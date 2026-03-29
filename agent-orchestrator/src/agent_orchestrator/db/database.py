@@ -1,0 +1,129 @@
+"""SQLite database management with async access via aiosqlite."""
+
+import aiosqlite
+from pathlib import Path
+
+DB_DIR = Path.home() / ".vex"
+DB_PATH = DB_DIR / "vex.db"
+DATA_DIR = DB_DIR / "data"
+
+_db: aiosqlite.Connection | None = None
+
+
+async def get_db() -> aiosqlite.Connection:
+    """Get the shared database connection."""
+    global _db
+    if _db is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    return _db
+
+
+async def init_db() -> None:
+    """Initialize database: create dirs, connect, run schema."""
+    global _db
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _db = await aiosqlite.connect(str(DB_PATH))
+    _db.row_factory = aiosqlite.Row
+    await _db.execute("PRAGMA journal_mode=WAL")
+    await _db.execute("PRAGMA foreign_keys=ON")
+    await _create_tables(_db)
+
+
+async def close_db() -> None:
+    """Close the database connection."""
+    global _db
+    if _db is not None:
+        await _db.close()
+        _db = None
+
+
+async def _create_tables(db: aiosqlite.Connection) -> None:
+    """Create all tables if they don't exist."""
+    await db.executescript("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            path TEXT NOT NULL UNIQUE,
+            framework TEXT,
+            dev_command TEXT,
+            dev_port INTEGER DEFAULT 3000,
+            package_manager TEXT,
+            styling_approach TEXT,
+            status TEXT DEFAULT 'idle',
+            dev_server_pid INTEGER,
+            dev_server_url TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS agents (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            tier INTEGER DEFAULT 1,
+            capabilities TEXT NOT NULL,
+            status TEXT DEFAULT 'registered',
+            pid INTEGER,
+            project_id TEXT,
+            last_heartbeat TEXT,
+            config TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS batches (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            page_url TEXT NOT NULL,
+            page_title TEXT NOT NULL,
+            action_count INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            submitted_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS actions (
+            id TEXT PRIMARY KEY,
+            batch_id TEXT NOT NULL,
+            sequence_index INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            selector TEXT NOT NULL,
+            data TEXT NOT NULL,
+            screenshot_before_path TEXT,
+            screenshot_after_path TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_actions_batch ON actions(batch_id, sequence_index);
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            agent_id TEXT,
+            type TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            prompt TEXT NOT NULL,
+            context TEXT,
+            result TEXT,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            assigned_at TEXT,
+            completed_at TEXT,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS config (
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            scope TEXT DEFAULT 'global',
+            project_id TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (key, scope, COALESCE(project_id, '')),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+    """)
+    await db.commit()
