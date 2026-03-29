@@ -1,0 +1,156 @@
+import { useCallback, useState } from "react";
+import type { Action } from "../../shared/types";
+import { AGENT_MANAGER_URL } from "../../shared/messages";
+
+interface ControlsProps {
+  activeTabId: number | null;
+  selectorIsActive: boolean;
+  actions: Action[];
+  pageUrl: string;
+  pageTitle: string;
+  projectId: string | null;
+  onToggle: () => void;
+  onClear: () => void;
+  onRefreshState: () => Promise<void>;
+}
+
+export function Controls({
+  selectorIsActive,
+  actions,
+  pageUrl,
+  pageTitle,
+  projectId,
+  onToggle,
+  onClear,
+  onRefreshState,
+}: ControlsProps) {
+  const [sendState, setSendState] = useState<
+    "idle" | "sending" | "sent"
+  >("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSend = useCallback(async () => {
+    if (actions.length === 0 || !projectId) return;
+
+    setSendState("sending");
+    setUploadProgress(0);
+    setError(null);
+
+    await onRefreshState();
+
+    const batch = {
+      batch: {
+        pageUrl,
+        pageTitle,
+        actions,
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    const url = AGENT_MANAGER_URL + "/api/projects/" + projectId + "/batches";
+    const body = JSON.stringify(batch);
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", url);
+        xhr.setRequestHeader("Content-Type", "application/json");
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error("Server returned " + xhr.status));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.ontimeout = () => reject(new Error("Request timed out"));
+        xhr.timeout = 30000;
+
+        xhr.send(body);
+      });
+
+      setUploadProgress(100);
+      setSendState("sent");
+      setTimeout(() => {
+        setSendState("idle");
+        setUploadProgress(0);
+      }, 2000);
+    } catch {
+      setSendState("idle");
+      setUploadProgress(0);
+      setError("Agent Manager not reachable. Is the server running?");
+      setTimeout(() => setError(null), 4000);
+    }
+  }, [actions, pageUrl, pageTitle, projectId, onRefreshState]);
+
+  const sendTitle =
+    sendState === "sending"
+      ? "Sending... " + uploadProgress + "%"
+      : sendState === "sent"
+        ? "Sent!"
+        : "Send";
+
+  const sendBtnClass =
+    sendState === "sending"
+      ? "ctrl-btn send sending"
+      : sendState === "sent"
+        ? "ctrl-btn send sent"
+        : "ctrl-btn send";
+
+  return (
+    <div className="controls-bar">
+      <button
+        className={`ctrl-btn toggle${selectorIsActive ? " active" : ""}`}
+        onClick={onToggle}
+        title={selectorIsActive ? "Pause selector" : "Activate selector"}
+      >
+        {/* Crosshair / Pause icon */}
+        {selectorIsActive ? (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor"/><rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor"/></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="8" y1="1" x2="8" y2="4" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="12" x2="8" y2="15" stroke="currentColor" strokeWidth="1.5"/><line x1="1" y1="8" x2="4" y2="8" stroke="currentColor" strokeWidth="1.5"/><line x1="12" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1.5"/></svg>
+        )}
+      </button>
+
+      <button
+        className={sendBtnClass}
+        disabled={actions.length === 0 || !projectId || sendState !== "idle"}
+        onClick={handleSend}
+        title={!projectId ? "Select a project first" : sendTitle}
+      >
+        {/* Send icon */}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2L14 8L2 14V9.5L10 8L2 6.5V2Z" fill="currentColor"/></svg>
+      </button>
+
+      <button
+        className="ctrl-btn clear"
+        onClick={onClear}
+        title="Clear all"
+        disabled={actions.length === 0}
+      >
+        {/* Trash icon */}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5.5 2V1.5C5.5 1.22 5.72 1 6 1H10C10.28 1 10.5 1.22 10.5 1.5V2M2.5 3H13.5M4 3V13.5C4 14.05 4.45 14.5 5 14.5H11C11.55 14.5 12 14.05 12 13.5V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+      </button>
+
+      {sendState === "sending" && (
+        <div className="upload-progress-bar" title={sendTitle}>
+          <div
+            className="upload-progress-fill"
+            style={{ width: uploadProgress + "%" }}
+          />
+        </div>
+      )}
+
+      {error && <div className="error-msg">{error}</div>}
+    </div>
+  );
+}

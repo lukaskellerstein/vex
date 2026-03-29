@@ -1,0 +1,318 @@
+import { useCallback, useEffect, useRef } from "react";
+import type { InteractionMode, Selection } from "../shared/types";
+import { useSelectionState } from "./hooks/useSelectionState";
+import { useActions } from "./hooks/useActions";
+import { useHoverHighlight } from "./hooks/useHoverHighlight";
+import { useNatsClient } from "./hooks/useNatsClient";
+import { captureScreenshot } from "./hooks/useScreenshot";
+import { collectMetadata } from "./utils/metadata";
+import { Overlay } from "./components/Overlay";
+import { PopupDialog } from "./components/PopupDialog";
+import { Toolbar } from "./components/Toolbar";
+import { EditMode } from "./components/EditMode";
+import { ResizeMode } from "./components/ResizeMode";
+import { StylePanel } from "./components/StylePanel";
+import { CopyStyle } from "./components/CopyStyle";
+import { VisibilityHelper } from "./components/VisibilityHelper";
+
+const HOST_ID = "__web-selector-root";
+
+const MODE_KEY_MAP: Record<string, InteractionMode> = {
+  "1": "select",
+  "2": "edit",
+  "3": "resize",
+  "4": "style",
+  "5": "copyStyle",
+  "6": "visibility",
+};
+
+interface PopupState {
+  element: Element;
+  metadata: Selection;
+}
+
+interface AppProps {
+  hostElement: HTMLElement;
+  shadowRoot: ShadowRoot;
+}
+
+export function App({ hostElement, shadowRoot }: AppProps) {
+  const {
+    state,
+    selections,
+    selectionsRef,
+    toggle,
+    enterSelected,
+    exitSelected,
+    addSelection,
+    removeSelectionAt,
+    clearSelections,
+    deactivate,
+  } = useSelectionState();
+
+  const {
+    actions,
+    mode,
+    actionsRef,
+    addAction,
+    removeAction,
+    updateInstruction: updateActionInstruction,
+    clearActions,
+    setMode,
+  } = useActions();
+
+  const { hover, isOwnElement } = useHoverHighlight(state, HOST_ID);
+  const natsClient = useNatsClient();
+
+  const popupRef = useRef<PopupState | null>(null);
+  const popupResolveRef = useRef<((instruction: string) => void) | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Keyboard shortcuts for mode switching
+  useEffect(() => {
+    if (stateRef.current === "inactive") return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (stateRef.current === "inactive") return;
+      if (stateRef.current === "selected") return; // don't switch while popup open
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+
+      const newMode = MODE_KEY_MAP[e.key];
+      if (newMode) {
+        e.preventDefault();
+        setMode(newMode);
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [state, setMode]);
+
+  // Send handler
+  const handleSend = useCallback(() => {
+    chrome.runtime.sendMessage({
+      action: "sendActions",
+      actions: actionsRef.current,
+      pageUrl: location.href,
+      pageTitle: document.title,
+    });
+  }, [actionsRef]);
+
+  // Watch for selected element removal from DOM
+  useEffect(() => {
+    if (state !== "selected" || !popupRef.current) return;
+
+    const observer = new MutationObserver(() => {
+      if (!popupRef.current) return;
+      if (!document.body.contains(popupRef.current.element)) {
+        popupResolveRef.current?.("");
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [state]);
+
+  // Click handler
+  useEffect(() => {
+    const onClick = async (e: MouseEvent) => {
+      if (stateRef.current !== "idle") return;
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || isOwnElement(el)) return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      // Check if already selected -> deselect
+      const existingIndex = selectionsRef.current.findIndex((s) => {
+        try {
+          const found = document.querySelector(s.selector);
+          return found === el;
+        } catch {
+          return false;
+        }
+      });
+
+      if (existingIndex !== -1) {
+        removeSelectionAt(existingIndex);
+        return;
+      }
+
+      // New selection pipeline
+      const metadata = collectMetadata(el);
+      const selectionNumber = selectionsRef.current.length + 1;
+
+      try {
+        metadata.screenshot = await captureScreenshot(
+          el,
+          selectionNumber,
+          hostElement,
+        );
+      } catch (err) {
+        console.warn(
+          "Web Selector: screenshot capture failed:",
+          (err as Error).message,
+        );
+        metadata.screenshot = "";
+      }
+
+      // Show popup - enter selected state
+      popupRef.current = { element: el, metadata };
+      enterSelected();
+
+      // Wait for user instruction (null = cancel)
+      const instruction = await new Promise<string | null>((resolve) => {
+        popupResolveRef.current = resolve as (v: string) => void;
+      });
+
+      popupRef.current = null;
+      popupResolveRef.current = null;
+
+      if (instruction !== null) {
+        metadata.instruction = instruction;
+        addSelection(metadata);
+      }
+      exitSelected();
+    };
+
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [
+    isOwnElement,
+    hostElement,
+    enterSelected,
+    exitSelected,
+    addSelection,
+    removeSelectionAt,
+    selectionsRef,
+  ]);
+
+  // Escape key handler
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && stateRef.current === "idle") {
+        deactivate();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [deactivate]);
+
+  // Chrome message handlers
+  useEffect(() => {
+    const listener = (
+      message: { action: string },
+      _sender: chrome.runtime.MessageSender,
+      sendResponse: (response: unknown) => void,
+    ) => {
+      if (message.action === "ping") {
+        sendResponse({ pong: true });
+        return;
+      }
+      if (message.action === "getSelections") {
+        sendResponse({
+          selections: selectionsRef.current,
+          isActive: stateRef.current !== "inactive",
+          pageUrl: location.href,
+          pageTitle: document.title,
+        });
+        return;
+      }
+      if (message.action === "toggleSelector") {
+        toggle();
+        const newActive = stateRef.current === "inactive";
+        sendResponse({ isActive: newActive });
+        return;
+      }
+      if (message.action === "removeSelection") {
+        const msg = message as { action: string; index: number };
+        removeSelectionAt(msg.index);
+        sendResponse({ removed: true });
+        return;
+      }
+      if (message.action === "updateInstruction") {
+        const msg = message as { action: string; index: number; instruction: string };
+        const sel = selectionsRef.current[msg.index];
+        if (sel) {
+          sel.instruction = msg.instruction;
+        }
+        sendResponse({ updated: true });
+        return;
+      }
+      if (message.action === "clearSelections") {
+        clearSelections();
+        deactivate();
+        sendResponse({ cleared: true });
+        return;
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [selectionsRef, toggle, clearSelections, deactivate]);
+
+  const handlePopupSubmit = useCallback((instruction: string) => {
+    popupResolveRef.current?.(instruction);
+  }, []);
+
+  const handlePopupSkip = useCallback(() => {
+    popupResolveRef.current?.("");
+  }, []);
+
+  const handlePopupCancel = useCallback(() => {
+    (popupResolveRef.current as ((v: string | null) => void) | null)?.(null);
+  }, []);
+
+  const popupState = popupRef.current;
+  const popupHeaderText = popupState
+    ? popupState.metadata.tagName +
+      (popupState.metadata.selector.length < 50
+        ? " \u2014 " + popupState.metadata.selector
+        : " \u2014 " + popupState.metadata.selector.slice(0, 47) + "...")
+    : "";
+
+  // Show pending selection as a green border while popup is open
+  const pendingSelection = popupState ? popupState.metadata : null;
+
+  const isActive = state !== "inactive";
+
+  return (
+    <>
+      {isActive && (
+        <Toolbar
+          mode={mode}
+          actionCount={actions.length}
+          onModeChange={setMode}
+          onSend={handleSend}
+        />
+      )}
+
+      {mode === "select" && (
+        <>
+          <Overlay hover={hover} selections={selections} pendingSelection={pendingSelection} />
+          {state === "selected" && popupState && (
+            <PopupDialog
+              elementRect={popupState.metadata.boundingRect}
+              headerText={popupHeaderText}
+              screenshotBase64={popupState.metadata.screenshot}
+              shadowRoot={shadowRoot}
+              onSubmit={handlePopupSubmit}
+              onSkip={handlePopupSkip}
+              onCancel={handlePopupCancel}
+            />
+          )}
+        </>
+      )}
+
+      {mode === "edit" && <EditMode addAction={addAction} hostElement={hostElement} natsClient={natsClient} />}
+      {mode === "resize" && <ResizeMode addAction={addAction} hostElement={hostElement} />}
+      {mode === "style" && <StylePanel addAction={addAction} hostElement={hostElement} />}
+      {mode === "copyStyle" && <CopyStyle addAction={addAction} hostElement={hostElement} />}
+      {mode === "visibility" && <VisibilityHelper hostElement={hostElement} />}
+    </>
+  );
+}
