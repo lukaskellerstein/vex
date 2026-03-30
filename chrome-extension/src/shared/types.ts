@@ -41,10 +41,20 @@ interface BaseAction {
   screenshotAfter: string;
 }
 
-export interface SelectAction extends BaseAction {
+export interface SelectAction {
   type: "select";
+  selector: string;
+  tagName: string;
+  id: string | null;
+  classList: string[];
+  textContent: string;
+  attributes: Record<string, string>;
+  computedStyles: Record<string, string>;
+  boundingRect: BoundingRect;
+  parentTag: string | null;
+  childCount: number;
   instruction: string;
-  elementInfo: ElementInfo;
+  screenshot: string;
 }
 
 export interface InsertAction extends BaseAction {
@@ -160,12 +170,11 @@ export type Action =
 // --- Modes ---
 
 export type InteractionMode =
+  | "idle"
   | "select"
   | "edit"
   | "resize"
-  | "style"
-  | "copyStyle"
-  | "visibility";
+  | "style";
 
 // --- Batch ---
 

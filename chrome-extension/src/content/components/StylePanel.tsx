@@ -407,6 +407,14 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
   const [transitionDuration, setTransitionDuration] = useState(200);
   const [transitionEasing, setTransitionEasing] = useState("ease");
 
+  // Drag state
+  const [dragPos, setDragPos] = useState<{ top: number; left: number } | null>(null);
+  const dragRef = useRef<{ dragging: boolean; offsetX: number; offsetY: number }>({
+    dragging: false,
+    offsetX: 0,
+    offsetY: 0,
+  });
+
   const initialStylesRef = useRef<Record<string, string>>({});
   const screenshotBeforeRef = useRef<string | null>(null);
   const hoverStyleElRef = useRef<HTMLStyleElement | null>(null);
@@ -672,6 +680,46 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
   useEffect(() => {
     return () => cleanupHoverStyle();
   }, [cleanupHoverStyle]);
+
+  // Drag handlers for panel header
+  const onHeaderPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      // Don't drag from close button or copy-style button
+      if ((e.target as HTMLElement).tagName === "BUTTON") return;
+      const pos = dragPos ?? panelPos;
+      dragRef.current = {
+        dragging: true,
+        offsetX: e.clientX - pos.left,
+        offsetY: e.clientY - pos.top,
+      };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      e.preventDefault();
+    },
+    [dragPos, panelPos],
+  );
+
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragRef.current.dragging) return;
+      const newLeft = Math.max(0, Math.min(window.innerWidth - 280, e.clientX - dragRef.current.offsetX));
+      const newTop = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragRef.current.offsetY));
+      setDragPos({ top: newTop, left: newLeft });
+    };
+    const onPointerUp = () => {
+      dragRef.current.dragging = false;
+    };
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
+  // Reset drag position when element changes
+  useEffect(() => {
+    setDragPos(null);
+  }, [selectedEl]);
 
   // --- Change handlers that apply live ---
 
@@ -946,26 +994,67 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
   if (!selectedEl) return null;
 
   const fontOptions = pageFontsRef.current.map((f) => ({ value: f, label: f }));
+  const effectivePos = dragPos ?? panelPos;
+  const selRect = selectedEl.getBoundingClientRect();
 
   return (
-    <div
-      className="cs-style-panel"
-      style={{
-        position: "fixed",
-        top: panelPos.top,
-        left: panelPos.left,
-        pointerEvents: "auto",
-        zIndex: 2147483647,
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="cs-style-panel-header">
-        <span className="cs-style-panel-title">Style Editor</span>
-        <button className="cs-style-panel-close" onClick={handleClose}>
-          \u2715
-        </button>
-      </div>
+    <>
+      {/* T028: Selection border on styled element */}
+      <div
+        className="cs-style-selection-border"
+        style={{
+          position: "fixed",
+          top: selRect.top,
+          left: selRect.left,
+          width: selRect.width,
+          height: selRect.height,
+          pointerEvents: "none",
+          border: "3px solid #4f46e5",
+          borderRadius: 2,
+          zIndex: 2147483646,
+        }}
+      />
+
+      <div
+        className="cs-style-panel"
+        style={{
+          position: "fixed",
+          top: effectivePos.top,
+          left: effectivePos.left,
+          pointerEvents: "auto",
+          zIndex: 2147483647,
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="cs-style-panel-header"
+          onPointerDown={onHeaderPointerDown}
+          style={{ cursor: dragRef.current.dragging ? "grabbing" : "grab" }}
+        >
+          <span className="cs-style-panel-title">Style Editor</span>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <button
+              className="cs-style-panel-copystyle"
+              onClick={() => {
+                // TODO: Wire copy-style flow from CopyStyle.tsx
+              }}
+              title="Copy style from another element"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <span>Copy Style</span>
+            </button>
+            <button className="cs-style-panel-close" onClick={handleClose} title="Close">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
 
       <div className="cs-style-panel-body">
         {/* Colors */}
@@ -1207,5 +1296,6 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
         </Section>
       </div>
     </div>
+    </>
   );
 }

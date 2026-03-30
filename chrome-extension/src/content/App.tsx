@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { InteractionMode, Selection } from "../shared/types";
+import type { Action, InteractionMode, Selection } from "../shared/types";
 import { useSelectionState } from "./hooks/useSelectionState";
 import { useActions } from "./hooks/useActions";
 import { useHoverHighlight } from "./hooks/useHoverHighlight";
@@ -12,8 +12,6 @@ import { Toolbar } from "./components/Toolbar";
 import { EditMode } from "./components/EditMode";
 import { ResizeMode } from "./components/ResizeMode";
 import { StylePanel } from "./components/StylePanel";
-import { CopyStyle } from "./components/CopyStyle";
-import { VisibilityHelper } from "./components/VisibilityHelper";
 
 const HOST_ID = "__web-selector-root";
 
@@ -22,8 +20,6 @@ const MODE_KEY_MAP: Record<string, InteractionMode> = {
   "2": "edit",
   "3": "resize",
   "4": "style",
-  "5": "copyStyle",
-  "6": "visibility",
 };
 
 interface PopupState {
@@ -79,10 +75,10 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
-      const newMode = MODE_KEY_MAP[e.key];
-      if (newMode) {
+      const keyMode = MODE_KEY_MAP[e.key];
+      if (keyMode) {
         e.preventDefault();
-        setMode(newMode);
+        setMode((prev) => prev === keyMode ? "idle" : keyMode);
       }
     };
 
@@ -213,22 +209,27 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         sendResponse({ pong: true });
         return;
       }
-      if (message.action === "getSelections") {
+      if (message.action === "getState") {
         sendResponse({
-          selections: selectionsRef.current,
+          mode,
+          actions: selectionsRef.current,
           isActive: stateRef.current !== "inactive",
           pageUrl: location.href,
           pageTitle: document.title,
         });
         return;
       }
-      if (message.action === "toggleSelector") {
-        toggle();
-        const newActive = stateRef.current === "inactive";
-        sendResponse({ isActive: newActive });
+      if (message.action === "toggleActive") {
+        const msg = message as { action: string; active: boolean };
+        if (msg.active && stateRef.current === "inactive") {
+          toggle();
+        } else if (!msg.active && stateRef.current !== "inactive") {
+          deactivate();
+        }
+        sendResponse({ isActive: msg.active });
         return;
       }
-      if (message.action === "removeSelection") {
+      if (message.action === "removeAction") {
         const msg = message as { action: string; index: number };
         removeSelectionAt(msg.index);
         sendResponse({ removed: true });
@@ -243,7 +244,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         sendResponse({ updated: true });
         return;
       }
-      if (message.action === "clearSelections") {
+      if (message.action === "clearActions") {
         clearSelections();
         deactivate();
         sendResponse({ cleared: true });
@@ -253,7 +254,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, [selectionsRef, toggle, clearSelections, deactivate]);
+  }, [selectionsRef, toggle, deactivate, clearSelections, removeSelectionAt, mode]);
 
   const handlePopupSubmit = useCallback((instruction: string) => {
     popupResolveRef.current?.(instruction);
@@ -285,9 +286,8 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       {isActive && (
         <Toolbar
           mode={mode}
-          actionCount={actions.length}
           onModeChange={setMode}
-          onSend={handleSend}
+          onClose={deactivate}
         />
       )}
 
@@ -310,9 +310,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
       {mode === "edit" && <EditMode addAction={addAction} hostElement={hostElement} natsClient={natsClient} />}
       {mode === "resize" && <ResizeMode addAction={addAction} hostElement={hostElement} />}
-      {mode === "style" && <StylePanel addAction={addAction} hostElement={hostElement} />}
-      {mode === "copyStyle" && <CopyStyle addAction={addAction} hostElement={hostElement} />}
-      {mode === "visibility" && <VisibilityHelper hostElement={hostElement} />}
+      {mode === "style" && isActive && <StylePanel addAction={addAction} hostElement={hostElement} />}
     </>
   );
 }

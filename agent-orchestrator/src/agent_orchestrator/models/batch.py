@@ -3,7 +3,8 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
 class BatchStatus(StrEnum):
@@ -15,6 +16,8 @@ class BatchStatus(StrEnum):
 
 class ActionData(BaseModel):
     """Flat union of all 12 action types. Type-specific fields are optional."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     type: str
     selector: str
@@ -83,6 +86,8 @@ class BatchSubmission(BaseModel):
 
 
 class BatchPayload(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
     page_url: str
     page_title: str
     actions: list[ActionData]

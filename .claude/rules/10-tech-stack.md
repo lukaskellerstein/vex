@@ -1,52 +1,65 @@
 ---
-description: "Reference: Technology stack — Python/uv, React, TypeScript, Docker, K8s, Terraform"
+description: "Reference: Technology stack — Electron, Chrome Extension, React, TypeScript, Python/FastAPI, NATS, SQLite, CodeMirror, GSAP"
 ---
 
 # Reference: Technology Stack
 
-## Frontend & UI
+## Project Structure
 
-- Package Manager: `npm`
-- Runtime: Node.js
-- Framework: React
-- UI Components: shadcn-ui, Radix UI primitives
-- Charts: d3.js
-- Animations: GSAP
-- Styling: Tailwind CSS
-- Type Safety: TypeScript with strict mode enabled
+```
+electron-app/        # Electron desktop app (main process + React renderer)
+chrome-extension/    # Chrome Extension (Manifest V3, React + Vite)
+agent-orchestrator/  # Python FastAPI backend
+```
 
-## Backend
+## Electron App
 
-**Python (preferred):**
+- Electron: 30.0.0
+- React: 18.3.x, React DOM: 18.3.x
+- TypeScript: 5.7+
+- Bundler: Vite 6.0
+- Packaging: electron-builder 25.1
+- IPC between main and renderer processes
+- Manages child processes (NATS server, agent-orchestrator)
+
+## Chrome Extension
+
+- Manifest V3
+- React: 18.3.x
+- TypeScript: 5.7+
+- Bundler: Vite 6.0 + vite-plugin-web-extension
+- CodeMirror 6 (markdown editor)
+- GSAP 3.14 (animations)
+- NATS WebSocket client: nats.ws 1.30
+- Styling: Custom CSS (Catppuccin Mocha color scheme), no CSS framework
+
+## Backend (agent-orchestrator)
+
 - **CRITICAL**: Use `uv` exclusively — NEVER use `pip` directly
-- Virtual Environment: `uv venv` followed by `source .venv/bin/activate`
-- Dependency Management: `uv sync` (not `pip install`)
-- **AVOID**: `hatchling.build` in pyproject.toml
-- API Framework: FastAPI with Uvicorn
-- Type Hints: Use type annotations consistently (Python 3.10+ syntax)
+- Python: 3.11+
+- API Framework: FastAPI >= 0.115 + Uvicorn >= 0.32
+- Database: aiosqlite >= 0.20 (SQLite with WAL mode, stored at `~/.vex/vex.db`)
+- Messaging: nats-py >= 2.9
+- Validation: Pydantic >= 2.10
+- AI Agent: Claude Agent SDK >= 0.1.52
+- Build System: Hatchling
+- Linter: Ruff (Python 3.11 target, 100 char line length)
+- Testing: pytest + pytest-asyncio
 
-**Node.js** (only when justified):
-- Package Manager: `npm`
-- API Framework: Express.js
-- Bundler: `esbuild`
+## Messaging
 
-**Go** (only when justified — performance-critical services, system tools)
+- NATS Server v2.10+ (bundled binaries in `electron-app/bin/`)
+  - TCP: port 4222
+  - WebSocket: port 4223 (no TLS in dev)
+- Python client: nats-py
+- JS client: nats.ws (WebSocket)
 
-## Scripting & Automation
+## Data Storage
 
-- Default: Python for all scripts
-- Avoid: Bash/Shell scripts (unless trivial one-liners), PowerShell
+- SQLite: `~/.vex/vex.db` (async via aiosqlite, WAL mode, foreign keys enabled)
+- File-based screenshots: `~/.vex/data/{projectId}/`
 
-## AI & Machine Learning
+## Package Managers
 
-- ML/DL: PyTorch (primary), avoid TensorFlow
-- Model Hub: Hugging Face
-- Agent Development: Claude Agent SDK (preferred), LangChain + LangGraph (alternative)
-
-## Infrastructure & DevOps
-
-- **Containers**: Docker, multi-stage builds, Alpine/distroless for production
-- **Orchestration**: Kubernetes (GKE), Helm for templating
-- **IaC**: Terraform
-- **Networking**: Traefik as ingress/reverse proxy
-- **OS**: Linux (Ubuntu LTS preferred)
+- JavaScript: `npm`
+- Python: `uv` (never `pip`)

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 
 from agent_orchestrator.db.database import get_db
+from agent_orchestrator.services import nats_service
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ async def health():
         "status": "healthy" if db_status == "ok" else "degraded",
         "uptime": int(time.time() - _start_time),
         "agentCount": 0,
-        "natsConnected": False,
+        "natsConnected": nats_service.is_connected(),
         "dbStatus": db_status,
     }
 
@@ -49,10 +50,8 @@ async def update_config(body: dict):
 
     for key, value in body.items():
         await db.execute(
-            """INSERT INTO config (key, value, scope, updated_at)
-               VALUES (?, ?, 'global', ?)
-               ON CONFLICT (key, scope, COALESCE(project_id, ''))
-               DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
+            """INSERT OR REPLACE INTO config (key, value, scope, updated_at)
+               VALUES (?, ?, 'global', ?)""",
             (key, str(value), now),
         )
     await db.commit()

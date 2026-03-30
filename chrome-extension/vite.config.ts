@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     webExtension({
       manifest: "manifest.json",
+      additionalInputs: ["screenshot-viewer.html", "screenshot-viewer.js"],
     }),
   ],
   build: {
