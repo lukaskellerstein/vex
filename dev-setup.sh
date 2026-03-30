@@ -59,6 +59,7 @@ mkdir -p "$LOG_DIR" "$TMP_DIR"
 # Truncate old logs
 > "$LOG_DIR/nats.log"
 > "$LOG_DIR/ao.log"
+> "$LOG_DIR/vite.log"
 > "$LOG_DIR/electron.log"
 
 NATS_CONF="${TMP_DIR}/nats-dev.conf"
@@ -106,11 +107,13 @@ run_prefixed() {
 echo "=== Vex Development Environment ==="
 echo "  NATS:                port ${NATS_PORT} (ws: ${NATS_WS_PORT})"
 echo "  Agent Orchestrator:  port ${AO_PORT}"
-echo "  Electron:            standalone mode (devtools: 9222)"
+echo "  Vite (HMR):          port 5199"
+echo "  Electron:            standalone + dev mode (devtools: 9222)"
 echo ""
 echo "  Log files:"
 echo "    /tmp/vex-logs/nats.log"
 echo "    /tmp/vex-logs/ao.log"
+echo "    /tmp/vex-logs/vite.log"
 echo "    /tmp/vex-logs/electron.log"
 echo ""
 
@@ -156,12 +159,50 @@ for i in $(seq 1 30); do
   sleep 0.5
 done
 
-# --- 3. Start Electron ---
-echo "Starting Electron app (standalone)..."
+# --- 3. Build main process & start Vite dev server ---
 ELECTRON_DIR="${ROOT_DIR}/electron-app"
-(cd "$ELECTRON_DIR" && npm run build 2>&1 | sed 's/^/[build] /')
+VITE_PORT=5199
+
+# Compile TypeScript (main process needs this; renderer output is unused in dev mode)
+echo "Compiling Electron TypeScript..."
+(cd "$ELECTRON_DIR" && npx tsc 2>&1 | sed 's/^/[build] /')
+
+# Kill any stale process on the Vite port from a previous run
+if lsof -ti ":${VITE_PORT}" > /dev/null 2>&1; then
+  echo "Killing stale process on port ${VITE_PORT}..."
+  lsof -ti ":${VITE_PORT}" | xargs kill 2>/dev/null || true
+  sleep 0.5
+fi
+
+# Start Vite dev server for the renderer (HMR enabled)
+echo "Starting Vite dev server on port ${VITE_PORT}..."
+(cd "$ELECTRON_DIR" && npx vite --port "$VITE_PORT" --strict-port) > >(tee -a "$LOG_DIR/vite.log" | sed "s/^/[vite] /") 2>&1 &
+PIDS+=($!)
+
+# Wait for Vite to be ready
+echo "Waiting for Vite dev server..."
+for i in $(seq 1 30); do
+  if curl -sf "http://localhost:${VITE_PORT}" > /dev/null 2>&1; then
+    echo "Vite dev server is ready."
+    break
+  fi
+  if [[ $i -eq 30 ]]; then
+    echo "WARNING: Vite dev server health check timed out."
+  fi
+  sleep 0.5
+done
+
+# --- 4. Start Electron ---
+# Kill any stale process on the devtools port from a previous run
+DEVTOOLS_PORT=9222
+if lsof -ti ":${DEVTOOLS_PORT}" > /dev/null 2>&1; then
+  echo "Killing stale process on port ${DEVTOOLS_PORT}..."
+  lsof -ti ":${DEVTOOLS_PORT}" | xargs kill 2>/dev/null || true
+  sleep 0.5
+fi
+echo "Starting Electron app (standalone + dev mode)..."
 run_prefixed "elec" "$LOG_DIR/electron.log" npx --prefix "$ELECTRON_DIR" electron --no-sandbox --remote-debugging-port=9222 "$ELECTRON_DIR/dist/main/index.js" \
-  --standalone --ao-port "$AO_PORT" --nats-port "$NATS_PORT"
+  --standalone --dev --ao-port "$AO_PORT" --nats-port "$NATS_PORT" --vite-port "$VITE_PORT"
 
 echo ""
 echo "=== All services running. Press Ctrl+C to stop. ==="

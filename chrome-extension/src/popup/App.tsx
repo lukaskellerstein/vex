@@ -123,12 +123,16 @@ export function App() {
     if (!activeTabId) return;
     await ensureContentScript(activeTabId);
 
+    const willActivate = !selectorIsActive;
     const response = (await sendToContent(activeTabId, {
       action: "toggleActive",
-      active: !selectorIsActive,
+      active: willActivate,
     })) as { isActive: boolean } | null;
     if (response) {
       setSelectorIsActive(response.isActive);
+      if (response.isActive) {
+        window.close();
+      }
     }
   }, [activeTabId, selectorIsActive]);
 
@@ -192,6 +196,7 @@ export function App() {
 
       <PopupActionList
         actions={actions}
+        activeTabId={activeTabId}
         onRemove={handleRemove}
         onUpdateInstruction={handleUpdateInstruction}
       />
@@ -225,14 +230,21 @@ const ACTION_COLORS: Record<string, string> = {
 
 function PopupActionList({
   actions,
+  activeTabId,
   onRemove,
   onUpdateInstruction,
 }: {
   actions: Action[];
+  activeTabId: number | null;
   onRemove: (i: number) => void;
   onUpdateInstruction: (i: number, instruction: string) => void;
 }) {
   if (actions.length === 0) return null;
+
+  const highlightAction = (index: number | null) => {
+    if (!activeTabId) return;
+    sendToContent(activeTabId, { action: "highlightAction", index });
+  };
 
   return (
     <div className="popup-action-list">
@@ -243,6 +255,8 @@ function PopupActionList({
           index={i}
           onRemove={onRemove}
           onUpdateInstruction={onUpdateInstruction}
+          onMouseEnter={() => highlightAction(i)}
+          onMouseLeave={() => highlightAction(null)}
         />
       ))}
     </div>
@@ -254,11 +268,15 @@ function PopupActionItem({
   index,
   onRemove,
   onUpdateInstruction,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   action: Action;
   index: number;
   onRemove: (i: number) => void;
   onUpdateInstruction: (i: number, instruction: string) => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -355,7 +373,7 @@ function PopupActionItem({
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="popup-action-item-wrapper">
+    <div className="popup-action-item-wrapper" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div
         className={`popup-action-item ${expanded ? "popup-action-item-expanded" : ""}`}
         onClick={() => { if (!editing) setExpanded((v) => !v); }}

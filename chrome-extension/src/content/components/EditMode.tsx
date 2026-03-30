@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { markdown } from "@codemirror/lang-markdown";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import type { Action } from "../../shared/types";
 import type { NatsClient } from "../hooks/useNatsClient";
 import { AGENT_MANAGER_URL } from "../../shared/messages";
 import { generateSelector } from "../utils/selector";
 import {
   insertElement,
+  insertElementHorizontal,
   removeElement,
   cloneElement,
   reorderElement,
@@ -14,13 +20,6 @@ import { captureScreenshot } from "../hooks/useScreenshot";
 import { useUndo } from "../hooks/useUndo";
 
 const HOST_ID = "__web-selector-root";
-
-const BLOCK_TAGS = new Set([
-  "DIV", "SECTION", "ARTICLE", "P", "H1", "H2", "H3", "H4", "H5", "H6",
-  "UL", "OL", "HEADER", "FOOTER", "MAIN", "NAV", "ASIDE",
-]);
-
-const SECTION_TAGS = new Set(["SECTION", "MAIN", "HEADER", "FOOTER", "NAV", "ASIDE"]);
 
 const INSERT_TAGS = ["p", "div", "span", "h2", "h3", "button", "a", "img", "ul"];
 const WRAP_TAGS = ["div", "section", "article", "span"];
@@ -37,6 +36,7 @@ interface EditModeProps {
   addAction: (action: Action) => void;
   hostElement: HTMLElement;
   natsClient: NatsClient;
+  shadowRoot: ShadowRoot;
 }
 
 function isOwnElement(el: Element): boolean {
@@ -49,14 +49,6 @@ function isOwnElement(el: Element): boolean {
   return false;
 }
 
-function isBlockElement(el: Element): boolean {
-  return BLOCK_TAGS.has(el.tagName);
-}
-
-function isSectionBoundary(el: Element): boolean {
-  return SECTION_TAGS.has(el.tagName) || (el.tagName === "DIV" && el.parentElement?.tagName === "BODY");
-}
-
 async function takeScreenshot(el: Element, hostEl: HTMLElement): Promise<string> {
   try {
     return await captureScreenshot(el, 0, hostEl);
@@ -65,15 +57,17 @@ async function takeScreenshot(el: Element, hostEl: HTMLElement): Promise<string>
   }
 }
 
+type VisualPosition = "above" | "below" | "left" | "right";
+
 type PopupKind =
-  | { kind: "insert"; position: "before" | "after"; reference: Element }
+  | { kind: "insert"; visualPosition: VisualPosition; reference: Element }
   | { kind: "wrap"; target: Element }
   | { kind: "section"; position: "before" | "after"; reference: Element }
   | { kind: "imageReplace"; target: HTMLImageElement }
   | { kind: "imageUrl"; target: HTMLImageElement }
   | { kind: "imageGenerate"; target: HTMLImageElement };
 
-export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) {
+export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: EditModeProps) {
   const { pushUndo } = useUndo();
 
   const [hovered, setHovered] = useState<Element | null>(null);
@@ -83,13 +77,137 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
   const [editing, setEditing] = useState<Element | null>(null);
   const editBeforeRef = useRef<string>("");
 
+  // Hover lock: when mouse is over the highlight overlay (buttons, padding zone), keep the current hover
+  const overHighlightRef = useRef(false);
+  const unhoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Drag state
   const dragSourceRef = useRef<Element | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Insert form state
+  const [insertTab, setInsertTab] = useState<"manual" | "prompt">("prompt");
   const [insertTag, setInsertTag] = useState("p");
   const [insertText, setInsertText] = useState("");
+  const [insertPrompt, setInsertPrompt] = useState("");
+  const insertEditorContainerRef = useRef<HTMLDivElement>(null);
+  const insertEditorViewRef = useRef<EditorView | null>(null);
+  const [insertPopupSize, setInsertPopupSize] = useState({ width: 300, height: 260 });
+  const insertDragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
+
+  // Insert prompt CodeMirror editor — create/destroy when prompt tab is shown
+  const insertSubmitRef = useRef<(() => void) | null>(null);
+  const insertCancelRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!popup || popup.kind !== "insert" || insertTab !== "prompt") {
+      if (insertEditorViewRef.current) {
+        // Read value before destroying
+        setInsertPrompt(insertEditorViewRef.current.state.doc.toString());
+        insertEditorViewRef.current.destroy();
+        insertEditorViewRef.current = null;
+      }
+      return;
+    }
+
+    // Wait one tick for the container div to mount
+    const timer = setTimeout(() => {
+      const container = insertEditorContainerRef.current;
+      if (!container || insertEditorViewRef.current) return;
+
+      const view = new EditorView({
+        state: EditorState.create({
+          doc: insertPrompt,
+          extensions: [
+            keymap.of([
+              {
+                key: "Enter",
+                run: () => {
+                  insertSubmitRef.current?.();
+                  return true;
+                },
+              },
+              {
+                key: "Escape",
+                run: () => {
+                  insertCancelRef.current?.();
+                  return true;
+                },
+              },
+              {
+                key: "Shift-Enter",
+                run: () => false,
+              },
+              ...defaultKeymap,
+              ...historyKeymap,
+            ]),
+            history(),
+            markdown(),
+            syntaxHighlighting(defaultHighlightStyle),
+            EditorView.lineWrapping,
+            cmPlaceholder("Describe what you want to add… (Shift+Enter for newline)"),
+            EditorView.theme({
+              "&": {
+                fontSize: "13px",
+                fontFamily: "monospace",
+                border: "1px solid #45475a",
+                borderRadius: "6px",
+                minHeight: "80px",
+                flex: "1",
+                display: "flex",
+                flexDirection: "column",
+                backgroundColor: "#181825",
+              },
+              ".cm-scroller": {
+                flex: "1",
+                overflow: "auto",
+              },
+              "&.cm-focused": {
+                outline: "none",
+                borderColor: "#4F46E5",
+                boxShadow: "0 0 0 2px rgba(79,70,229,0.15)",
+              },
+              ".cm-content": {
+                padding: "8px 10px",
+                minHeight: "70px",
+                color: "#cdd6f4",
+                caretColor: "#cdd6f4",
+              },
+              ".cm-cursor": {
+                borderLeftColor: "#cdd6f4",
+              },
+              ".cm-activeLine": {
+                backgroundColor: "rgba(69, 71, 90, 0.3)",
+              },
+              ".cm-placeholder": {
+                color: "#6c7086",
+              },
+              ".cm-selectionBackground": {
+                backgroundColor: "rgba(79, 70, 229, 0.3) !important",
+              },
+            }),
+            EditorView.contentAttributes.of({
+              "aria-label": "Insert prompt editor",
+            }),
+          ],
+        }),
+        parent: container,
+        root: shadowRoot,
+      });
+
+      insertEditorViewRef.current = view;
+      view.focus();
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      if (insertEditorViewRef.current) {
+        setInsertPrompt(insertEditorViewRef.current.state.doc.toString());
+        insertEditorViewRef.current.destroy();
+        insertEditorViewRef.current = null;
+      }
+    };
+  }, [popup, insertTab, shadowRoot]);
 
   // Wrap form state
   const [wrapTag, setWrapTag] = useState("div");
@@ -132,18 +250,42 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
     };
   }, [clearGenTimer, cleanupGenSubscription]);
 
-  // Hover tracking
+  // Hover tracking with debounced unhover and highlight lock
   useEffect(() => {
     if (popup || editing) return;
 
+    const clearUnhoverTimer = () => {
+      if (unhoverTimerRef.current !== null) {
+        clearTimeout(unhoverTimerRef.current);
+        unhoverTimerRef.current = null;
+      }
+    };
+
+    const scheduleUnhover = () => {
+      clearUnhoverTimer();
+      unhoverTimerRef.current = setTimeout(() => {
+        // Only unhover if mouse is NOT over the highlight overlay
+        if (!overHighlightRef.current) {
+          setHovered(null);
+          setHoverRect(null);
+          hoveredRef.current = null;
+        }
+      }, 80);
+    };
+
     const onMouseMove = (e: MouseEvent) => {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el || isOwnElement(el)) {
-        setHovered(null);
-        setHoverRect(null);
-        hoveredRef.current = null;
+      // If mouse is over the highlight overlay (buttons/padding), keep the current hover locked
+      if (overHighlightRef.current) {
+        clearUnhoverTimer();
         return;
       }
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || isOwnElement(el)) {
+        scheduleUnhover();
+        return;
+      }
+      clearUnhoverTimer();
       hoveredRef.current = el;
       setHovered(el);
       setHoverRect(el.getBoundingClientRect());
@@ -158,6 +300,8 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
     document.addEventListener("mousemove", onMouseMove, true);
     document.addEventListener("scroll", onScroll, true);
     return () => {
+      clearUnhoverTimer();
+      overHighlightRef.current = false;
       document.removeEventListener("mousemove", onMouseMove, true);
       document.removeEventListener("scroll", onScroll, true);
     };
@@ -246,6 +390,11 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
     return () => {
       el.removeEventListener("blur", onBlur);
       el.removeEventListener("keydown", onKeyDown);
+      // Revert text and disable contentEditable on unmount (e.g. global Escape deactivation)
+      if (el.contentEditable === "true") {
+        el.innerText = editBeforeRef.current;
+        el.contentEditable = "false";
+      }
     };
   }, [editing, addAction, hostElement, pushUndo]);
 
@@ -337,16 +486,31 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
     });
   }, [addAction, hostElement, pushUndo]);
 
-  // Insert handler
+  // Insert handler — supports all 4 visual directions
   const handleInsert = useCallback(async (
-    position: "before" | "after",
+    visualPosition: VisualPosition,
     reference: Element,
     tag: string,
     text: string,
+    prompt?: string,
   ) => {
     const refSelector = generateSelector(reference);
     const screenshotBefore = await takeScreenshot(reference, hostElement);
-    const newEl = insertElement(position, reference, tag, text, {});
+
+    let newEl: Element;
+    let wasWrapped = false;
+    let domPosition: "before" | "after";
+
+    if (visualPosition === "above" || visualPosition === "below") {
+      domPosition = visualPosition === "above" ? "before" : "after";
+      newEl = insertElement(domPosition, reference, tag, text, {});
+    } else {
+      domPosition = visualPosition === "left" ? "before" : "after";
+      const result = insertElementHorizontal(visualPosition, reference, tag, text, {});
+      newEl = result.newEl;
+      wasWrapped = result.wasWrapped;
+    }
+
     const screenshotAfter = await takeScreenshot(newEl, hostElement);
 
     addAction({
@@ -355,18 +519,31 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
       timestamp: new Date().toISOString(),
       screenshotBefore,
       screenshotAfter,
-      position,
+      position: domPosition,
+      visualPosition,
       referenceSelector: refSelector,
       content: { tag, text, attributes: {} },
+      wasWrapped,
+      ...(prompt ? { prompt } : {}),
     });
 
-    pushUndo(() => {
-      newEl.remove();
-    });
+    if (wasWrapped) {
+      const wrapper = newEl.parentElement!;
+      pushUndo(() => {
+        const parent = wrapper.parentElement!;
+        parent.insertBefore(reference, wrapper);
+        wrapper.remove();
+      });
+    } else {
+      pushUndo(() => {
+        newEl.remove();
+      });
+    }
 
     setPopup(null);
     setInsertTag("p");
     setInsertText("");
+    setInsertPrompt("");
   }, [addAction, hostElement, pushUndo]);
 
   // Wrap handler
@@ -824,18 +1001,6 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
     return () => document.removeEventListener("click", onClick, true);
   }, [popup, editing]);
 
-  // Detect section boundaries for "+" dividers
-  const sectionBoundaries: Array<{ el: Element; rect: DOMRect }> = [];
-  if (!popup && !editing) {
-    const bodyChildren = Array.from(document.body.children);
-    for (const child of bodyChildren) {
-      if (isOwnElement(child)) continue;
-      if (isSectionBoundary(child)) {
-        sectionBoundaries.push({ el: child, rect: child.getBoundingClientRect() });
-      }
-    }
-  }
-
   // Render popup
   const renderPopup = () => {
     if (!popup) return null;
@@ -857,34 +1022,132 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
     if (popup.kind === "insert") {
       const ref = popup.reference;
       const rect = ref.getBoundingClientRect();
-      const top = popup.position === "before" ? rect.top - 10 : rect.bottom + 10;
+      const vp = popup.visualPosition;
+      const popupTop = vp === "above" ? rect.top - 10
+        : vp === "below" ? rect.bottom + 10
+        : rect.top;
+      const popupLeft = vp === "left" ? rect.left - insertPopupSize.width - 10
+        : vp === "right" ? rect.right + 10
+        : rect.left;
+
+      const tabStyle = (active: boolean): React.CSSProperties => ({
+        flex: 1,
+        padding: "5px 0",
+        background: active ? "#4f46e5" : "transparent",
+        color: active ? "#fff" : "#a6adc8",
+        border: "none",
+        borderRadius: 4,
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "inherit",
+      });
+
+      const handlePromptSubmit = () => {
+        const text = insertEditorViewRef.current?.state.doc.toString().trim() ?? "";
+        if (text) handleInsert(vp, ref, "div", "", text);
+      };
+      const handlePromptCancel = () => setPopup(null);
+
+      // Keep refs in sync for CodeMirror keymap
+      insertSubmitRef.current = handlePromptSubmit;
+      insertCancelRef.current = handlePromptCancel;
+
+      const handleInsertResize = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        insertDragRef.current = { startX: e.clientX, startY: e.clientY, startW: insertPopupSize.width, startH: insertPopupSize.height };
+        const onMove = (ev: MouseEvent) => {
+          if (!insertDragRef.current) return;
+          setInsertPopupSize({
+            width: Math.max(260, insertDragRef.current.startW + (ev.clientX - insertDragRef.current.startX)),
+            height: Math.max(200, insertDragRef.current.startH + (ev.clientY - insertDragRef.current.startY)),
+          });
+        };
+        const onUp = () => {
+          insertDragRef.current = null;
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      };
 
       return (
-        <div style={{ ...popupStyle, left: rect.left, top, minWidth: 240 }} className="cs-edit-popup">
-          <div style={{ marginBottom: 8, fontWeight: 600 }}>Insert {popup.position}</div>
-          <select
-            value={insertTag}
-            onChange={(e) => setInsertTag(e.target.value)}
-            style={selectStyle}
-          >
-            {INSERT_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <input
-            type="text"
-            placeholder="Text content..."
-            value={insertText}
-            onChange={(e) => setInsertText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleInsert(popup.position, ref, insertTag, insertText);
-              if (e.key === "Escape") setPopup(null);
-            }}
-            autoFocus
-            style={{ ...inputStyle, marginTop: 6 }}
-          />
-          <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
-            <button onClick={() => handleInsert(popup.position, ref, insertTag, insertText)} style={btnPrimaryStyle}>Insert</button>
+        <div
+          style={{
+            ...popupStyle,
+            left: popupLeft,
+            top: popupTop,
+            width: insertTab === "prompt" ? insertPopupSize.width : undefined,
+            height: insertTab === "prompt" ? insertPopupSize.height : undefined,
+            minWidth: 260,
+            display: "flex",
+            flexDirection: "column",
+          }}
+          className="cs-edit-popup"
+        >
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>Insert {vp}</div>
+          {/* Tab toggle */}
+          <div style={{ display: "flex", gap: 2, background: "#313244", borderRadius: 4, padding: 2, marginBottom: 8 }}>
+            <button style={tabStyle(insertTab === "prompt")} onClick={() => setInsertTab("prompt")}>Prompt</button>
+            <button style={tabStyle(insertTab === "manual")} onClick={() => setInsertTab("manual")}>Manual</button>
           </div>
+
+          {insertTab === "manual" ? (
+            <>
+              <select
+                value={insertTag}
+                onChange={(e) => setInsertTag(e.target.value)}
+                style={selectStyle}
+              >
+                {INSERT_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input
+                type="text"
+                placeholder="Text content..."
+                value={insertText}
+                onChange={(e) => setInsertText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleInsert(vp, ref, insertTag, insertText);
+                  if (e.key === "Escape") setPopup(null);
+                }}
+                autoFocus
+                style={{ ...inputStyle, marginTop: 6 }}
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+                <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
+                <button onClick={() => handleInsert(vp, ref, insertTag, insertText)} style={btnPrimaryStyle}>Insert</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div ref={insertEditorContainerRef} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }} />
+              <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+                <button onClick={handlePromptCancel} style={btnCancelStyle}>Cancel</button>
+                <button onClick={handlePromptSubmit} style={btnPrimaryStyle}>Insert</button>
+              </div>
+            </>
+          )}
+          {/* Resize grip — only in prompt tab */}
+          {insertTab === "prompt" && (
+            <div
+              onMouseDown={handleInsertResize}
+              style={{
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                cursor: "nwse-resize",
+                padding: 6,
+                opacity: 0.5,
+                lineHeight: 0,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10">
+                <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="#6c7086" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </div>
+          )}
         </div>
       );
     }
@@ -1039,7 +1302,9 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
 
   return (
     <div className="cs-overlay" style={{ pointerEvents: popup ? "auto" : "none" }}>
-      {/* Hover highlight */}
+      {/* Hover highlight — pointer-events: none so elementFromPoint always sees page elements.
+           Buttons use pointer-events: auto + expanded ::before hit areas (CSS) + onMouseEnter lock
+           so they stay reachable without blocking child-element selection. */}
       {hoverRect && hovered && !popup && !editing && (
         <div
           className="cs-edit-highlight"
@@ -1067,49 +1332,91 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
           <button
             className="cs-edit-delete-btn"
             style={{ pointerEvents: "auto" }}
+            onMouseEnter={() => { overHighlightRef.current = true; }}
+            onMouseLeave={() => { overHighlightRef.current = false; }}
             onClick={(e) => { e.stopPropagation(); handleDelete(hovered); }}
             title="Delete element"
           >
             x
           </button>
 
-          {/* "+" insertion handles for block elements */}
-          {isBlockElement(hovered) && (
-            <>
-              <button
-                className="cs-edit-insert-btn cs-edit-insert-top"
-                style={{ pointerEvents: "auto" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setInsertTag("p");
-                  setInsertText("");
-                  setPopup({ kind: "insert", position: "before", reference: hovered });
-                }}
-                title="Insert before"
-              >
-                +
-              </button>
-              <button
-                className="cs-edit-insert-btn cs-edit-insert-bottom"
-                style={{ pointerEvents: "auto" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setInsertTag("p");
-                  setInsertText("");
-                  setPopup({ kind: "insert", position: "after", reference: hovered });
-                }}
-                title="Insert after"
-              >
-                +
-              </button>
-            </>
-          )}
+          {/* "+" insertion handles — all 4 directions on every element */}
+          <button
+            className="cs-edit-insert-btn cs-edit-insert-top"
+            style={{ pointerEvents: "auto" }}
+            onMouseEnter={() => { overHighlightRef.current = true; }}
+            onMouseLeave={() => { overHighlightRef.current = false; }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setInsertTag("p");
+              setInsertText("");
+              setInsertPrompt("");
+              setInsertTab("prompt");
+              setPopup({ kind: "insert", visualPosition: "above", reference: hovered });
+            }}
+            title="Insert above"
+          >
+            +
+          </button>
+          <button
+            className="cs-edit-insert-btn cs-edit-insert-bottom"
+            style={{ pointerEvents: "auto" }}
+            onMouseEnter={() => { overHighlightRef.current = true; }}
+            onMouseLeave={() => { overHighlightRef.current = false; }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setInsertTag("p");
+              setInsertText("");
+              setInsertPrompt("");
+              setInsertTab("prompt");
+              setPopup({ kind: "insert", visualPosition: "below", reference: hovered });
+            }}
+            title="Insert below"
+          >
+            +
+          </button>
+          <button
+            className="cs-edit-insert-btn cs-edit-insert-left"
+            style={{ pointerEvents: "auto" }}
+            onMouseEnter={() => { overHighlightRef.current = true; }}
+            onMouseLeave={() => { overHighlightRef.current = false; }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setInsertTag("p");
+              setInsertText("");
+              setInsertPrompt("");
+              setInsertTab("prompt");
+              setPopup({ kind: "insert", visualPosition: "left", reference: hovered });
+            }}
+            title="Insert left"
+          >
+            +
+          </button>
+          <button
+            className="cs-edit-insert-btn cs-edit-insert-right"
+            style={{ pointerEvents: "auto" }}
+            onMouseEnter={() => { overHighlightRef.current = true; }}
+            onMouseLeave={() => { overHighlightRef.current = false; }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setInsertTag("p");
+              setInsertText("");
+              setInsertPrompt("");
+              setInsertTab("prompt");
+              setPopup({ kind: "insert", visualPosition: "right", reference: hovered });
+            }}
+            title="Insert right"
+          >
+            +
+          </button>
 
           {/* Image overlay buttons */}
           {hovered.tagName === "IMG" && (
             <div className="cs-edit-img-overlay" style={{ pointerEvents: "auto" }}>
               <button
                 className="cs-edit-img-btn"
+                onMouseEnter={() => { overHighlightRef.current = true; }}
+                onMouseLeave={() => { overHighlightRef.current = false; }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setPopup({ kind: "imageReplace", target: hovered as HTMLImageElement });
@@ -1122,35 +1429,6 @@ export function EditMode({ addAction, hostElement, natsClient }: EditModeProps) 
           )}
         </div>
       )}
-
-      {/* Section boundary dividers */}
-      {sectionBoundaries.map((sb, i) => (
-        <div
-          key={i}
-          className="cs-edit-section-divider"
-          style={{
-            position: "fixed",
-            left: sb.rect.left,
-            top: sb.rect.top - 16,
-            width: sb.rect.width,
-            pointerEvents: "auto",
-          }}
-        >
-          <div className="cs-edit-section-line" />
-          <button
-            className="cs-edit-section-btn"
-            onClick={() => {
-              setSectionPrompt("");
-              setSectionStyle("match existing");
-              setPopup({ kind: "section", position: "before", reference: sb.el });
-            }}
-            title="Generate section here"
-          >
-            + Section
-          </button>
-          <div className="cs-edit-section-line" />
-        </div>
-      ))}
 
       {/* Popups */}
       {renderPopup()}

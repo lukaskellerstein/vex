@@ -79,7 +79,7 @@ export function generateSelector(el: Element): string {
   }
 
   const sel = path.join(" > ");
-  if (document.querySelectorAll(sel).length === 1) return sel;
+  if (sel && document.querySelectorAll(sel).length === 1) return sel;
 
   // Final fallback: full path from html
   const fullPath: string[] = [];

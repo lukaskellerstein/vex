@@ -68,6 +68,9 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
             project_id TEXT,
             last_heartbeat TEXT,
             config TEXT,
+            tasks_completed INTEGER DEFAULT 0,
+            tasks_failed INTEGER DEFAULT 0,
+            total_cost_usd REAL DEFAULT 0,
             created_at TEXT NOT NULL,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
         );
@@ -79,9 +82,14 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
             page_title TEXT NOT NULL,
             action_count INTEGER NOT NULL,
             status TEXT DEFAULT 'pending',
+            duration_ms INTEGER,
+            cost_usd REAL,
+            error_message TEXT,
+            agent_id TEXT,
             submitted_at TEXT NOT NULL,
             completed_at TEXT,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS actions (
@@ -127,5 +135,75 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_config_unique
             ON config(key, scope, COALESCE(project_id, ''));
+
+        CREATE TABLE IF NOT EXISTS activity_events (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            project_id TEXT,
+            project_name TEXT,
+            agent_id TEXT,
+            agent_name TEXT,
+            summary TEXT NOT NULL,
+            meta TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+            FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_activity_created
+            ON activity_events(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_activity_project
+            ON activity_events(project_id);
+        CREATE INDEX IF NOT EXISTS idx_activity_type
+            ON activity_events(type);
+
+        CREATE TABLE IF NOT EXISTS agent_traces (
+            id TEXT PRIMARY KEY,
+            batch_id TEXT UNIQUE,
+            agent_id TEXT,
+            agent_name TEXT,
+            agent_model TEXT,
+            status TEXT DEFAULT 'running',
+            total_duration_ms INTEGER,
+            total_cost_usd REAL,
+            total_tokens INTEGER,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
+            FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS trace_steps (
+            id TEXT PRIMARY KEY,
+            trace_id TEXT NOT NULL,
+            sequence_index INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            content TEXT,
+            metadata TEXT,
+            duration_ms INTEGER,
+            token_count INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (trace_id) REFERENCES agent_traces(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_trace_steps_trace
+            ON trace_steps(trace_id, sequence_index);
     """)
+
+    # Migrations for existing databases: add new columns if missing.
+    migrations = [
+        ("batches", "duration_ms", "ALTER TABLE batches ADD COLUMN duration_ms INTEGER"),
+        ("batches", "cost_usd", "ALTER TABLE batches ADD COLUMN cost_usd REAL"),
+        ("batches", "error_message", "ALTER TABLE batches ADD COLUMN error_message TEXT"),
+        ("batches", "agent_id", "ALTER TABLE batches ADD COLUMN agent_id TEXT REFERENCES agents(id)"),
+        ("agents", "tasks_completed", "ALTER TABLE agents ADD COLUMN tasks_completed INTEGER DEFAULT 0"),
+        ("agents", "tasks_failed", "ALTER TABLE agents ADD COLUMN tasks_failed INTEGER DEFAULT 0"),
+        ("agents", "total_cost_usd", "ALTER TABLE agents ADD COLUMN total_cost_usd REAL DEFAULT 0"),
+    ]
+    for _table, _col, sql in migrations:
+        try:
+            await db.execute(sql)
+        except Exception:
+            pass  # Column already exists
+
     await db.commit()

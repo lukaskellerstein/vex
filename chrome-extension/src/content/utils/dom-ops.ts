@@ -29,6 +29,67 @@ export function insertElement(
   return el;
 }
 
+function isHorizontalLayout(parent: Element): boolean {
+  const style = getComputedStyle(parent);
+  if (style.display === "flex" || style.display === "inline-flex") {
+    const dir = style.flexDirection;
+    return dir === "row" || dir === "row-reverse";
+  }
+  if (style.display === "grid" || style.display === "inline-grid") {
+    const cols = style.gridTemplateColumns;
+    return cols !== "none" && cols.split(/\s+/).length > 1;
+  }
+  return false;
+}
+
+/**
+ * Insert an element to the left or right of a reference element.
+ * If the parent is already a horizontal layout, inserts as a sibling.
+ * Otherwise, wraps the reference + new element in a flex container.
+ * Returns { newEl, wasWrapped }.
+ */
+export function insertElementHorizontal(
+  side: "left" | "right",
+  reference: Element,
+  tag: string,
+  text: string,
+  attrs: Record<string, string>,
+): { newEl: Element; wasWrapped: boolean } {
+  const el = document.createElement(tag);
+  el.textContent = text;
+  for (const [k, v] of Object.entries(attrs)) {
+    el.setAttribute(k, v);
+  }
+
+  const parent = reference.parentElement!;
+
+  if (isHorizontalLayout(parent)) {
+    // Parent is already horizontal — insert as sibling
+    if (side === "left") {
+      parent.insertBefore(el, reference);
+    } else {
+      parent.insertBefore(el, reference.nextSibling);
+    }
+    return { newEl: el, wasWrapped: false };
+  }
+
+  // Wrap reference + new element in a flex row
+  const wrapper = document.createElement("div");
+  wrapper.style.display = "flex";
+  wrapper.style.alignItems = "center";
+  wrapper.style.gap = "8px";
+  parent.insertBefore(wrapper, reference);
+  wrapper.appendChild(reference);
+
+  if (side === "left") {
+    wrapper.insertBefore(el, reference);
+  } else {
+    wrapper.appendChild(el);
+  }
+
+  return { newEl: el, wasWrapped: true };
+}
+
 export function removeElement(el: Element): string {
   const html = el.outerHTML;
   el.remove();

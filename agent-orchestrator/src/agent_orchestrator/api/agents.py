@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.models.agent import Agent, AgentCreate, HeartbeatRequest
@@ -33,6 +33,9 @@ def _row_to_agent(row) -> dict:
         project_id=row["project_id"],
         last_heartbeat=row["last_heartbeat"],
         config=config,
+        tasks_completed=row["tasks_completed"],
+        tasks_failed=row["tasks_failed"],
+        total_cost_usd=row["total_cost_usd"],
         created_at=row["created_at"],
     ).model_dump(mode="json")
 
@@ -73,6 +76,22 @@ async def get_agent(agent_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return _row_to_agent(row)
+
+
+@router.get("/agents/{agent_id}/logs")
+async def get_agent_logs(
+    agent_id: str,
+    limit: int = Query(default=200, le=1000),
+    offset: int = Query(default=0),
+):
+    db = await get_db()
+    cursor = await db.execute("SELECT id FROM agents WHERE id = ?", (agent_id,))
+    if await cursor.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # For now, return empty logs — agent log storage will be populated
+    # when agents actually run and produce output
+    return []
 
 
 @router.delete("/agents/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)

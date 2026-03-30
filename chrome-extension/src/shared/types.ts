@@ -60,8 +60,11 @@ export interface SelectAction {
 export interface InsertAction extends BaseAction {
   type: "insert";
   position: "after" | "before" | "firstChild" | "lastChild";
+  visualPosition: "above" | "below" | "left" | "right";
   referenceSelector: string;
   content: { tag: string; text: string; attributes: Record<string, string> };
+  wasWrapped: boolean;
+  prompt?: string;
 }
 
 export interface EditTextAction extends BaseAction {

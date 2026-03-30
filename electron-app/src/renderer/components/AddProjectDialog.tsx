@@ -112,14 +112,17 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: "8px 20px",
-    background: active ? "#3d3d5c" : "transparent",
-    color: active ? "#e0e0f0" : "#888",
+    background: active ? "var(--surface-hover)" : "transparent",
+    color: active ? "var(--foreground)" : "var(--foreground-muted)",
     border: "none",
-    borderRadius: "6px 6px 0 0",
+    borderRadius: "var(--radius) var(--radius) 0 0",
     cursor: "pointer",
     fontSize: "13px",
     fontWeight: active ? 600 : 400,
+    transition: "color 150ms, background 150ms",
   });
+
+  const disabledPrimary = !githubUrl.trim() || busy;
 
   return (
     <div
@@ -129,37 +132,51 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(0,0,0,0.6)",
+        background: "var(--glass-bg)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
+        animation: "fade-in 0.15s ease-out",
       }}
       onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
     >
       <div
         style={{
-          background: "#2d2d44",
+          background: "var(--surface-elevated)",
+          border: "1px solid var(--border)",
           borderRadius: "12px",
           width: "480px",
           maxHeight: "80vh",
           overflow: "auto",
           padding: "24px",
+          animation: "fade-in-up 0.2s ease-out",
         }}
       >
+        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0 }}>Add Project</h3>
+          <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0, color: "var(--foreground)" }}>Add Project</h3>
           {!busy && (
             <button
               onClick={onClose}
-              style={{ background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: "18px" }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--foreground-muted)",
+                cursor: "pointer",
+                fontSize: "18px",
+                transition: "color 150ms",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--foreground)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--foreground-muted)"; }}
             >
               ×
             </button>
           )}
         </div>
 
-        <div style={{ display: "flex", gap: "4px", marginBottom: "16px", borderBottom: "1px solid #3d3d5c" }}>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: "4px", marginBottom: "16px", borderBottom: "1px solid var(--border)" }}>
           <button style={tabStyle(tab === "github")} onClick={() => !busy && setTab("github")}>
             From GitHub URL
           </button>
@@ -168,13 +185,14 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
           </button>
         </div>
 
+        {/* Error */}
         {error && (
           <div style={{
             padding: "10px 14px",
-            background: "#3d1c1c",
-            border: "1px solid #f44336",
-            borderRadius: "6px",
-            color: "#f44336",
+            background: "hsla(0, 84%, 60%, 0.1)",
+            border: "1px solid var(--status-error)",
+            borderRadius: "var(--radius)",
+            color: "var(--status-error)",
             fontSize: "13px",
             marginBottom: "12px",
           }}>
@@ -182,6 +200,7 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
           </div>
         )}
 
+        {/* GitHub tab */}
         {tab === "github" && (
           <div>
             <input
@@ -195,10 +214,10 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
               style={{
                 width: "100%",
                 padding: "10px 12px",
-                background: "#1a1a2e",
-                border: "1px solid #3d3d5c",
-                borderRadius: "6px",
-                color: "#e0e0f0",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                color: "var(--foreground)",
                 fontSize: "14px",
                 outline: "none",
                 boxSizing: "border-box",
@@ -209,19 +228,23 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
             {phase && (
               <div style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "12px", color: "#a0a0b8" }}>{statusMessage}</span>
-                  <span style={{ fontSize: "12px", color: "#a0a0b8" }}>{progress}%</span>
+                  <span style={{ fontSize: "12px", color: "var(--foreground-muted)" }}>{statusMessage}</span>
+                  <span style={{ fontSize: "12px", color: "var(--foreground-muted)" }}>{progress}%</span>
                 </div>
                 <div style={{
                   height: "6px",
-                  background: "#1a1a2e",
+                  background: "var(--surface)",
                   borderRadius: "3px",
                   overflow: "hidden",
                 }}>
                   <div style={{
                     height: "100%",
                     width: `${progress}%`,
-                    background: phase === "ready" ? "#4caf50" : phase === "error" ? "#f44336" : "#6c63ff",
+                    background: phase === "ready"
+                      ? "var(--status-success)"
+                      : phase === "error"
+                        ? "var(--status-error)"
+                        : "var(--primary)",
                     borderRadius: "3px",
                     transition: "width 0.3s",
                   }} />
@@ -231,17 +254,21 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
 
             <button
               onClick={handleGithubSubmit}
-              disabled={!githubUrl.trim() || busy}
+              disabled={disabledPrimary}
               style={{
                 width: "100%",
                 padding: "10px",
-                background: !githubUrl.trim() || busy ? "#3d3d5c" : "#6c63ff",
-                color: "#fff",
+                background: disabledPrimary
+                  ? "var(--surface-hover)"
+                  : "linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)",
+                color: "var(--primary-foreground)",
                 border: "none",
-                borderRadius: "6px",
-                cursor: !githubUrl.trim() || busy ? "default" : "pointer",
+                borderRadius: "var(--radius)",
+                cursor: disabledPrimary ? "default" : "pointer",
                 fontSize: "14px",
-                opacity: !githubUrl.trim() || busy ? 0.5 : 1,
+                fontWeight: 600,
+                opacity: disabledPrimary ? 0.5 : 1,
+                transition: "opacity 150ms, transform 150ms",
               }}
             >
               {busy ? "Working..." : "Clone & Setup"}
@@ -249,6 +276,7 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
           </div>
         )}
 
+        {/* Folder tab */}
         {tab === "folder" && (
           <div>
             {!pendingPath ? (
@@ -258,19 +286,30 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                 style={{
                   width: "100%",
                   padding: "24px",
-                  background: "#1a1a2e",
-                  border: "2px dashed #3d3d5c",
+                  background: "var(--surface)",
+                  border: "2px dashed var(--border)",
                   borderRadius: "8px",
-                  color: "#a0a0b8",
+                  color: "var(--foreground-muted)",
                   cursor: busy ? "default" : "pointer",
                   fontSize: "14px",
+                  transition: "border-color 150ms, color 150ms",
+                }}
+                onMouseEnter={(e) => {
+                  if (!busy) {
+                    e.currentTarget.style.borderColor = "var(--border-bright)";
+                    e.currentTarget.style.color = "var(--foreground)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--foreground-muted)";
                 }}
               >
                 Click to select a project folder
               </button>
             ) : (
               <div>
-                <div style={{ fontSize: "12px", color: "#a0a0b8", marginBottom: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--foreground-muted)", marginBottom: "8px" }}>
                   {pendingPath}
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
@@ -284,10 +323,10 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                     style={{
                       flex: 1,
                       padding: "8px 12px",
-                      background: "#1a1a2e",
-                      border: "1px solid #3d3d5c",
-                      borderRadius: "6px",
-                      color: "#e0e0f0",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius)",
+                      color: "var(--foreground)",
                       fontSize: "14px",
                       outline: "none",
                     }}
@@ -297,12 +336,16 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                     disabled={!projectName.trim() || busy}
                     style={{
                       padding: "8px 16px",
-                      background: projectName.trim() && !busy ? "#4caf50" : "#3d3d5c",
-                      color: "#fff",
+                      background: projectName.trim() && !busy
+                        ? "linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)"
+                        : "var(--surface-hover)",
+                      color: "var(--primary-foreground)",
                       border: "none",
-                      borderRadius: "6px",
+                      borderRadius: "var(--radius)",
                       cursor: projectName.trim() && !busy ? "pointer" : "default",
                       fontSize: "13px",
+                      fontWeight: 600,
+                      opacity: projectName.trim() && !busy ? 1 : 0.5,
                     }}
                   >
                     Create
@@ -312,12 +355,23 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                     disabled={busy}
                     style={{
                       padding: "8px 16px",
-                      background: "#3d3d5c",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
+                      background: "var(--surface-elevated)",
+                      color: "var(--foreground-muted)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius)",
                       cursor: busy ? "default" : "pointer",
                       fontSize: "13px",
+                      transition: "color 150ms, background 150ms",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!busy) {
+                        e.currentTarget.style.background = "var(--surface-hover)";
+                        e.currentTarget.style.color = "var(--foreground)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "var(--surface-elevated)";
+                      e.currentTarget.style.color = "var(--foreground-muted)";
                     }}
                   >
                     Cancel

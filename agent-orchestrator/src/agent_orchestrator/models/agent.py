@@ -30,6 +30,9 @@ class Agent(BaseModel):
     project_id: str | None = None
     last_heartbeat: datetime | None = None
     config: dict | None = None
+    tasks_completed: int = 0
+    tasks_failed: int = 0
+    total_cost_usd: float = 0
     created_at: datetime
 
 
