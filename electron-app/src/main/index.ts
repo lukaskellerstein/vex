@@ -3,7 +3,9 @@ import path from "path";
 import http from "http";
 import net from "net";
 import { ProcessManager } from "./process-manager.js";
-import { DevServerManager, ProjectInfo } from "./dev-server-manager.js";
+import { DevServerManager } from "./dev-server-manager.js";
+import { cloneRepo } from "./github-cloner.js";
+import { installDependencies } from "./dependency-installer.js";
 
 Menu.setApplicationMenu(null);
 
@@ -183,7 +185,6 @@ ipcMain.handle("start-dev-server", async (_event, projectId: string) => {
     path: project.path as string,
     dev_command: project.dev_command as string | undefined,
     dev_port: project.dev_port as number | undefined,
-    dev_server_url: project.dev_server_url as string | undefined,
     package_manager: project.package_manager as string | undefined,
   });
   console.log(`[dev-server] Start result:`, result);
@@ -192,16 +193,7 @@ ipcMain.handle("start-dev-server", async (_event, projectId: string) => {
 
 ipcMain.handle("stop-dev-server", async (_event, projectId: string) => {
   console.log(`[dev-server] Stopping project ${projectId}`);
-  const project = (await apiGet(`/api/projects/${projectId}`)) as Record<string, unknown> | null;
-  // Use the actual runtime port from dev_server_url if available, otherwise fall back to dev_port.
-  let port = (project?.dev_port as number) ?? 3000;
-  if (project?.dev_server_url) {
-    try {
-      const urlPort = parseInt(new URL(project.dev_server_url as string).port, 10);
-      if (urlPort > 0) port = urlPort;
-    } catch { /* use default */ }
-  }
-  const result = await devServerManager.stop(projectId, port);
+  const result = await devServerManager.stop(projectId);
   console.log(`[dev-server] Stop result:`, result);
   return result;
 });
@@ -212,6 +204,14 @@ ipcMain.handle("get-dev-server-logs", async (_event, projectId: string, offset: 
 
 ipcMain.handle("open-external", async (_event, url: string) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle("clone-github-repo", async (_event, url: string) => {
+  return cloneRepo(url, mainWindow);
+});
+
+ipcMain.handle("install-dependencies", async (_event, projectPath: string) => {
+  return installDependencies(projectPath, mainWindow);
 });
 
 ipcMain.handle("get-agents", async () => {
@@ -258,27 +258,18 @@ function checkHttp(url: string): Promise<boolean> {
 
 // --- App lifecycle ---
 
-async function syncProjectStatuses(): Promise<void> {
+async function resetAllProjectStatuses(): Promise<void> {
   try {
-    const projects = (await apiGet("/api/projects")) as Array<ProjectInfo & { status?: string }> | null;
+    const projects = (await apiGet("/api/projects")) as Array<{ id: string; status?: string }> | null;
     if (!Array.isArray(projects)) return;
     for (const p of projects) {
-      const url = await devServerManager.checkRunning(p);
-      const dbStatus = p.status;
-      if (url) {
-        if (dbStatus !== "running") {
-          console.log(`[dev-server] Detected running server for ${p.id} at ${url}`);
-          await apiPatch(`/api/projects/${p.id}`, { status: "running", dev_server_url: url });
-        }
-      } else {
-        if (dbStatus === "running" || dbStatus === "starting" || dbStatus === "stopping") {
-          console.log(`[dev-server] No server found for ${p.id}, resetting to idle`);
-          await apiPatch(`/api/projects/${p.id}`, { status: "idle", dev_server_url: null });
-        }
+      if (p.status !== "idle") {
+        console.log(`[dev-server] Resetting project ${p.id} to idle`);
+        await apiPatch(`/api/projects/${p.id}`, { status: "idle", dev_server_url: null });
       }
     }
   } catch (err) {
-    console.error("Failed to sync project statuses:", err);
+    console.error("Failed to reset project statuses:", err);
   }
 }
 
@@ -293,11 +284,11 @@ app.on("ready", async () => {
     console.log(`[standalone] NATS: ${natsOk ? "reachable" : "NOT reachable"}`);
     const aoOk = await checkHttp(`http://localhost:${cliArgs.aoPort}/api/health`);
     console.log(`[standalone] AgentOrchestrator: ${aoOk ? "reachable" : "NOT reachable"}`);
-    if (aoOk) await syncProjectStatuses();
+    if (aoOk) await resetAllProjectStatuses();
   } else {
     try {
       await processManager.startAll();
-      await syncProjectStatuses();
+      await resetAllProjectStatuses();
     } catch (err) {
       console.error("Failed to start managed processes:", err);
     }

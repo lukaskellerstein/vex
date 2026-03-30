@@ -27,6 +27,7 @@ export function ProjectDetail({ projectId, onBack }: Props) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [portError, setPortError] = useState<string | null>(null);
   const logOffsetRef = useRef(0);
   const logEndRef = useRef<HTMLDivElement>(null);
   const browserOpenedRef = useRef(false);
@@ -61,6 +62,9 @@ export function ProjectDetail({ projectId, onBack }: Props) {
           setLogLines((prev) => [...prev, ...result.lines]);
           logOffsetRef.current = result.offset;
         }
+        if (result?.portError) {
+          setPortError(result.portError);
+        }
         // Open browser once when URL is detected.
         if (result?.url && !browserOpenedRef.current) {
           browserOpenedRef.current = true;
@@ -84,6 +88,7 @@ export function ProjectDetail({ projectId, onBack }: Props) {
   async function handleStart() {
     // Reset log state for a new session.
     setLogLines([]);
+    setPortError(null);
     logOffsetRef.current = 0;
     browserOpenedRef.current = false;
     const result = await window.electronAPI.startDevServer(projectId);
@@ -310,7 +315,7 @@ export function ProjectDetail({ projectId, onBack }: Props) {
           <button
             onClick={handleStop}
             disabled={!isBusy}
-            title={`Kills any process listening on port ${project.dev_port ?? 3000}`}
+            title="Stop dev server"
             style={{
               padding: "8px 16px",
               background: !isBusy ? "#3d3d5c" : "#f44336",
@@ -359,6 +364,22 @@ export function ProjectDetail({ projectId, onBack }: Props) {
             {showAgents ? "Hide Agents" : "Agent Panel"}
           </button>
         </div>
+
+        {portError && (
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "10px 14px",
+              background: "#3d1c1c",
+              border: "1px solid #f44336",
+              borderRadius: "6px",
+              color: "#f44336",
+              fontSize: "13px",
+            }}
+          >
+            {portError}
+          </div>
+        )}
       </div>
 
       {/* Terminal Output */}
