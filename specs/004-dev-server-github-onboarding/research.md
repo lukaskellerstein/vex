@@ -95,3 +95,47 @@ The AO's `project_detector.py` already implements this detection. We'll replicat
 **Alternatives considered**:
 - Automatic retry → Rejected: YAGNI. Clone failures are usually not transient (wrong URL, no internet).
 - Show raw git/npm output → Rejected: meaningless to target user. Log it for debugging but show friendly message.
+
+---
+
+## Implementation Findings
+
+## R-009: Incremental Log Polling via Offset
+
+**Finding**: The `get-dev-server-logs` IPC channel was implemented with an `offset` parameter rather than returning the full buffer on every call.
+
+**Rationale**: The renderer polls every second. Returning the full 2000-line buffer on each poll would send growing payloads over IPC unnecessarily. The offset approach returns only lines appended since the last poll. `url` and `portError` are included in the same response to avoid additional round-trips.
+
+**Implementation**: `getLogs(projectId, offset)` returns `{ lines: string[], offset: number, running: boolean, url: string | null, portError: string | null }`. The renderer accumulates lines into local state and passes back the updated offset on each call.
+
+## R-010: Port Conflict Detection via Async Log Parsing
+
+**Finding**: Port conflicts cannot be detected synchronously at the time `start-dev-server` returns. The process must spawn and attempt to bind before the error appears in stderr. The implementation parses stderr lines on arrival, stores the conflict message in `DevServer.portError`, and surfaces it via `getLogs`. The renderer displays it inline below the Start/Stop buttons.
+
+**Rationale**: This is more accurate than attempting to pre-check the port (which violates the "no port scanning" constraint) and avoids blocking the IPC response while waiting for a potential error that may never occur.
+
+## R-011: SIGKILL Escalation on Stop
+
+**Finding**: The `stop` method sends SIGTERM to the process group and waits up to 5 seconds for the process to exit. If the process does not exit within that window, SIGKILL is sent. The `before-quit` handler calls `stopAll()` which uses this same mechanism.
+
+**Rationale**: Some dev servers (particularly those running webpack) may not respond immediately to SIGTERM. The 5-second escalation ensures clean shutdown even for unresponsive processes, which is critical for the "no orphans on quit" requirement.
+
+## R-012: `buildRunCommand` Reads `package.json` Instead of Splitting `dev_command`
+
+**Finding**: The AO stores a `dev_command` field (e.g., `"npm run dev"`), but the implementation ignores it and instead reads `package.json` directly to find the first matching script key (`dev`, `start`, `serve`), then constructs the command as `[packageManager, "run", scriptKey]`.
+
+**Rationale**: The stored `dev_command` string may be set to a human-readable value that does not match the actual script key. Reading `package.json` directly is deterministic. The package manager is taken from the AO's `package_manager` field, which is set by `project_detector.py` at registration time.
+
+**Limitation**: If the project's dev script uses a non-standard key not in (`dev`, `start`, `serve`), `buildRunCommand` returns `null` and start fails with "Cannot determine dev command".
+
+## R-013: `installDependencies` Skips Repos Without `package.json`
+
+**Finding**: If the cloned repo does not contain a `package.json`, `installDependencies` returns `{ success: true, packageManager: "npm" }` without running any install command. This is intentional — repos without `package.json` (e.g., non-Node projects, static sites) should not cause an install error during onboarding.
+
+**Rationale**: Non-Node repos may still have other value (e.g., a static HTML site that can be served). Silently skipping install keeps the onboarding flow working rather than failing with a confusing error.
+
+## R-014: `BrowserWindow` Passed Directly for Progress Reporting
+
+**Finding**: Both `cloneRepo` and `installDependencies` accept a `BrowserWindow | null` reference to send progress events directly via `win.webContents.send("clone-progress", ...)`. This avoids the need for an event emitter or callback abstraction.
+
+**Rationale**: Since the clone/install operations live in the Electron main process and `mainWindow` is accessible at call time, passing it directly is the simplest approach. The `null` guard (`if (win && !win.isDestroyed())`) handles the edge case where the window was closed during a long-running clone.

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `004-dev-server-github-onboarding`
 **Created**: 2026-03-30
-**Status**: Draft
+**Status**: Implemented
 **Input**: User description: "Dev Server Management & Project Onboarding — move dev server lifecycle to Electron, add GitHub URL-based project onboarding"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -138,8 +138,10 @@ A user tries to start a dev server, but the port is already in use by another pr
 
 ## Assumptions
 
-- Git is installed on the user's machine (required for cloning). If not present, the system should detect this and prompt the user to install it.
-- A supported runtime (Node.js with npm/yarn/pnpm) is installed. Framework detection relies on the presence of package.json and lock files.
+- Git is installed on the user's machine (required for cloning). If not present, the system detects this and shows a user-friendly error.
+- A supported runtime (Node.js with npm/yarn/pnpm/bun) is installed. Framework detection relies on the presence of package.json and lock files.
 - Only public GitHub repos are supported initially. Private repo support (authentication) is out of scope for this iteration.
 - The managed project storage location is `~/.vex/projects/`. This directory is created automatically if it doesn't exist.
 - The backend API service remains the source of truth for project metadata (persistent storage), while the desktop app owns runtime process state.
+- Repos without a `package.json` are cloned without running an install step (no error, dependency install is silently skipped).
+- Dev server URL detection covers both `localhost` and `127.0.0.1` addresses.

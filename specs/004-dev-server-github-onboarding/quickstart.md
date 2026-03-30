@@ -2,6 +2,7 @@
 
 **Feature**: 004-dev-server-github-onboarding
 **Date**: 2026-03-30
+**Status**: Implemented and runtime-tested
 
 ## Prerequisites
 
@@ -44,9 +45,9 @@ cd agent-orchestrator && uv sync
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
-| `start-dev-server` | Renderer → Main | Spawn dev server for project |
-| `stop-dev-server` | Renderer → Main | Kill dev server process group |
-| `get-dev-server-logs` | Renderer → Main | Get buffered log lines |
+| `start-dev-server` | Renderer → Main | Spawn dev server for project (takes `projectId` only) |
+| `stop-dev-server` | Renderer → Main | Kill dev server process group (SIGTERM → SIGKILL after 5s) |
+| `get-dev-server-logs` | Renderer → Main | Get new log lines since `offset`; also returns `url` and `portError` |
 
 ## Add Project from GitHub
 
@@ -73,9 +74,9 @@ cd agent-orchestrator && uv sync
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
-| `clone-github-repo` | Renderer → Main | Start clone operation |
-| `clone-progress` | Main → Renderer | Stream clone/install progress |
-| `install-dependencies` | Renderer → Main | Run package manager install |
+| `clone-github-repo` | Renderer → Main | Start clone (validates URL, creates `~/.vex/projects/`, runs `git clone`) |
+| `clone-progress` | Main → Renderer | Stream clone/install progress events (subscribed via `onCloneProgress`, returns unsubscribe fn) |
+| `install-dependencies` | Renderer → Main | Run package manager install (skips silently if no `package.json`) |
 
 ## Testing
 

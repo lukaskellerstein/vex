@@ -2,8 +2,9 @@
 
 **Input**: Design documents from `/specs/004-dev-server-github-onboarding/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
+**Status**: All 28 tasks implemented and runtime-tested.
 
-**Tests**: Not explicitly requested — test tasks omitted. Validation via Chrome DevTools MCP and manual inspection per testing rules.
+**Tests**: Validation via Chrome DevTools MCP and manual process inspection. Start/Stop/URL detection/logs all verified working end-to-end.
 
 **Organization**: Tasks grouped by user story. US1 and US2 are both P1 but US1 (dev server) is foundational — US2 (GitHub onboarding) depends on a working start/stop flow.
 
@@ -215,3 +216,25 @@ Task: "Create AddProjectDialog.tsx in electron-app/src/renderer/components/"
 - T017 (AddProjectDialog) and T018 (ProjectList update) both touch the add-project flow — T017 before T018
 - AO has no code changes in this feature — only Electron app is modified
 - Existing preload.ts IPC interface for start/stop/logs is unchanged; only new channels added for clone
+
+---
+
+## Task-Level Implementation Notes
+
+**T005** (URL detection): Implemented as multi-strategy. Primary: whitespace-tokenize the line, check each token against `http(s)://localhost:` and `http(s)://127.0.0.1:` prefixes. Fallback: if the line contains "ready", "listening", or "started" and a standalone port number (1024–65535) is found, construct `http://localhost:<port>`. ANSI codes stripped by regex before matching.
+
+**T008** (`start-dev-server` IPC): The request takes only `projectId` (not the full project payload). Main fetches project details from `GET /api/projects/:id` internally before calling `DevServerManager.start`.
+
+**T009** (`stop-dev-server` IPC): Response shape is `{ status: "stopped" | "not_running" }`, not `{ success: true }` as originally described. The stop method also sends `dev_server_url: null` to the AO via the `StatusUpdater` callback when transitioning to "idle".
+
+**T010** (`get-dev-server-logs` IPC): Implemented with incremental offset. Request takes `(projectId, offset)`. Response includes `{ lines, offset, running, url, portError }` — not a simple `{ logs }` array. Port conflict detection and URL detection are piggybacked onto log poll responses.
+
+**T013** (`github-cloner.ts`): `cloneRepo` signature is `(url, win: BrowserWindow | null)` — no `destDir` parameter. Destination computed internally. Duplicate name handling appends `-2`, `-3`, etc. (not configurable).
+
+**T014** (`dependency-installer.ts`): `installDependencies` signature is `(projectPath, win: BrowserWindow | null)`. Silently succeeds (no install run) if `package.json` is absent. Package manager error message includes the detected PM name, e.g., "Make sure pnpm is installed on your computer."
+
+**T019** (onboarding pipeline): After `cloneGithubRepo` + `installDependencies`, the dialog calls `createProject(repoName, projectPath)`. The AO's `project_detector.py` runs during `POST /api/projects` to auto-detect framework. On success, `onProjectCreated()` is called which closes the dialog and triggers a project list refresh — no automatic navigation to the new project's detail page.
+
+**T024** (port conflict detection): Port conflict is detected asynchronously from stderr patterns, not synchronously from the `start-dev-server` IPC response. The conflict message is stored in `DevServer.portError` and returned in subsequent `getLogs` poll responses.
+
+**T025** (port conflict UI): `ProjectDetail` displays the `portError` inline in a red box below the Start/Stop/Open buttons. The error is cleared on the next Start click (`setPortError(null)` in `handleStart`), allowing retry.

@@ -28,9 +28,12 @@ The existing `projects` table in SQLite already has all needed fields. No schema
 **State transitions** (managed by Electron, synced to AO via PATCH):
 
 ```
-idle → starting → running → stopping → idle
-                ↘ error ↗         ↘ error
+idle → starting → running → idle
+              ↘ error            (port conflict detected in stderr)
+                        ↘ error  (non-zero exit without port conflict)
 ```
+
+Note: The `stopping` state is not produced by the current implementation. Stop transitions directly from `running` to `idle` once the process exits or is killed.
 
 ### Dev Server Instance (runtime only, Electron in-memory)
 
@@ -40,10 +43,9 @@ Not persisted. Exists only in `DevServerManager`'s `Map<projectId, DevServer>`.
 |-------|------|-------|
 | projectId | string | Key in the map |
 | process | ChildProcess | Node.js child process handle |
-| pid | number | OS process ID (for process group kill) |
-| logBuffer | string[] | Circular buffer, max 2000 lines |
-| detectedUrl | string | null | First localhost URL found in stdout |
-| status | string | starting, running, error |
+| logLines | string[] | Circular buffer, max 2000 lines; prefixed `[out]`, `[err]`, `[system]` |
+| url | string \| null | First `localhost` or `127.0.0.1` URL found in stdout/stderr |
+| portError | string \| null | Port conflict message if detected, e.g. "Port 3000 is in use. Stop the other process first." |
 
 ### Clone Operation (runtime only, Electron in-memory)
 
