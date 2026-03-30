@@ -1,11 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Web Selector",
-  "version": "2.0.0",
+  "name": "Vex",
+  "version": "3.0.0",
   "description": "Visually select elements on any webpage, annotate them with instructions, and send to a coding agent for automatic code changes.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8420/*"
   ],
   "action": {
     "default_popup": "src/popup/index.html",
@@ -21,8 +25,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/index.tsx"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/index.tsx"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -31,5 +39,11 @@
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["screenshot-viewer.html", "screenshot-viewer.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

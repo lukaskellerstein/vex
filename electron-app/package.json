@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "start": "electron dist/main/index.js"
+    "start": "electron --no-sandbox --remote-debugging-port=9222 dist/main/index.js",
+    "build:start": "npm run build && npm run start"
   },
   "dependencies": {
     "electron": "^30.0.0",

@@ -24,6 +24,8 @@ class ProjectUpdate(BaseModel):
     package_manager: str | None = None
     styling_approach: str | None = None
     framework: str | None = None
+    status: str | None = None
+    dev_server_url: str | None = None
 
 
 class Project(BaseModel):

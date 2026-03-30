@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { connect, JSONCodec, type NatsConnection, type Subscription } from "nats.ws";
 import { AGENT_MANAGER_URL, NATS_WS_URL } from "../../shared/messages";
 
-interface Subscription {
+interface SubEntry {
   subject: string;
   callback: (data: object) => void;
+  sub: Subscription | null;
 }
 
 export interface NatsClient {
@@ -15,19 +17,18 @@ export interface NatsClient {
   pollForResult: (requestId: string, timeoutMs: number) => Promise<unknown>;
 }
 
+const jc = JSONCodec();
+
 /**
- * Lightweight NATS WebSocket client hook.
- *
- * Uses raw WebSocket with JSON-framed messages. Designed to be swapped
- * to nats.ws later without changing the consumer API.
+ * NATS WebSocket client hook using the official nats.ws library.
  *
  * Reconnects with exponential backoff: 1s, 2s, 4s, 8s ... max 30s.
  */
 export function useNatsClient(): NatsClient {
   const [connected, setConnected] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const subsRef = useRef<Map<string, Subscription>>(new Map());
+  const ncRef = useRef<NatsConnection | null>(null);
+  const subsRef = useRef<Map<string, SubEntry>>(new Map());
   const subCounterRef = useRef(0);
   const reconnectDelayRef = useRef(1000);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,118 +41,127 @@ export function useNatsClient(): NatsClient {
     }
   }, []);
 
-  const connect = useCallback(() => {
+  const drainSubscription = useCallback(async (entry: SubEntry) => {
+    if (entry.sub) {
+      try {
+        entry.sub.unsubscribe();
+      } catch {
+        // already closed
+      }
+      entry.sub = null;
+    }
+  }, []);
+
+  const startSubscription = useCallback(
+    (nc: NatsConnection, entry: SubEntry) => {
+      const sub = nc.subscribe(entry.subject);
+      entry.sub = sub;
+      (async () => {
+        for await (const msg of sub) {
+          try {
+            const data = jc.decode(msg.data) as object;
+            entry.callback(data);
+          } catch {
+            // decode error — skip
+          }
+        }
+      })();
+    },
+    [],
+  );
+
+  const doConnect = useCallback(async () => {
     if (!mountedRef.current) return;
     clearReconnectTimer();
 
     try {
-      const ws = new WebSocket(NATS_WS_URL);
+      const nc = await connect({ servers: NATS_WS_URL, name: "vex-chrome-ext-v3.0.0" });
+      ncRef.current = nc;
+      setConnected(true);
+      setFallbackMode(false);
+      reconnectDelayRef.current = 1000;
 
-      ws.onopen = () => {
-        // Send NATS CONNECT command
-        ws.send(JSON.stringify({ op: "CONNECT", verbose: false }));
-        setConnected(true);
-        setFallbackMode(false);
-        reconnectDelayRef.current = 1000;
+      // Re-subscribe existing entries
+      for (const entry of subsRef.current.values()) {
+        startSubscription(nc, entry);
+      }
 
-        // Re-subscribe existing subscriptions
-        for (const [id, sub] of subsRef.current) {
-          ws.send(JSON.stringify({ op: "SUB", subject: sub.subject, sid: id }));
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data as string) as {
-            op?: string;
-            subject?: string;
-            sid?: string;
-            data?: object;
-          };
-          if (msg.op === "MSG" && msg.sid) {
-            const sub = subsRef.current.get(msg.sid);
-            if (sub && msg.data) {
-              sub.callback(msg.data);
-            }
-          }
-        } catch {
-          // Non-JSON message or parse error — ignore
-        }
-      };
-
-      ws.onclose = () => {
+      // Monitor connection close
+      (async () => {
+        const err = await nc.closed();
+        if (!mountedRef.current) return;
+        ncRef.current = null;
         setConnected(false);
         setFallbackMode(true);
-        wsRef.current = null;
+        if (err) {
+          console.warn("[vex] NATS closed with error:", err.message);
+        }
         scheduleReconnect();
-      };
-
-      ws.onerror = () => {
-        // onclose will fire after onerror, triggering reconnect
-        ws.close();
-      };
-
-      wsRef.current = ws;
+      })();
     } catch {
+      setFallbackMode(true);
       scheduleReconnect();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearReconnectTimer]);
+  }, [clearReconnectTimer, startSubscription]);
 
   const scheduleReconnect = useCallback(() => {
     if (!mountedRef.current) return;
     const delay = reconnectDelayRef.current;
     reconnectTimerRef.current = setTimeout(() => {
       reconnectDelayRef.current = Math.min(delay * 2, 30000);
-      connect();
+      doConnect();
     }, delay);
-  }, [connect]);
+  }, [doConnect]);
 
   // Auto-connect on mount, disconnect on unmount
   useEffect(() => {
     mountedRef.current = true;
-    connect();
+    doConnect();
     return () => {
       mountedRef.current = false;
       clearReconnectTimer();
-      if (wsRef.current) {
-        wsRef.current.onclose = null; // Prevent reconnect on intentional close
-        wsRef.current.close();
-        wsRef.current = null;
+      const nc = ncRef.current;
+      if (nc) {
+        nc.drain().catch(() => {});
+        ncRef.current = null;
       }
       setConnected(false);
     };
-  }, [connect, clearReconnectTimer]);
+  }, [doConnect, clearReconnectTimer]);
 
   const publish = useCallback((subject: string, data: object) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ op: "PUB", subject, data }));
+    const nc = ncRef.current;
+    if (!nc || nc.isClosed()) return;
+    nc.publish(subject, jc.encode(data));
   }, []);
 
   const subscribe = useCallback(
     (subject: string, callback: (data: object) => void): string => {
       const subId = String(++subCounterRef.current);
-      subsRef.current.set(subId, { subject, callback });
+      const entry: SubEntry = { subject, callback, sub: null };
+      subsRef.current.set(subId, entry);
 
-      const ws = wsRef.current;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ op: "SUB", subject, sid: subId }));
+      const nc = ncRef.current;
+      if (nc && !nc.isClosed()) {
+        startSubscription(nc, entry);
       }
 
       return subId;
     },
-    [],
+    [startSubscription],
   );
 
-  const unsubscribe = useCallback((subId: string) => {
-    subsRef.current.delete(subId);
-
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ op: "UNSUB", sid: subId }));
-    }
-  }, []);
+  const unsubscribe = useCallback(
+    (subId: string) => {
+      const entry = subsRef.current.get(subId);
+      if (entry) {
+        drainSubscription(entry);
+        subsRef.current.delete(subId);
+      }
+    },
+    [drainSubscription],
+  );
 
   const pollForResult = useCallback(
     (requestId: string, timeoutMs: number): Promise<unknown> => {

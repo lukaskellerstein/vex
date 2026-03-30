@@ -81,11 +81,21 @@ function getBoxValues(el: Element): {
   };
 }
 
+function elementLabel(el: Element): string {
+  const tag = el.tagName.toLowerCase();
+  if (el.id) return tag + "#" + el.id;
+  if (el.classList.length) return tag + "." + el.classList[0];
+  return tag;
+}
+
 export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
   const [selectedEl, setSelectedEl] = useState<HTMLElement | null>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [boxValues, setBoxValues] = useState<ReturnType<typeof getBoxValues> | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Hover state for when no element is selected
+  const [hoverEl, setHoverEl] = useState<{ rect: DOMRect; label: string } | null>(null);
 
   const dragRef = useRef<{
     handle: HandleInfo;
@@ -123,6 +133,33 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
       window.removeEventListener("resize", updateRect);
     };
   }, [selectedEl, updateRect]);
+
+  // Hover highlight when no element is selected
+  useEffect(() => {
+    if (selectedEl) {
+      setHoverEl(null);
+      return;
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || hostElement.contains(el) || el === hostElement) {
+        setHoverEl(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      setHoverEl({ rect: r, label: elementLabel(el) });
+    };
+
+    const onMouseLeave = () => setHoverEl(null);
+
+    document.addEventListener("mousemove", onMouseMove, true);
+    document.addEventListener("mouseleave", onMouseLeave);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove, true);
+      document.removeEventListener("mouseleave", onMouseLeave);
+    };
+  }, [selectedEl, hostElement]);
 
   // Click to select element
   useEffect(() => {
@@ -299,7 +336,36 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
     setShowConfirm(false);
   }, [selectedEl, updateRect]);
 
-  if (!selectedEl || !rect) return null;
+  // Show hover highlight when no element is selected
+  if (!selectedEl || !rect) {
+    return (
+      <div className="cs-overlay">
+        {hoverEl && (
+          <>
+            <div
+              className="cs-highlight"
+              style={{
+                top: hoverEl.rect.top,
+                left: hoverEl.rect.left,
+                width: hoverEl.rect.width,
+                height: hoverEl.rect.height,
+              }}
+            />
+            <div
+              className="cs-highlight-label"
+              style={{
+                position: "fixed",
+                top: hoverEl.rect.top - 22,
+                left: hoverEl.rect.left,
+              }}
+            >
+              {hoverEl.label}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   const handleSize = 8;
   const half = handleSize / 2;

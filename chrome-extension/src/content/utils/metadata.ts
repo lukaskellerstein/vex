@@ -46,6 +46,7 @@ export function collectMetadata(el: Element): Selection {
   }
 
   return {
+    type: "select",
     selector: generateSelector(el),
     tagName: el.tagName.toLowerCase(),
     id: el.id || null,

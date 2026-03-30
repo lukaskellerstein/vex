@@ -122,8 +122,10 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
             scope TEXT DEFAULT 'global',
             project_id TEXT,
             updated_at TEXT NOT NULL,
-            PRIMARY KEY (key, scope, COALESCE(project_id, '')),
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_config_unique
+            ON config(key, scope, COALESCE(project_id, ''));
     """)
     await db.commit()

@@ -29,6 +29,18 @@ export function StatusBar() {
 
   useEffect(() => {
     async function poll() {
+      // Check NATS health via ProcessManager IPC
+      try {
+        const natsStatus = await window.electronAPI.getNatsStatus();
+        setStatus((prev) => ({
+          ...prev,
+          nats: natsStatus?.healthy ? "connected" : "disconnected",
+        }));
+      } catch {
+        setStatus((prev) => ({ ...prev, nats: "disconnected" }));
+      }
+
+      // Check AgentManager via config endpoint
       try {
         const config = await window.electronAPI.getConfig();
         setStatus((prev) => ({
@@ -39,20 +51,13 @@ export function StatusBar() {
         setStatus((prev) => ({ ...prev, agentManager: "disconnected" }));
       }
 
+      // Check agent count
       try {
         const agents = await window.electronAPI.getAgents();
         const count = Array.isArray(agents) ? agents.length : 0;
-        setStatus((prev) => ({
-          ...prev,
-          agentCount: count,
-          nats: count >= 0 ? "connected" : "unknown",
-        }));
+        setStatus((prev) => ({ ...prev, agentCount: count }));
       } catch {
-        setStatus((prev) => ({
-          ...prev,
-          agentCount: 0,
-          nats: "disconnected",
-        }));
+        setStatus((prev) => ({ ...prev, agentCount: 0 }));
       }
     }
 

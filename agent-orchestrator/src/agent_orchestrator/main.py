@@ -1,18 +1,27 @@
 """Vex AgentManager — FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent_orchestrator.db.database import init_db, close_db
+from agent_orchestrator.services import nats_service
 from agent_orchestrator.api import projects, batches, agents, tasks, config
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    try:
+        await nats_service.connect()
+    except Exception as e:
+        logger.warning("NATS connection failed on startup (will retry): %s", e)
     yield
+    await nats_service.disconnect()
     await close_db()
 
 

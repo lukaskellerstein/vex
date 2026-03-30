@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.models.project import Project, ProjectCreate, ProjectUpdate
+from agent_orchestrator.services.project_detector import detect as detect_project
 
 router = APIRouter(tags=["projects"])
 
@@ -44,10 +45,17 @@ async def create_project(body: ProjectCreate):
     now = datetime.now(UTC).isoformat()
     name = body.name or Path(body.path).name
 
+    # Auto-detect project properties.
+    detected = detect_project(body.path)
+
     await db.execute(
-        """INSERT INTO projects (id, name, path, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (project_id, name, body.path, now, now),
+        """INSERT INTO projects (id, name, path, framework, dev_command, dev_port,
+           package_manager, styling_approach, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (project_id, name, body.path,
+         detected["framework"], detected["dev_command"], detected["dev_port"],
+         detected["package_manager"], detected["styling_approach"],
+         now, now),
     )
     await db.commit()
 

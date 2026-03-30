@@ -1,5 +1,5 @@
 ---
-description: "Step 4: Implement — coding rules, UI dev workflow, backend deployment, service structure"
+description: "Step 4: Implement — coding rules, dev environment, project structure"
 ---
 
 # Step 4: Implement
@@ -7,55 +7,44 @@ description: "Step 4: Implement — coding rules, UI dev workflow, backend deplo
 Write clean code from the start. Follow these rules during implementation:
 
 - Do NOT commit via `git` unless explicitly instructed by the user
-- Do NOT start the UI dev server — the user runs it manually
+- Do NOT start the dev environment — the user runs `./dev-setup.sh` manually
 - When creating diagrams or graphs, use `mermaid`
 - Write clean code from the start — don't plan to "clean it up later"
 - Refactor continuously — improve code structure immediately when you see issues
 - Remove dead code — delete unused functions, variables, imports, and commented code
 - After writing code: review comments, clean up imports, check for side effects
 
-## UI Development
+## Development Environment
 
-Use the local Vite dev server with hot reload (`http://localhost:3555`).
+The project runs via `./dev-setup.sh` at the project root, which starts all three components:
 
-Before any UI work:
-```bash
-./ui/scripts/check-dev-server.sh
-```
+1. **NATS server** — TCP port 4222, WebSocket port 4223 (bundled binaries in `electron-app/bin/`)
+2. **Agent Orchestrator** — FastAPI on port 8420 (`agent-orchestrator/`)
+3. **Electron app** — standalone mode with remote debugging on port 9222 (`electron-app/`)
 
-**If the check fails, STOP and tell the user:**
-> "The UI dev server is not running. Please start it with: `cd ui && ./scripts/dev-setup.sh`"
+Do NOT run `./dev-setup.sh` yourself. If the dev environment is not running, tell the user:
+> "The dev environment is not running. Please start it with: `./dev-setup.sh`"
 
-Do NOT run `npm run dev` or `./scripts/dev-setup.sh` yourself.
+## Electron App (`electron-app/`)
 
-Key points:
-- Hot reload enabled — changes appear instantly
-- No Bearer token needed for chrome-devtool — Vite proxy handles API auth
-- Connects to deployed backend APIs
+- Main process + React renderer, bundled with Vite
+- Manages child processes (NATS, agent-orchestrator) in production mode
+- IPC between main and renderer via `preload.ts`
+- Install deps: `cd electron-app && npm install`
+- Build: `cd electron-app && npm run build`
 
-## Backend Services Development
+## Chrome Extension (`chrome-extension/`)
 
-Deploy directly to K8s:
-```bash
-cd svc/<service-name>
-./scripts/release.sh    # Build + push + deploy
-```
+- Manifest V3, React + Vite (`vite-plugin-web-extension`)
+- Connects to NATS via WebSocket (port 4223)
+- Build: `cd chrome-extension && npm run build`
+- Dev: `cd chrome-extension && npm run dev`
 
-Individual steps if needed:
-```bash
-./scripts/build.sh      # Build Docker image
-./scripts/push.sh       # Push to registry
-./scripts/deploy.sh     # Deploy to K8s
-```
+## Agent Orchestrator (`agent-orchestrator/`)
 
-## Service Deployment Structure
-
-Each service has self-contained deployment:
-```
-svc/<service>/
-├── helm/           # Helm chart
-├── scripts/        # build.sh, push.sh, deploy.sh, release.sh
-└── DEPLOYMENT.md   # Deployment docs
-```
-
-**Versioning**: `{git-sha}-{YYYYMMDD-HHMMSS}` (e.g., `fd0a4c3-20251214-225109`)
+- Python FastAPI backend, uses `uv` exclusively (never `pip`)
+- SQLite database at `~/.vex/vex.db` (async via aiosqlite, WAL mode)
+- Install deps: `cd agent-orchestrator && uv sync`
+- Run standalone: `cd agent-orchestrator && uv run uvicorn agent_orchestrator.main:app --reload --port 8420`
+- Lint: `cd agent-orchestrator && uv run ruff check .`
+- Test: `cd agent-orchestrator && uv run pytest`
