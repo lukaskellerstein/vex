@@ -14,22 +14,29 @@ Menu.setApplicationMenu(null);
 function parseArgs() {
   const args = process.argv.slice(1); // skip electron binary
   let standalone = false;
+  let dev = false;
   let aoPort = 8420;
   let natsPort = 4222;
+  let vitePort = 5173;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--standalone") {
       standalone = true;
+    } else if (args[i] === "--dev") {
+      dev = true;
     } else if (args[i] === "--ao-port" && args[i + 1]) {
       aoPort = parseInt(args[i + 1], 10);
       i++;
     } else if (args[i] === "--nats-port" && args[i + 1]) {
       natsPort = parseInt(args[i + 1], 10);
       i++;
+    } else if (args[i] === "--vite-port" && args[i + 1]) {
+      vitePort = parseInt(args[i + 1], 10);
+      i++;
     }
   }
 
-  return { standalone, aoPort, natsPort };
+  return { standalone, dev, aoPort, natsPort, vitePort };
 }
 
 const cliArgs = parseArgs();
@@ -53,6 +60,7 @@ function createWindow(): void {
     width: 1200,
     height: 800,
     backgroundColor: "#1a1a2e",
+    icon: path.join(__dirname, "..", "..", "resources", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -60,9 +68,13 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.loadFile(
-    path.join(__dirname, "..", "renderer", "index.html")
-  );
+  if (cliArgs.dev) {
+    mainWindow.loadURL(`http://localhost:${cliArgs.vitePort}`);
+  } else {
+    mainWindow.loadFile(
+      path.join(__dirname, "..", "renderer", "index.html")
+    );
+  }
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -145,6 +157,32 @@ function apiPatch(urlPath: string, data: unknown): Promise<unknown> {
     );
     req.on("error", reject);
     req.write(payload);
+    req.end();
+  });
+}
+
+function apiDelete(urlPath: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      `${API_BASE}${urlPath}`,
+      { method: "DELETE" },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk: string) => (body += chunk));
+        res.on("end", () => {
+          if (res.statusCode === 204) {
+            resolve(null);
+          } else {
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              resolve(body);
+            }
+          }
+        });
+      }
+    );
+    req.on("error", reject);
     req.end();
   });
 }
@@ -236,6 +274,62 @@ ipcMain.handle("get-config", async () => {
 
 ipcMain.handle("update-config", async (_event, config: Record<string, unknown>) => {
   return apiPatch("/api/config", config);
+});
+
+ipcMain.handle("delete-project", async (_event, projectId: string) => {
+  return apiDelete(`/api/projects/${projectId}`);
+});
+
+ipcMain.handle("get-project", async (_event, projectId: string) => {
+  return apiGet(`/api/projects/${projectId}`);
+});
+
+ipcMain.handle("get-batches", async (_event, projectId: string) => {
+  return apiGet(`/api/projects/${projectId}/batches`);
+});
+
+ipcMain.handle("get-batch", async (_event, projectId: string, batchId: string) => {
+  return apiGet(`/api/projects/${projectId}/batches/${batchId}`);
+});
+
+ipcMain.handle("get-agent-trace", async (_event, batchId: string) => {
+  return apiGet(`/api/batches/${batchId}/trace`);
+});
+
+ipcMain.handle("get-activity", async (_event, filters?: { projectId?: string; type?: string; since?: string }) => {
+  const params = new URLSearchParams();
+  if (filters?.projectId) params.set("project_id", filters.projectId);
+  if (filters?.type) params.set("type", filters.type);
+  if (filters?.since) params.set("since", filters.since);
+  const qs = params.toString();
+  return apiGet(`/api/activity${qs ? `?${qs}` : ""}`);
+});
+
+ipcMain.handle("get-activity-stats", async (_event, since?: string) => {
+  const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+  return apiGet(`/api/activity/stats${qs}`);
+});
+
+ipcMain.handle("get-tasks", async (_event, projectId?: string) => {
+  const qs = projectId ? `?project_id=${projectId}` : "";
+  return apiGet(`/api/tasks${qs}`);
+});
+
+ipcMain.handle("get-storage-stats", async () => {
+  return apiGet("/api/storage/stats");
+});
+
+ipcMain.handle("clear-screenshots", async () => {
+  return apiDelete("/api/storage/screenshots");
+});
+
+ipcMain.handle("get-app-info", async () => {
+  return {
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    node: process.versions.node,
+    platform: process.platform,
+  };
 });
 
 // --- Standalone health-check helpers ---

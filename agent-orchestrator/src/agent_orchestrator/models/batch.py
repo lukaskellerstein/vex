@@ -97,8 +97,14 @@ class BatchPayload(BaseModel):
 class BatchSummary(BaseModel):
     id: str
     project_id: str
+    page_url: str
+    page_title: str
     action_count: int
     status: BatchStatus = BatchStatus.PENDING
+    duration_ms: int | None = None
+    cost_usd: float | None = None
+    error_message: str | None = None
+    agent_id: str | None = None
     submitted_at: str
     completed_at: str | None = None
 

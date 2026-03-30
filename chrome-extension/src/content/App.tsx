@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action, InteractionMode, Selection } from "../shared/types";
 import { useSelectionState } from "./hooks/useSelectionState";
 import { useActions } from "./hooks/useActions";
@@ -6,7 +6,7 @@ import { useHoverHighlight } from "./hooks/useHoverHighlight";
 import { useNatsClient } from "./hooks/useNatsClient";
 import { captureScreenshot } from "./hooks/useScreenshot";
 import { collectMetadata } from "./utils/metadata";
-import { Overlay } from "./components/Overlay";
+import { Overlay, ActionMarkers } from "./components/Overlay";
 import { PopupDialog } from "./components/PopupDialog";
 import { Toolbar } from "./components/Toolbar";
 import { EditMode } from "./components/EditMode";
@@ -64,6 +64,8 @@ export function App({ hostElement, shadowRoot }: AppProps) {
   const popupResolveRef = useRef<((instruction: string) => void) | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  const [highlightedActionIndex, setHighlightedActionIndex] = useState<number | null>(null);
 
   // Keyboard shortcuts for mode switching
   useEffect(() => {
@@ -186,17 +188,28 @@ export function App({ hostElement, shadowRoot }: AppProps) {
     selectionsRef,
   ]);
 
-  // Escape key handler
+  // Escape key handler — always deactivate in one shot
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && stateRef.current === "idle") {
-        deactivate();
+      if (e.key !== "Escape") return;
+      if (stateRef.current === "inactive") return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      // Cancel popup if open
+      if (stateRef.current === "selected") {
+        (popupResolveRef.current as ((v: string | null) => void) | null)?.(null);
       }
+
+      // Full reset: mode → select, deactivate
+      setMode("select");
+      deactivate();
     };
 
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [deactivate]);
+  }, [deactivate, setMode]);
 
   // Chrome message handlers
   useEffect(() => {
@@ -212,7 +225,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       if (message.action === "getState") {
         sendResponse({
           mode,
-          actions: selectionsRef.current,
+          actions: [...selectionsRef.current, ...actionsRef.current],
           isActive: stateRef.current !== "inactive",
           pageUrl: location.href,
           pageTitle: document.title,
@@ -242,6 +255,12 @@ export function App({ hostElement, shadowRoot }: AppProps) {
           sel.instruction = msg.instruction;
         }
         sendResponse({ updated: true });
+        return;
+      }
+      if (message.action === "highlightAction") {
+        const msg = message as { action: string; index: number | null };
+        setHighlightedActionIndex(msg.index);
+        sendResponse({ ok: true });
         return;
       }
       if (message.action === "clearActions") {
@@ -281,6 +300,10 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   const isActive = state !== "inactive";
 
+  // Unified action list: selections first, then edit/resize/style actions
+  // This order matches what getState sends to the popup
+  const allActions: Action[] = [...selections, ...actions];
+
   return (
     <>
       {isActive && (
@@ -291,9 +314,12 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         />
       )}
 
-      {mode === "select" && (
+      {/* Persistent numbered markers for ALL actions — visible even when deactivated */}
+      {allActions.length > 0 && <ActionMarkers actions={allActions} highlightedIndex={highlightedActionIndex} />}
+
+      {isActive && mode === "select" && (
         <>
-          <Overlay hover={hover} selections={selections} pendingSelection={pendingSelection} />
+          <Overlay hover={hover} selections={[]} pendingSelection={pendingSelection} />
           {state === "selected" && popupState && (
             <PopupDialog
               elementRect={popupState.metadata.boundingRect}
@@ -308,9 +334,9 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         </>
       )}
 
-      {mode === "edit" && <EditMode addAction={addAction} hostElement={hostElement} natsClient={natsClient} />}
-      {mode === "resize" && <ResizeMode addAction={addAction} hostElement={hostElement} />}
-      {mode === "style" && isActive && <StylePanel addAction={addAction} hostElement={hostElement} />}
+      {isActive && mode === "edit" && <EditMode addAction={addAction} hostElement={hostElement} natsClient={natsClient} shadowRoot={shadowRoot} />}
+      {isActive && mode === "resize" && <ResizeMode addAction={addAction} hostElement={hostElement} />}
+      {isActive && mode === "style" && <StylePanel addAction={addAction} hostElement={hostElement} />}
     </>
   );
 }

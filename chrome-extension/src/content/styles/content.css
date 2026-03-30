@@ -68,47 +68,92 @@
   pointer-events: none;
 }
 
+.cs-action-marker {
+  position: fixed;
+  border: 2px dashed;
+  pointer-events: none;
+  border-radius: 2px;
+  transition: border-width 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.cs-action-marker-highlighted {
+  border-width: 3px;
+  border-style: solid;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+}
+
 .cs-popup-container {
   position: fixed;
   z-index: 2147483647;
   pointer-events: auto;
   border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-  background: #fff;
-  width: 460px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background: #1e1e2e;
+  border: 1px solid #313244;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
-  overflow: hidden;
+}
+
+.cs-popup-section {
+  border-bottom: 1px solid #313244;
+}
+
+.cs-popup-section:last-of-type {
+  border-bottom: none;
+}
+
+.cs-popup-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c7086;
+  padding: 8px 14px 0;
 }
 
 .cs-popup-header {
   font-size: 11px;
-  color: #6b7280;
+  color: #a6adc8;
   font-family: monospace;
-  padding: 10px 14px 6px;
+  padding: 4px 14px 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-bottom: 1px solid #f3f4f6;
 }
 
 .cs-popup-thumb {
-  padding: 8px 14px;
+  padding: 4px 14px 8px;
   display: flex;
   justify-content: center;
-  background: #f9fafb;
+  background: #181825;
 }
 
 .cs-popup-thumb img {
   max-width: 100%;
   max-height: 140px;
   border-radius: 4px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #313244;
+}
+
+.cs-popup-section-grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .cs-popup-editor {
-  padding: 8px 14px;
-  min-height: 120px;
+  padding: 4px 14px 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .cs-popup-buttons {
@@ -116,32 +161,51 @@
   justify-content: flex-end;
   gap: 6px;
   padding: 8px 14px 12px;
+  border-top: 1px solid #313244;
+}
+
+.cs-popup-resize-grip {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: nwse-resize;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.cs-popup-resize-grip:hover {
+  opacity: 1;
 }
 
 .cs-btn {
   padding: 6px 16px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #45475a;
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
-  background: #fff;
-  color: #374151;
+  background: #313244;
+  color: #cdd6f4;
   font-family: inherit;
 }
 
 .cs-btn:hover {
-  background: #f3f4f6;
+  background: #45475a;
 }
 
 .cs-btn-cancel {
-  color: #dc2626;
-  border-color: #fca5a5;
+  color: #f38ba8;
+  border-color: #f38ba8;
   margin-right: auto;
 }
 
 .cs-btn-cancel:hover {
-  background: #fef2f2;
-  border-color: #dc2626;
+  background: rgba(243, 139, 168, 0.1);
+  border-color: #f38ba8;
 }
 
 .cs-btn-add {
@@ -731,7 +795,7 @@
 /* --- Edit Mode --- */
 
 .cs-edit-highlight {
-  transition: top 0.05s, left 0.05s, width 0.05s, height 0.05s;
+  transition: none;
 }
 
 .cs-edit-label {
@@ -749,6 +813,9 @@
   line-height: 14px;
 }
 
+/* Delete and insert buttons share an expanded ::before hit area
+   so the mouse can reach them from inside the element without the
+   highlight disappearing first. */
 .cs-edit-delete-btn {
   position: absolute;
   top: -10px;
@@ -772,14 +839,19 @@
   transition: opacity 0.15s;
 }
 
+.cs-edit-delete-btn::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+}
+
 .cs-edit-delete-btn:hover {
   opacity: 1;
 }
 
 .cs-edit-insert-btn {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -795,25 +867,46 @@
   line-height: 1;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   padding: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
+  opacity: 0.85;
+  transition: opacity 0.15s, background 0.15s;
+  z-index: 1;
 }
 
-.cs-edit-highlight:hover .cs-edit-insert-btn {
-  opacity: 0.85;
+/* Expanded invisible hit area — 12px around the visible button circle */
+.cs-edit-insert-btn::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
 }
 
 .cs-edit-insert-btn:hover {
-  opacity: 1 !important;
+  opacity: 1;
   background: #4338ca;
 }
 
 .cs-edit-insert-top {
   top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .cs-edit-insert-bottom {
   bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.cs-edit-insert-left {
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.cs-edit-insert-right {
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .cs-edit-img-overlay {
@@ -1018,6 +1111,25 @@
 .cs-style-panel-copystyle:hover {
   background: #45475a;
   border-color: #585b70;
+}
+
+.cs-style-panel-apply {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #4f46e5;
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.cs-style-panel-apply:hover {
+  background: #4338ca;
 }
 
 .cs-style-panel-copystyle svg,

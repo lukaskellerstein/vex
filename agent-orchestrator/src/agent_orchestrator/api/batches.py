@@ -20,8 +20,14 @@ def _row_to_summary(row) -> dict:
     return BatchSummary(
         id=row["id"],
         project_id=row["project_id"],
+        page_url=row["page_url"],
+        page_title=row["page_title"],
         action_count=row["action_count"],
         status=row["status"],
+        duration_ms=row["duration_ms"],
+        cost_usd=row["cost_usd"],
+        error_message=row["error_message"],
+        agent_id=row["agent_id"],
         submitted_at=row["submitted_at"],
         completed_at=row["completed_at"],
     ).model_dump(mode="json")
@@ -142,6 +148,52 @@ async def get_batch(project_id: str, batch_id: str):
     result = _row_to_summary(row)
     result["actions"] = actions
     return result
+
+
+@router.get("/batches/{batch_id}/trace")
+async def get_batch_trace(batch_id: str):
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM agent_traces WHERE batch_id = ?", (batch_id,)
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+
+    step_cursor = await db.execute(
+        "SELECT * FROM trace_steps WHERE trace_id = ? ORDER BY sequence_index",
+        (row["id"],),
+    )
+    step_rows = await step_cursor.fetchall()
+
+    steps = []
+    for s in step_rows:
+        metadata = json.loads(s["metadata"]) if s["metadata"] else None
+        steps.append({
+            "id": s["id"],
+            "sequence_index": s["sequence_index"],
+            "type": s["type"],
+            "content": s["content"],
+            "metadata": metadata,
+            "duration_ms": s["duration_ms"],
+            "token_count": s["token_count"],
+            "created_at": s["created_at"],
+        })
+
+    return {
+        "id": row["id"],
+        "batch_id": row["batch_id"],
+        "agent_id": row["agent_id"],
+        "agent_name": row["agent_name"],
+        "agent_model": row["agent_model"],
+        "status": row["status"],
+        "total_duration_ms": row["total_duration_ms"],
+        "total_cost_usd": row["total_cost_usd"],
+        "total_tokens": row["total_tokens"],
+        "steps": steps,
+        "created_at": row["created_at"],
+        "completed_at": row["completed_at"],
+    }
 
 
 @router.delete(

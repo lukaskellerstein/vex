@@ -188,22 +188,20 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
     return () => document.removeEventListener("click", onClick, true);
   }, [selectedEl, hostElement, showConfirm]);
 
-  // Escape to deselect
+  // Escape is handled globally in App.tsx — deactivates the entire extension
+  // Revert pending resize changes on unmount
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (showConfirm) {
-          handleDiscard();
-        } else {
-          setSelectedEl(null);
-          setRect(null);
-          setBoxValues(null);
+    return () => {
+      if (pendingActionRef.current && selectedElRef.current) {
+        const { beforeStyles } = pendingActionRef.current;
+        for (const [prop, value] of Object.entries(beforeStyles)) {
+          const cssProp = prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+          selectedElRef.current.style.setProperty(cssProp, value);
         }
+        pendingActionRef.current = null;
       }
     };
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [showConfirm]);
+  }, []);
 
   // Handle drag
   const onHandleMouseDown = useCallback(

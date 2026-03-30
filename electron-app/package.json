@@ -9,10 +9,26 @@
     "start": "electron --no-sandbox --remote-debugging-port=9222 dist/main/index.js",
     "build:start": "npm run build && npm run start"
   },
+  "build": {
+    "appId": "com.vex.desktop",
+    "productName": "Vex",
+    "icon": "resources/icon.png",
+    "linux": {
+      "icon": "resources/icon.png"
+    },
+    "mac": {
+      "icon": "resources/icon.png"
+    },
+    "win": {
+      "icon": "resources/icon.png"
+    }
+  },
   "dependencies": {
     "electron": "^30.0.0",
+    "lucide-react": "^1.7.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^7.13.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

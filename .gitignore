@@ -31,5 +31,8 @@ venv/
 .env*
 !.env.example
 
+# Vite
+.vite/
+
 # Vex data
 .vex/

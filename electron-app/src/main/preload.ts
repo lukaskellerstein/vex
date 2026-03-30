@@ -30,4 +30,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("clone-progress", handler);
     return () => ipcRenderer.removeListener("clone-progress", handler);
   },
+  deleteProject: (projectId: string) =>
+    ipcRenderer.invoke("delete-project", projectId),
+  getProject: (projectId: string) =>
+    ipcRenderer.invoke("get-project", projectId),
+  getBatches: (projectId: string) =>
+    ipcRenderer.invoke("get-batches", projectId),
+  getBatch: (projectId: string, batchId: string) =>
+    ipcRenderer.invoke("get-batch", projectId, batchId),
+  getAgentTrace: (batchId: string) =>
+    ipcRenderer.invoke("get-agent-trace", batchId),
+  getActivity: (filters?: { projectId?: string; type?: string; since?: string }) =>
+    ipcRenderer.invoke("get-activity", filters),
+  getActivityStats: (since?: string) =>
+    ipcRenderer.invoke("get-activity-stats", since),
+  getTasks: (projectId?: string) =>
+    ipcRenderer.invoke("get-tasks", projectId),
+  getStorageStats: () => ipcRenderer.invoke("get-storage-stats"),
+  clearScreenshots: () => ipcRenderer.invoke("clear-screenshots"),
+  getAppInfo: () => ipcRenderer.invoke("get-app-info"),
 });

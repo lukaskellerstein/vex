@@ -416,6 +416,7 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
   });
 
   const initialStylesRef = useRef<Record<string, string>>({});
+  const initialCssTextRef = useRef<string>("");
   const screenshotBeforeRef = useRef<string | null>(null);
   const hoverStyleElRef = useRef<HTMLStyleElement | null>(null);
   const selectedElRef = useRef(selectedEl);
@@ -506,9 +507,10 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
       // If clicking same element, ignore
       if (htmlEl === selectedElRef.current) return;
 
-      // If already have a selection, finalize it first
+      // If already have a selection, revert unsaved changes
       if (selectedElRef.current) {
-        await finalizeAction();
+        revertStyles();
+        cleanupHoverStyle();
       }
 
       // Capture before screenshot
@@ -523,6 +525,7 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
       }
 
       initialStylesRef.current = captureTrackedStyles(htmlEl);
+      initialCssTextRef.current = htmlEl.style.cssText;
       loadStylesFromElement(htmlEl);
       setPanelPos(computePanelPosition(htmlEl));
       setSelectedEl(htmlEl);
@@ -623,18 +626,47 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
     transitionEasing,
   ]);
 
-  // Escape to deselect
+  // Hover highlight for style mode
+  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
+  const hoveredRef = useRef<Element | null>(null);
+
   useEffect(() => {
-    const onKeyDown = async (e: KeyboardEvent) => {
-      if (e.key === "Escape" && selectedEl) {
-        await finalizeAction();
-        cleanupHoverStyle();
-        setSelectedEl(null);
+    if (selectedEl) {
+      setHoverRect(null);
+      return;
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || hostElement.contains(el) || el === hostElement) {
+        setHoverRect(null);
+        hoveredRef.current = null;
+        return;
+      }
+      hoveredRef.current = el;
+      setHoverRect(el.getBoundingClientRect());
+    };
+
+    const onScroll = () => {
+      if (hoveredRef.current) {
+        setHoverRect(hoveredRef.current.getBoundingClientRect());
       }
     };
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [selectedEl, finalizeAction]);
+
+    document.addEventListener("mousemove", onMouseMove, true);
+    document.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove, true);
+      document.removeEventListener("scroll", onScroll, true);
+    };
+  }, [selectedEl, hostElement]);
+
+  // Revert styles to initial state by restoring original inline styles
+  const revertStyles = useCallback(() => {
+    const el = selectedElRef.current;
+    if (!el) return;
+    el.style.cssText = initialCssTextRef.current;
+  }, []);
 
   // Apply style to element live
   const applyStyle = useCallback(
@@ -676,10 +708,37 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
     }
   }, []);
 
-  // Cleanup hover style on unmount
+  // Cleanup on unmount — revert unsaved styles and remove hover CSS
   useEffect(() => {
-    return () => cleanupHoverStyle();
+    return () => {
+      const el = selectedElRef.current;
+      if (el) {
+        el.style.cssText = initialCssTextRef.current;
+      }
+      cleanupHoverStyle();
+    };
   }, [cleanupHoverStyle]);
+
+  // Apply and commit styles
+  const handleApply = useCallback(async () => {
+    await finalizeAction();
+    if (selectedElRef.current) {
+      initialStylesRef.current = captureTrackedStyles(selectedElRef.current);
+      initialCssTextRef.current = selectedElRef.current.style.cssText;
+      try {
+        screenshotBeforeRef.current = await captureScreenshot(selectedElRef.current, 0, hostElement);
+      } catch {
+        screenshotBeforeRef.current = null;
+      }
+    }
+  }, [finalizeAction, hostElement]);
+
+  // Cancel: revert styles and close panel
+  const handleCancel = useCallback(() => {
+    revertStyles();
+    cleanupHoverStyle();
+    setSelectedEl(null);
+  }, [revertStyles, cleanupHoverStyle]);
 
   // Drag handlers for panel header
   const onHeaderPointerDown = useCallback(
@@ -984,14 +1043,37 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
     [injectHoverStyle, hoverTransform, hoverBoxShadow, transitionDuration],
   );
 
-  // Close panel
-  const handleClose = useCallback(async () => {
-    await finalizeAction();
+  // Close panel — revert unsaved changes
+  const handleClose = useCallback(() => {
+    revertStyles();
     cleanupHoverStyle();
     setSelectedEl(null);
-  }, [finalizeAction, cleanupHoverStyle]);
+  }, [revertStyles, cleanupHoverStyle]);
 
-  if (!selectedEl) return null;
+  if (!selectedEl) {
+    // Show hover highlight when no element is selected
+    return hoverRect ? (
+      <div
+        className="cs-edit-highlight"
+        style={{
+          position: "fixed",
+          left: hoverRect.x,
+          top: hoverRect.y,
+          width: hoverRect.width,
+          height: hoverRect.height,
+          border: "2px dashed #a855f7",
+          pointerEvents: "none",
+          borderRadius: 2,
+          boxSizing: "border-box",
+          zIndex: 2147483646,
+        }}
+      >
+        <span className="cs-edit-label" style={{ background: "#a855f7" }}>
+          {hoveredRef.current?.tagName.toLowerCase() ?? ""}
+        </span>
+      </div>
+    ) : null;
+  }
 
   const fontOptions = pageFontsRef.current.map((f) => ({ value: f, label: f }));
   const effectivePos = dragPos ?? panelPos;
@@ -1047,7 +1129,14 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
               </svg>
               <span>Copy Style</span>
             </button>
-            <button className="cs-style-panel-close" onClick={handleClose} title="Close">
+            <button
+              className="cs-style-panel-apply"
+              onClick={handleApply}
+              title="Apply styles"
+            >
+              Apply
+            </button>
+            <button className="cs-style-panel-close" onClick={handleClose} title="Cancel">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

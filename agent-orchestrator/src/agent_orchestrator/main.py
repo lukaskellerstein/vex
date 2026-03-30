@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent_orchestrator.db.database import init_db, close_db
 from agent_orchestrator.services import nats_service
-from agent_orchestrator.api import projects, batches, agents, tasks, config
+from agent_orchestrator.api import projects, batches, agents, tasks, config, activity, storage
 
 logger = logging.getLogger(__name__)
 
@@ -44,3 +44,5 @@ app.include_router(batches.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
+app.include_router(storage.router, prefix="/api")

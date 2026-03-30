@@ -33,6 +33,32 @@ def _row_to_task(row) -> dict:
     ).model_dump(mode="json")
 
 
+@router.get("/tasks")
+async def list_tasks(
+    project_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=100, le=500),
+):
+    db = await get_db()
+    conditions = []
+    params: list = []
+
+    if project_id:
+        conditions.append("project_id = ?")
+        params.append(project_id)
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    cursor = await db.execute(
+        f"SELECT * FROM tasks {where} ORDER BY created_at DESC LIMIT ?",
+        params + [limit],
+    )
+    rows = await cursor.fetchall()
+    return [_row_to_task(r) for r in rows]
+
+
 @router.post("/tasks", status_code=status.HTTP_201_CREATED)
 async def create_task(body: TaskCreate):
     db = await get_db()
