@@ -1,24 +1,32 @@
 /**
  * Dev-server process management for user projects.
  *
+ * Electron owns the full dev server lifecycle:
  * - Start: spawns a child process in its own process group (detached)
- * - Stop: kills the Electron-spawned process group, OR kills whatever is
- *   listening on the project's port (cross-platform via lsof/netstat)
- * - Status: simple TCP connect to the project's dev_port
- * - On Electron close: Electron-spawned servers are killed automatically
+ * - Stop: kills the process group via SIGTERM
+ * - Logs: buffered in-memory (up to 2000 lines)
+ * - On Electron close: all spawned servers are killed
+ * - On Electron restart: clean slate — everything is idle
  */
 
-import { ChildProcess, spawn, execSync } from "child_process";
+import { ChildProcess, spawn } from "child_process";
 import fs from "fs";
-import net from "net";
 import path from "path";
 
 const MAX_LOG_LINES = 2000;
+
+const PORT_IN_USE_PATTERNS = [
+  "EADDRINUSE",
+  "port is already in use",
+  "address already in use",
+  "Port is already in use",
+];
 
 interface DevServer {
   process: ChildProcess;
   logLines: string[];
   url: string | null;
+  portError: string | null;
 }
 
 export interface ProjectInfo {
@@ -26,7 +34,6 @@ export interface ProjectInfo {
   path: string;
   dev_command?: string;
   dev_port?: number;
-  dev_server_url?: string;
   package_manager?: string;
 }
 
@@ -44,64 +51,10 @@ export class DevServerManager {
     this.updateProjectStatus = updateProjectStatus;
   }
 
-  /**
-   * Check if something is listening on the project's dev port.
-   * Checks both the configured dev_port and the last-known URL port
-   * (dev servers often auto-increment when the default port is taken).
-   * Cross-platform — just TCP connects.
-   */
-  checkRunning(project: ProjectInfo): Promise<string | null> {
-    const tracked = this.servers.get(project.id);
-    if (tracked && tracked.process.exitCode === null) {
-      return Promise.resolve(tracked.url);
-    }
-
-    const portsToCheck = new Set<number>();
-    // Last-known URL port takes priority (it's the actual runtime port).
-    if (project.dev_server_url) {
-      try {
-        const urlPort = parseInt(new URL(project.dev_server_url).port, 10);
-        if (urlPort > 0) portsToCheck.add(urlPort);
-      } catch { /* invalid URL */ }
-    }
-    portsToCheck.add(project.dev_port ?? 3000);
-
-    return new Promise((resolve) => {
-      let remaining = portsToCheck.size;
-      let resolved = false;
-
-      for (const port of portsToCheck) {
-        const conn = net.createConnection({ port, host: "127.0.0.1" }, () => {
-          conn.destroy();
-          if (!resolved) {
-            resolved = true;
-            resolve(`http://localhost:${port}`);
-          }
-        });
-        conn.on("error", () => {
-          remaining--;
-          if (remaining === 0 && !resolved) resolve(null);
-        });
-        conn.setTimeout(500, () => {
-          conn.destroy();
-          remaining--;
-          if (remaining === 0 && !resolved) resolve(null);
-        });
-      }
-    });
-  }
-
   async start(project: ProjectInfo): Promise<{ status: string; detail?: string }> {
     if (this.servers.has(project.id)) {
       const existing = this.servers.get(project.id)!;
       return { status: "already_running", detail: existing.url ?? undefined };
-    }
-
-    // Check if already running externally.
-    const externalUrl = await this.checkRunning(project);
-    if (externalUrl) {
-      await this.updateProjectStatus(project.id, "running", externalUrl);
-      return { status: "already_running", detail: externalUrl };
     }
 
     const cmd = this.buildRunCommand(project);
@@ -130,101 +83,98 @@ export class DevServerManager {
       process: child,
       logLines: [],
       url: null,
+      portError: null,
     };
     this.servers.set(project.id, server);
 
-    const defaultPort = project.dev_port ?? 3000;
-
     this.appendLog(server, `[system] Started: ${exe} ${args.join(" ")} (pid ${child.pid}) in ${project.path}`);
+
+    const handleLine = (line: string, prefix: string) => {
+      if (!line) return;
+      this.appendLog(server, `${prefix} ${line}`);
+
+      if (!server.url) {
+        const detected = this.detectUrl(line);
+        if (detected) {
+          server.url = detected;
+          this.updateProjectStatus(project.id, "running", detected);
+        }
+      }
+
+      if (!server.portError) {
+        const portErr = this.detectPortConflict(line, project.dev_port ?? 3000);
+        if (portErr) {
+          server.portError = portErr;
+        }
+      }
+    };
 
     child.stdout?.on("data", (data: Buffer) => {
       for (const line of data.toString().split("\n")) {
-        if (!line) continue;
-        this.appendLog(server, `[out] ${line}`);
-        if (!server.url) {
-          const detected = this.detectUrl(line, defaultPort);
-          if (detected) {
-            server.url = detected;
-            this.updateProjectStatus(project.id, "running", detected);
-          }
-        }
+        handleLine(line, "[out]");
       }
     });
 
     child.stderr?.on("data", (data: Buffer) => {
       for (const line of data.toString().split("\n")) {
-        if (!line) continue;
-        this.appendLog(server, `[err] ${line}`);
-        if (!server.url) {
-          const detected = this.detectUrl(line, defaultPort);
-          if (detected) {
-            server.url = detected;
-            this.updateProjectStatus(project.id, "running", detected);
-          }
-        }
+        handleLine(line, "[err]");
       }
     });
 
     child.on("exit", (code) => {
       this.appendLog(server, `[system] Process exited with code ${code}`);
+      const portError = server.portError;
       if (this.servers.has(project.id)) {
         this.servers.delete(project.id);
-        this.updateProjectStatus(project.id, "idle");
+        if (portError) {
+          this.updateProjectStatus(project.id, "error");
+        } else {
+          this.updateProjectStatus(project.id, "idle");
+        }
       }
     });
 
     return { status: "starting" };
   }
 
-  async stop(projectId: string, port: number): Promise<{ status: string }> {
+  async stop(projectId: string): Promise<{ status: string }> {
     const server = this.servers.get(projectId);
+    if (!server) return { status: "not_running" };
 
-    if (server) {
-      // Electron-spawned: kill the process group.
-      this.appendLog(server, "[system] Stopping dev server...");
+    this.appendLog(server, "[system] Stopping dev server...");
 
-      return new Promise((resolve) => {
-        const forceKillTimer = setTimeout(() => {
-          try {
-            server.process.kill("SIGKILL");
-          } catch {
-            // already dead
-          }
-          this.servers.delete(projectId);
-          this.updateProjectStatus(projectId, "idle");
-          resolve({ status: "stopped" });
-        }, 5000);
-
-        server.process.once("exit", () => {
-          clearTimeout(forceKillTimer);
-          this.appendLog(server, "[system] Dev server stopped.");
-          this.servers.delete(projectId);
-          this.updateProjectStatus(projectId, "idle");
-          resolve({ status: "stopped" });
-        });
-
+    return new Promise((resolve) => {
+      const forceKillTimer = setTimeout(() => {
         try {
-          if (server.process.pid) {
-            process.kill(-server.process.pid, "SIGTERM");
-          }
+          server.process.kill("SIGKILL");
         } catch {
-          try {
-            server.process.kill("SIGTERM");
-          } catch {
-            // already dead
-          }
+          // already dead
         }
+        this.servers.delete(projectId);
+        this.updateProjectStatus(projectId, "idle");
+        resolve({ status: "stopped" });
+      }, 5000);
+
+      server.process.once("exit", () => {
+        clearTimeout(forceKillTimer);
+        this.appendLog(server, "[system] Dev server stopped.");
+        this.servers.delete(projectId);
+        this.updateProjectStatus(projectId, "idle");
+        resolve({ status: "stopped" });
       });
-    }
 
-    // Not spawned by Electron — kill whatever is on the port.
-    const killed = this.killByPort(port);
-    if (killed) {
-      await this.updateProjectStatus(projectId, "idle");
-      return { status: "stopped" };
-    }
-
-    return { status: "not_running" };
+      try {
+        if (server.process.pid) {
+          process.kill(-server.process.pid, "SIGTERM");
+        }
+      } catch {
+        try {
+          server.process.kill("SIGTERM");
+        } catch {
+          // already dead
+        }
+      }
+    });
   }
 
   getLogs(projectId: string, offset: number = 0): {
@@ -232,10 +182,11 @@ export class DevServerManager {
     offset: number;
     running: boolean;
     url: string | null;
+    portError: string | null;
   } {
     const server = this.servers.get(projectId);
     if (!server) {
-      return { lines: [], offset: 0, running: false, url: null };
+      return { lines: [], offset: 0, running: false, url: null, portError: null };
     }
 
     return {
@@ -243,62 +194,13 @@ export class DevServerManager {
       offset: server.logLines.length,
       running: server.process.exitCode === null,
       url: server.url,
+      portError: server.portError,
     };
   }
 
   async stopAll(): Promise<void> {
-    const promises = Array.from(this.servers.keys()).map((id) => {
-      const server = this.servers.get(id)!;
-      // We don't know the port here, but for Electron-spawned servers
-      // the first code path in stop() handles it.
-      return this.stop(id, 0);
-    });
+    const promises = Array.from(this.servers.keys()).map((id) => this.stop(id));
     await Promise.all(promises);
-  }
-
-  /**
-   * Kill whatever process is listening on the given port.
-   * Cross-platform: uses lsof (Linux/Mac) or netstat (Windows).
-   */
-  private killByPort(port: number): boolean {
-    if (port <= 0) return false;
-
-    try {
-      if (process.platform === "win32") {
-        // Windows: find PID via netstat, then taskkill
-        const out = execSync(
-          `netstat -ano | findstr :${port} | findstr LISTENING`,
-          { encoding: "utf8", timeout: 3000 }
-        );
-        const pids = new Set<number>();
-        for (const line of out.split("\n")) {
-          const parts = line.trim().split(/\s+/);
-          const pid = parseInt(parts[parts.length - 1], 10);
-          if (pid > 0) pids.add(pid);
-        }
-        for (const pid of pids) {
-          try {
-            execSync(`taskkill /PID ${pid} /T /F`, { timeout: 3000 });
-          } catch { /* already dead */ }
-        }
-        return pids.size > 0;
-      } else {
-        // Linux / Mac: lsof
-        const out = execSync(
-          `lsof -ti :${port}`,
-          { encoding: "utf8", timeout: 3000 }
-        );
-        const pids = out.trim().split("\n").map(Number).filter(Boolean);
-        for (const pid of pids) {
-          try {
-            process.kill(pid, "SIGTERM");
-          } catch { /* already dead */ }
-        }
-        return pids.length > 0;
-      }
-    } catch {
-      return false;
-    }
   }
 
   private appendLog(server: DevServer, line: string): void {
@@ -330,7 +232,7 @@ export class DevServerManager {
     return null;
   }
 
-  private detectUrl(line: string, _defaultPort: number): string | null {
+  private detectUrl(line: string): string | null {
     const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
     for (const token of clean.split(/\s+/)) {
       const trimmed = token.replace(/[(),;'"]/g, "");
@@ -352,6 +254,16 @@ export class DevServerManager {
             return `http://localhost:${port}`;
           }
         }
+      }
+    }
+    return null;
+  }
+
+  private detectPortConflict(line: string, port: number): string | null {
+    const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
+    for (const pattern of PORT_IN_USE_PATTERNS) {
+      if (clean.includes(pattern)) {
+        return `Port ${port} is in use. Stop the other process first.`;
       }
     }
     return null;

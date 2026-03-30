@@ -21,4 +21,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getConfig: () => ipcRenderer.invoke("get-config"),
   updateConfig: (config: Record<string, unknown>) =>
     ipcRenderer.invoke("update-config", config),
+  cloneGithubRepo: (url: string) =>
+    ipcRenderer.invoke("clone-github-repo", url),
+  installDependencies: (projectPath: string) =>
+    ipcRenderer.invoke("install-dependencies", projectPath),
+  onCloneProgress: (callback: (data: { phase: string; progress: number; message: string }) => void) => {
+    const handler = (_event: unknown, data: { phase: string; progress: number; message: string }) => callback(data);
+    ipcRenderer.on("clone-progress", handler);
+    return () => ipcRenderer.removeListener("clone-progress", handler);
+  },
 });
