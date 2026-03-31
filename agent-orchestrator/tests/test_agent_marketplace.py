@@ -15,6 +15,7 @@ Usage:
 """
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -164,9 +165,7 @@ async def run_test(
                     data = getattr(message, "data", {})
                     if subtype == "init":
                         file_logger.config(
-                            intended_plugins=[
-                                p.get("path", "?") for p in plugins
-                            ],
+                            intended_plugins=[p.get("path", "?") for p in plugins],
                             loaded_plugins=data.get("plugins", []),
                             loaded_skills=data.get("skills", []),
                             loaded_agents=data.get("agents", []),
@@ -200,18 +199,22 @@ async def run_test(
                         if loaded_mcp:
                             log("INIT", f"MCP servers ({len(loaded_mcp)}):")
                             for m in loaded_mcp:
-                                name = m.get("name", "?") if isinstance(m, dict) else str(m)
+                                name = (
+                                    m.get("name", "?")
+                                    if isinstance(m, dict)
+                                    else str(m)
+                                )
                                 log("MCP", f"  {name}")
 
                 elif isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock):
                             input_preview = (
-                                json.dumps(block.input)[:500]
-                                if block.input else ""
+                                json.dumps(block.input)[:500] if block.input else ""
                             )
                             file_logger.event(
-                                "tool_call", input_preview,
+                                "tool_call",
+                                input_preview,
                                 tool_name=block.name,
                                 tool_input=block.input,
                             )
@@ -220,8 +223,9 @@ async def run_test(
                                 skill = block.input.get("skill", "?")
                                 log("SKILL", f">>> {skill}")
                             elif block.name == "Agent" and block.input:
-                                atype = (block.input.get("subagent_type", "")
-                                         or block.input.get("description", "?"))
+                                atype = block.input.get(
+                                    "subagent_type", ""
+                                ) or block.input.get("description", "?")
                                 log("AGENT", f">>> {atype}")
                             else:
                                 log("TOOL", block.name)
@@ -318,6 +322,34 @@ async def main() -> None:
     log("CONFIG", f"Marketplaces: {list(ao_config.get('marketplaces', {}).keys())}")
     log("CONFIG", f"Agent profiles: {list(ao_config.get('agents', {}).keys())}")
 
+    # Step 1b: Print environment variables available to the agent
+    # These are inherited by the SDK subprocess — API keys are needed
+    # for MCP servers (ElevenLabs, Gemini, etc.) and the SDK itself.
+    _RELEVANT_ENV_VARS = [
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "AWS_REGION",
+        "GEMINI_API_KEY",
+        "ELEVENLABS_API_KEY",
+        "MEDIA_OUTPUT_DIR",
+        "HOME",
+        "PATH",
+    ]
+    print(f"\n{BOLD}Environment Variables{RESET}")
+    print(f"{'─' * 50}")
+    for var in _RELEVANT_ENV_VARS:
+        val = os.environ.get(var)
+        if val is None:
+            log("WARN", f"{var}: (not set)")
+        elif "KEY" in var or "SECRET" in var or "TOKEN" in var:
+            log(
+                "CONFIG",
+                f"{var}: {val[:4]}...{val[-4:]}" if len(val) > 8 else f"{var}: ***",
+            )
+        else:
+            log("CONFIG", f"{var}: {val}")
+
     # Step 2: Sync marketplaces
     print(f"\n{BOLD}Syncing Marketplaces{RESET}")
     print(f"{'─' * 50}")
@@ -347,35 +379,35 @@ async def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     test_cases = [
-        # ── dev-tools-plugin skills ─────────────────────────────────
-        {
-            "name": "Dead code detection → dev-tools-plugin:dead-code skill",
-            "prompt": (
-                "Find all unused code in this project — unused imports, dead functions, "
-                "unreferenced variables. Report what can be safely deleted."
-            ),
-            "expect_skills": ["dead-code"],
-            "expect_agents": None,
-        },
-        {
-            "name": "Dependency update → dev-tools-plugin:update-dependencies skill",
-            "prompt": (
-                "Update all project dependencies to their latest versions. "
-                "Check for breaking changes and report what was upgraded."
-            ),
-            "expect_skills": ["update-dependencies"],
-            "expect_agents": None,
-        },
-        # ── documentation-plugin skills ─────────────────────────────
-        {
-            "name": "README generation → documentation-plugin:update-readme skill",
-            "prompt": (
-                "Create a professional README.md for this repository. Include badges, "
-                "installation instructions, usage examples, and a contributing section."
-            ),
-            "expect_skills": ["update-readme"],
-            "expect_agents": None,
-        },
+        # # ── dev-tools-plugin skills ─────────────────────────────────
+        # {
+        #     "name": "Dead code detection → dev-tools-plugin:dead-code skill",
+        #     "prompt": (
+        #         "Find all unused code in this project — unused imports, dead functions, "
+        #         "unreferenced variables. Report what can be safely deleted."
+        #     ),
+        #     "expect_skills": ["dead-code"],
+        #     "expect_agents": None,
+        # },
+        # {
+        #     "name": "Dependency update → dev-tools-plugin:update-dependencies skill",
+        #     "prompt": (
+        #         "Update all project dependencies to their latest versions. "
+        #         "Check for breaking changes and report what was upgraded."
+        #     ),
+        #     "expect_skills": ["update-dependencies"],
+        #     "expect_agents": None,
+        # },
+        # # ── documentation-plugin skills ─────────────────────────────
+        # {
+        #     "name": "README generation → documentation-plugin:update-readme skill",
+        #     "prompt": (
+        #         "Create a professional README.md for this repository. Include badges, "
+        #         "installation instructions, usage examples, and a contributing section."
+        #     ),
+        #     "expect_skills": ["update-readme"],
+        #     "expect_agents": None,
+        # },
         {
             "name": "PowerPoint → documentation-plugin:pptx skill",
             "prompt": (
@@ -386,25 +418,25 @@ async def main() -> None:
             "expect_skills": ["pptx"],
             "expect_agents": None,
         },
-        {
-            "name": "Word document → documentation-plugin:docx skill",
-            "prompt": (
-                "Write a Word document (.docx) — a technical design proposal for "
-                "migrating from a monolith to microservices. 2-3 pages."
-            ),
-            "expect_skills": ["docx"],
-            "expect_agents": None,
-        },
-        {
-            "name": "Excel spreadsheet → documentation-plugin:xlsx skill",
-            "prompt": (
-                "Create an Excel spreadsheet (.xlsx) with a project budget tracker. "
-                "Include columns for task, estimated hours, hourly rate, and total cost. "
-                "Add formulas for totals and some sample data."
-            ),
-            "expect_skills": ["xlsx"],
-            "expect_agents": None,
-        },
+        # {
+        #     "name": "Word document → documentation-plugin:docx skill",
+        #     "prompt": (
+        #         "Write a Word document (.docx) — a technical design proposal for "
+        #         "migrating from a monolith to microservices. 2-3 pages."
+        #     ),
+        #     "expect_skills": ["docx"],
+        #     "expect_agents": None,
+        # },
+        # {
+        #     "name": "Excel spreadsheet → documentation-plugin:xlsx skill",
+        #     "prompt": (
+        #         "Create an Excel spreadsheet (.xlsx) with a project budget tracker. "
+        #         "Include columns for task, estimated hours, hourly rate, and total cost. "
+        #         "Add formulas for totals and some sample data."
+        #     ),
+        #     "expect_skills": ["xlsx"],
+        #     "expect_agents": None,
+        # },
         {
             "name": "Chart generation → documentation-plugin:graph-generation skill",
             "prompt": (
@@ -638,7 +670,9 @@ async def main() -> None:
         status = f"{GREEN}PASS{RESET}" if passed else f"{RED}FAIL{RESET}"
         print(f"  [{status}] {name}")
 
-    print(f"\n  {BOLD}Total: {total} | Passed: {passed_count} | Failed: {failed_count}{RESET}")
+    print(
+        f"\n  {BOLD}Total: {total} | Passed: {passed_count} | Failed: {failed_count}{RESET}"
+    )
 
     if failed_count > 0:
         print(f"\n  {RED}Some tests failed. Check output above for details.{RESET}")

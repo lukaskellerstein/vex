@@ -46,7 +46,12 @@
         "Write",
         "WebSearch",
         "WebFetch",
-        "mcp__vex-ao-chrome"
+        "mcp__vex-ao-chrome",
+        "mcp__media-mcp",
+        "mcp__ElevenLabs",
+        "mcp__webdesign-playwright",
+        "mcp__mermaid",
+        "mcp__docs-playwright"
       ],
       "disallowed_tools": [
         "Bash(rm -rf /)",
