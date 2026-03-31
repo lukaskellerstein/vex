@@ -138,6 +138,11 @@ export function App() {
     await refreshState();
   }, [activeTabId, refreshState]);
 
+  const handleUpdateInstruction = useCallback(async (index: number, instruction: string) => {
+    await sendToContent(activeTabId, { action: "updateInstruction", index, instruction });
+    await refreshState();
+  }, [activeTabId, refreshState]);
+
   useEffect(() => {
     (async () => {
       const [tab] = await chrome.tabs.query({
@@ -184,6 +189,7 @@ export function App() {
         actions={actions}
         activeTabId={activeTabId}
         onRemove={handleRemove}
+        onUpdateInstruction={handleUpdateInstruction}
       />
 
       <footer className="footer">
@@ -260,10 +266,12 @@ function PopupActionList({
   actions,
   activeTabId,
   onRemove,
+  onUpdateInstruction,
 }: {
   actions: Action[];
   activeTabId: number | null;
   onRemove: (i: number) => void;
+  onUpdateInstruction: (index: number, instruction: string) => Promise<void>;
 }) {
   if (actions.length === 0) return null;
 
@@ -280,6 +288,7 @@ function PopupActionList({
           action={action}
           index={i}
           onRemove={onRemove}
+          onUpdateInstruction={onUpdateInstruction}
           onMouseEnter={() => highlightAction(i)}
           onMouseLeave={() => highlightAction(null)}
         />
@@ -292,16 +301,20 @@ function PopupActionItem({
   action,
   index,
   onRemove,
+  onUpdateInstruction,
   onMouseEnter,
   onMouseLeave,
 }: {
   action: Action;
   index: number;
   onRemove: (i: number) => void;
+  onUpdateInstruction: (index: number, instruction: string) => Promise<void>;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingPrompt, setEditingPrompt] = useState(false);
+  const [editValue, setEditValue] = useState("");
   const instruction = "instruction" in action ? (action as any).instruction : "";
   const prompt = "prompt" in action ? (action as any).prompt : "";
   const fullPrompt = instruction || prompt;
@@ -383,12 +396,47 @@ function PopupActionItem({
             </div>
           )}
 
-          {fullPrompt && (
-            <div className="popup-detail-row">
-              <span className="popup-detail-label">Prompt</span>
-              <div className="popup-detail-value" style={{ whiteSpace: "pre-wrap" }}>{fullPrompt}</div>
-            </div>
-          )}
+          <div className="popup-detail-row">
+            <span className="popup-detail-label">Prompt</span>
+            {editingPrompt ? (
+              <div className="popup-detail-prompt-edit">
+                <textarea
+                  className="popup-detail-prompt-textarea"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setEditingPrompt(false);
+                    } else if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      onUpdateInstruction(index, editValue).then(() => setEditingPrompt(false));
+                    }
+                  }}
+                  autoFocus
+                  rows={3}
+                />
+                <div className="popup-detail-prompt-btns">
+                  <button
+                    className="popup-detail-prompt-save"
+                    onClick={() => onUpdateInstruction(index, editValue).then(() => setEditingPrompt(false))}
+                  >Save</button>
+                  <button
+                    className="popup-detail-prompt-cancel"
+                    onClick={() => setEditingPrompt(false)}
+                  >Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="popup-detail-value popup-detail-prompt-clickable"
+                style={{ whiteSpace: "pre-wrap", cursor: "pointer" }}
+                onClick={(e) => { e.stopPropagation(); setEditValue(fullPrompt); setEditingPrompt(true); }}
+                title="Click to edit"
+              >
+                {fullPrompt || <span style={{ opacity: 0.5, fontStyle: "italic" }}>Click to add prompt…</span>}
+              </div>
+            )}
+          </div>
 
           {"before" in action && "after" in action && (
             <div className="popup-detail-row">

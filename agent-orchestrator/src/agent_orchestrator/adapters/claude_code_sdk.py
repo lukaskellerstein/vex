@@ -11,7 +11,12 @@ from typing import AsyncIterator
 from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
 from claude_agent_sdk.types import (
     AssistantMessage,
+    HookContext,
+    HookInput,
+    HookJSONOutput,
+    HookMatcher,
     ResultMessage,
+    SystemMessage,
     TaskProgressMessage,
     TextBlock,
     ThinkingBlock,
@@ -31,6 +36,7 @@ class SDKAgentSession:
 
     agent_id: str
     client: ClaudeSDKClient | None = None
+    options: ClaudeAgentOptions | None = None
     session_id: str | None = None
     status: str = "idle"  # idle, running, completed, failed
     current_task_id: str | None = None
@@ -48,17 +54,16 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
     def __init__(self) -> None:
         self._sessions: dict[str, SDKAgentSession] = {}
 
-    async def start(self, project_id: str, project_path: str, agent_id: str | None = None) -> AgentProcess:
+    async def start(
+        self, project_id: str, project_path: str, agent_id: str | None = None
+    ) -> AgentProcess:
         """Create a ClaudeSDKClient session for the given project."""
         agent_id = agent_id or uuid.uuid4().hex
 
         options = ClaudeAgentOptions(
-            system_prompt={
-                "type": "preset",
-                "preset": "claude_code",
-                "append": self._build_system_prompt(project_path),
-            },
-            model="claude-sonnet-4-5-20250929",
+            model="claude-sonnet-4-6",
+            cwd=project_path,
+            setting_sources=["user", "project"],
             max_turns=10,
             permission_mode="bypassPermissions",
             allowed_tools=[
@@ -112,15 +117,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     "args": ["@playwright/mcp@latest", "--isolated"],
                 },
             },
-            plugins=[
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/dev-tools-plugin/1.1.0"},
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/documentation-plugin/4.2.0"},
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/infra-plugin/1.0.0"},
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/design-plugin/1.1.0"},
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/media-plugin/1.4.0"},
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/web-design-plugin/1.5.1"},
-                {"type": "local", "path": "~/.claude/plugins/cache/claude-my-marketplace/web-selector-plugin/1.2.0"},
-            ],
+            plugins=self._resolve_plugins(),
+            hooks=self._make_hooks(agent_id),
         )
 
         client = ClaudeSDKClient(options=options)
@@ -128,13 +126,16 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         session = SDKAgentSession(
             agent_id=agent_id,
             client=client,
+            options=options,
             project_path=project_path,
         )
         self._sessions[agent_id] = session
 
         logger.info(
             "Started claude-code-sdk agent %s for project %s at %s",
-            agent_id, project_id, project_path,
+            agent_id,
+            project_id,
+            project_path,
         )
         return AgentProcess(agent_id=agent_id, pid=None)
 
@@ -167,6 +168,18 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
 
         try:
             await session.client.__aenter__()
+
+            # ── Log resolved plugins (to AO log only, not to agent context) ──
+            resolved_plugins = [
+                p.get("path", "")
+                for p in (session.options.plugins if session.options else [])
+            ]
+            print(
+                f"[vex-agent] {agent_id} — Configured plugins ({len(resolved_plugins)}):"
+            )
+            for p in resolved_plugins:
+                print(f"  [plugin] {p}")
+
             await session.client.query(prompt)
 
             result_text = ""
@@ -177,12 +190,29 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             # Notify subscribers that agent is now running
             await nats_service.publish(
                 f"vex.agent.{agent_id}.status",
-                {"agent_id": agent_id, "status": "running", "timestamp": datetime.now(UTC).isoformat()},
+                {
+                    "agent_id": agent_id,
+                    "status": "running",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
             )
 
             step_index = 0
 
             async for message in session.client.receive_response():
+                if isinstance(message, SystemMessage):
+                    subtype = getattr(message, "subtype", "")
+                    data = getattr(message, "data", {})
+                    if subtype == "init":
+                        tools_count = len(data.get("tools", []))
+                        mcp_servers = data.get("mcp_servers", [])
+                        skills = data.get("skills", [])
+                        print(
+                            f"[vex-agent] {agent_id} — init: {tools_count} tools, "
+                            f"{len(mcp_servers)} MCP servers, {len(skills)} skills"
+                        )
+                    continue
+
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         now_ts = datetime.now(UTC).isoformat()
@@ -277,7 +307,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             step_index += 1
                             # Emit diff step for Edit tool calls
                             if block.name == "Edit" and block.input:
-                                diff_step = self._emit_diff_step(session, block.input, now_ts)
+                                diff_step = self._emit_diff_step(
+                                    session, block.input, now_ts
+                                )
                                 if diff_step:
                                     await nats_service.publish(
                                         f"vex.agent.{agent_id}.step",
@@ -290,7 +322,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 content_text = block.content
                             elif isinstance(block.content, list):
                                 content_text = " ".join(
-                                    item.get("text", "") for item in block.content if isinstance(item, dict)
+                                    item.get("text", "")
+                                    for item in block.content
+                                    if isinstance(item, dict)
                                 )
                             session.log_buffer.append(f"[result] {content_text[:200]}")
                             self._mark_previous_steps_past(session)
@@ -338,7 +372,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 elif isinstance(message, ResultMessage):
                     cost_usd = getattr(message, "total_cost_usd", None)
                     duration_ms = getattr(message, "duration_ms", None)
-                    result_text = f"Completed in {duration_ms}ms" if duration_ms else "Completed"
+                    result_text = (
+                        f"Completed in {duration_ms}ms" if duration_ms else "Completed"
+                    )
                     now_ts = datetime.now(UTC).isoformat()
                     self._mark_previous_steps_past(session)
                     step_data = {
@@ -373,7 +409,11 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             )
             await nats_service.publish(
                 f"vex.agent.{agent_id}.status",
-                {"agent_id": agent_id, "status": "completed", "timestamp": datetime.now(UTC).isoformat()},
+                {
+                    "agent_id": agent_id,
+                    "status": "completed",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
             )
 
         except Exception as e:
@@ -382,12 +422,14 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             session.log_buffer.append(f"[error] {error_msg}")
             now_ts = datetime.now(UTC).isoformat()
             self._mark_previous_steps_past(session)
-            session.steps.append({
-                "type": "error",
-                "content": error_msg,
-                "timestamp": now_ts,
-                "status": "past",
-            })
+            session.steps.append(
+                {
+                    "type": "error",
+                    "content": error_msg,
+                    "timestamp": now_ts,
+                    "status": "past",
+                }
+            )
 
             await nats_service.publish(
                 f"vex.task.{task_id}.complete",
@@ -404,7 +446,12 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             )
             await nats_service.publish(
                 f"vex.agent.{agent_id}.status",
-                {"agent_id": agent_id, "status": "failed", "error": error_msg, "timestamp": datetime.now(UTC).isoformat()},
+                {
+                    "agent_id": agent_id,
+                    "status": "failed",
+                    "error": error_msg,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
             )
             logger.exception("Task %s failed for agent %s", task_id, agent_id)
 
@@ -419,7 +466,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 step["status"] = "past"
 
     @staticmethod
-    def _emit_diff_step(session: SDKAgentSession, tool_input: dict, timestamp: str) -> dict | None:
+    def _emit_diff_step(
+        session: SDKAgentSession, tool_input: dict, timestamp: str
+    ) -> dict | None:
         """Emit a diff step from an Edit tool call's old_string/new_string. Returns the step dict."""
         file_path = tool_input.get("file_path", "")
         old_string = tool_input.get("old_string", "")
@@ -472,34 +521,180 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         for line in remaining:
             yield line
 
-    def _build_system_prompt(self, project_path: str) -> str:
-        """Build a system prompt with project context."""
-        return (
-            "You are a senior web designer and front-end developer working "
-            "inside the Vex visual editor.\n"
-            f"Project path: {project_path}\n\n"
-            "Your primary focus is **design and functionality** of real web "
-            "applications. You translate visual edit actions into production-"
-            "quality code that looks polished and works correctly.\n\n"
-            "## Design principles\n"
-            "- Prioritize visual fidelity: spacing, typography, color, and "
-            "layout must match the intended design precisely.\n"
-            "- Build responsive, accessible UI that works across viewports.\n"
-            "- Use the project's existing design system, component library, "
-            "and styling approach — never introduce conflicting patterns.\n"
-            "- Prefer semantic HTML, proper ARIA attributes, and keyboard "
-            "navigability.\n\n"
-            "## Implementation approach\n"
-            "- Analyze the project's framework, styling system, and component "
-            "patterns before making changes.\n"
-            "- Produce proper components, design tokens, and follow project "
-            "conventions.\n"
-            "- Never paste raw HTML or inline styles when the project uses a "
-            "component-based or utility-class approach.\n"
-            "- Ensure interactive elements (buttons, forms, modals, "
-            "animations) function correctly — not just look correct.\n"
-            "- Test visual changes in the browser when tools are available."
+    # ── Plugin resolution ────────────────────────────────────────────
+
+    _MARKETPLACE_PLUGINS = [
+        "design-plugin",
+        "web-design-plugin",
+        "dev-tools-plugin",
+        "documentation-plugin",
+        "infra-plugin",
+        "media-plugin",
+    ]
+
+    @staticmethod
+    def _resolve_plugins() -> list[dict]:
+        """Resolve installed marketplace plugins, picking the latest cached version."""
+        from pathlib import Path
+
+        cache_root = (
+            Path.home() / ".claude" / "plugins" / "cache" / "claude-my-marketplace"
         )
+        plugins: list[dict] = []
+
+        for name in ClaudeCodeSDKAdapter._MARKETPLACE_PLUGINS:
+            plugin_dir = cache_root / name
+            if not plugin_dir.is_dir():
+                logger.warning("Plugin %s not found in cache at %s", name, plugin_dir)
+                continue
+            # Pick the latest version directory (sorted lexicographically)
+            versions = sorted(
+                (d for d in plugin_dir.iterdir() if d.is_dir()),
+                key=lambda d: d.name,
+            )
+            if not versions:
+                logger.warning("Plugin %s has no version directories", name)
+                continue
+            latest = versions[-1]
+            manifest = latest / ".claude-plugin" / "plugin.json"
+            if not manifest.exists():
+                logger.warning("Plugin %s/%s missing plugin.json", name, latest.name)
+                continue
+            plugins.append({"type": "local", "path": str(latest)})
+            logger.info("Resolved plugin %s → %s", name, latest)
+
+        return plugins
+
+    # ── Hook helpers ────────────────────────────────────────────────
+
+    @staticmethod
+    def _make_hooks(agent_id: str) -> dict:
+        """Build SDK hook dict that publishes lifecycle events to NATS."""
+
+        # PreToolUse hooks MUST explicitly allow execution, otherwise the
+        # tool call may be silently blocked by the CLI.
+        _ALLOW: HookJSONOutput = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+            }
+        }
+        _CONTINUE: HookJSONOutput = {"continue_": True}
+
+        async def _on_subagent_start(
+            hook_input: HookInput,
+            tool_use_id: str | None,
+            ctx: HookContext,
+        ) -> HookJSONOutput:
+            await nats_service.publish(
+                f"vex.agent.{agent_id}.hooks",
+                {
+                    "hook": "SubagentStart",
+                    "agent_id": agent_id,
+                    "subagent_id": hook_input.get("agent_id", ""),
+                    "subagent_type": hook_input.get("agent_type", ""),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+            return _CONTINUE
+
+        async def _on_subagent_stop(
+            hook_input: HookInput,
+            tool_use_id: str | None,
+            ctx: HookContext,
+        ) -> HookJSONOutput:
+            await nats_service.publish(
+                f"vex.agent.{agent_id}.hooks",
+                {
+                    "hook": "SubagentStop",
+                    "agent_id": agent_id,
+                    "subagent_id": hook_input.get("agent_id", ""),
+                    "subagent_type": hook_input.get("agent_type", ""),
+                    "transcript_path": hook_input.get("agent_transcript_path", ""),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+            return _CONTINUE
+
+        async def _on_pre_tool_use(
+            hook_input: HookInput,
+            tool_use_id: str | None,
+            ctx: HookContext,
+        ) -> HookJSONOutput:
+            tool_name = hook_input.get("tool_name", "")
+            tool_input = hook_input.get("tool_input", {})
+
+            # Log every tool call for diagnostics
+            logger.info("Agent %s PreToolUse: %s", agent_id, tool_name)
+
+            payload: dict = {
+                "hook": "PreToolUse",
+                "agent_id": agent_id,
+                "tool_name": tool_name,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            # Enrich with subagent context if present
+            if hook_input.get("agent_id"):
+                payload["subagent_id"] = hook_input["agent_id"]
+                payload["subagent_type"] = hook_input.get("agent_type", "")
+
+            if tool_name == "Skill":
+                payload["skill_name"] = tool_input.get("skill", "")
+                payload["skill_args"] = tool_input.get("args", "")
+            elif tool_name == "Agent":
+                payload["subagent_description"] = tool_input.get("description", "")
+                payload["subagent_prompt"] = tool_input.get("prompt", "")[:500]
+                payload["subagent_agent_type"] = tool_input.get("subagent_type", "")
+            elif tool_name.startswith("mcp__"):
+                # MCP tool call — log which server/tool
+                payload["mcp_tool"] = tool_name
+                logger.info("Agent %s MCP tool call: %s", agent_id, tool_name)
+
+            await nats_service.publish(f"vex.agent.{agent_id}.hooks", payload)
+            return _ALLOW
+
+        async def _on_post_tool_use(
+            hook_input: HookInput,
+            tool_use_id: str | None,
+            ctx: HookContext,
+        ) -> HookJSONOutput:
+            tool_name = hook_input.get("tool_name", "")
+            tool_response = hook_input.get("tool_response", "")
+            response_str = str(tool_response)[:1000] if tool_response else ""
+
+            logger.info("Agent %s PostToolUse: %s", agent_id, tool_name)
+
+            payload: dict = {
+                "hook": "PostToolUse",
+                "agent_id": agent_id,
+                "tool_name": tool_name,
+                "response_preview": response_str,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            if hook_input.get("agent_id"):
+                payload["subagent_id"] = hook_input["agent_id"]
+                payload["subagent_type"] = hook_input.get("agent_type", "")
+
+            if tool_name == "Skill":
+                payload["skill_name"] = hook_input.get("tool_input", {}).get(
+                    "skill", ""
+                )
+            elif tool_name == "Agent":
+                payload["subagent_description"] = hook_input.get("tool_input", {}).get(
+                    "description", ""
+                )
+
+            await nats_service.publish(f"vex.agent.{agent_id}.hooks", payload)
+            return _CONTINUE
+
+        return {
+            "SubagentStart": [HookMatcher(matcher=".*", hooks=[_on_subagent_start])],
+            "SubagentStop": [HookMatcher(matcher=".*", hooks=[_on_subagent_stop])],
+            "PreToolUse": [HookMatcher(matcher=".*", hooks=[_on_pre_tool_use])],
+            "PostToolUse": [
+                HookMatcher(matcher="Skill|Agent|mcp__.*", hooks=[_on_post_tool_use])
+            ],
+        }
 
     def _format_prompt(self, task: dict) -> str:
         """Convert task dict into a structured prompt for the SDK agent."""

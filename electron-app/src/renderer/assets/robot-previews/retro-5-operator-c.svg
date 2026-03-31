@@ -1,0 +1,243 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    /* Arms: complex control panel operation — flip switch, turn knob, push button, pull lever */
+    .arm-l { animation: control-l 8s ease-in-out infinite -3.4s; transform-origin: 18px 78px; }
+    .arm-r { animation: control-r 8s ease-in-out infinite -3.4s; transform-origin: 102px 78px; }
+
+    @keyframes control-l {
+      0%, 3%   { transform: rotate(0deg) translateY(0); }
+      /* Flip switch up */
+      5%       { transform: rotate(-12deg) translateY(-2px); }
+      8%       { transform: rotate(-12deg) translateY(-2px); }
+      10%      { transform: rotate(0deg) translateY(0); }
+      /* Push button */
+      18%      { transform: rotate(0deg) translateY(0); }
+      20%      { transform: rotate(5deg) translateY(4px); }
+      22%      { transform: rotate(0deg) translateY(0); }
+      /* Wait */
+      30%, 35% { transform: rotate(0deg) translateY(0); }
+      /* Turn knob — circular motion approximation */
+      38%      { transform: rotate(-8deg) translateY(-2px); }
+      41%      { transform: rotate(-4deg) translateY(2px); }
+      44%      { transform: rotate(-10deg) translateY(-2px); }
+      47%      { transform: rotate(-6deg) translateY(2px); }
+      50%      { transform: rotate(-8deg) translateY(0); }
+      53%      { transform: rotate(0deg) translateY(0); }
+      /* Pull lever down */
+      60%      { transform: rotate(0deg) translateY(0); }
+      63%      { transform: rotate(-20deg) translateY(-4px); }
+      65%      { transform: rotate(-20deg) translateY(-4px); }  /* hold */
+      68%      { transform: rotate(8deg) translateY(6px); }     /* pull down hard */
+      70%      { transform: rotate(4deg) translateY(4px); }     /* settle */
+      73%      { transform: rotate(0deg) translateY(0); }
+      /* Rest — check readouts */
+      74%, 90% { transform: rotate(0deg) translateY(0); }
+      /* Quick adjustment */
+      92%      { transform: rotate(-6deg) translateY(-1px); }
+      94%      { transform: rotate(0deg) translateY(0); }
+      100%     { transform: rotate(0deg) translateY(0); }
+    }
+
+    @keyframes control-r {
+      0%, 10%  { transform: rotate(0deg) translateY(0); }
+      /* Press button sequence */
+      12%      { transform: rotate(0deg) translateY(4px); }
+      14%      { transform: rotate(0deg) translateY(0); }
+      16%      { transform: rotate(0deg) translateY(4px); }
+      18%      { transform: rotate(0deg) translateY(0); }
+      20%      { transform: rotate(0deg) translateY(4px); }
+      22%      { transform: rotate(0deg) translateY(0); }
+      /* Rest */
+      25%, 30% { transform: rotate(0deg) translateY(0); }
+      /* Flip switch down */
+      32%      { transform: rotate(10deg) translateY(3px); }
+      35%      { transform: rotate(10deg) translateY(3px); }
+      37%      { transform: rotate(0deg) translateY(0); }
+      /* Wait, then adjust */
+      45%, 55% { transform: rotate(0deg) translateY(0); }
+      /* Turn dial */
+      58%      { transform: rotate(8deg) translateY(2px); }
+      61%      { transform: rotate(4deg) translateY(-1px); }
+      64%      { transform: rotate(10deg) translateY(2px); }
+      67%      { transform: rotate(0deg) translateY(0); }
+      /* Rest — monitor */
+      68%, 85% { transform: rotate(0deg) translateY(0); }
+      /* Emergency toggle */
+      87%      { transform: rotate(12deg) translateY(4px); }
+      89%      { transform: rotate(0deg) translateY(0); }
+      100%     { transform: rotate(0deg) translateY(0); }
+    }
+
+    /* Head: monitors multiple displays, occasional double-take */
+    .head { animation: monitor 8s ease-in-out infinite -3.4s; }
+    @keyframes monitor {
+      0%, 8%   { transform: rotate(0deg); }
+      12%      { transform: rotate(-5deg); }    /* look left display */
+      20%      { transform: rotate(-5deg); }
+      24%      { transform: rotate(5deg); }     /* look right display */
+      30%      { transform: rotate(5deg); }
+      34%      { transform: rotate(0deg); }     /* center */
+      40%, 50% { transform: rotate(0deg); }     /* focused on center */
+      54%      { transform: rotate(3deg); }     /* quick glance right */
+      56%      { transform: rotate(0deg); }
+      60%      { transform: rotate(0deg); }
+      /* Double-take after lever pull */
+      68%      { transform: rotate(-4deg); }
+      70%      { transform: rotate(2deg); }     /* double-take */
+      72%      { transform: rotate(-4deg); }    /* look back */
+      76%      { transform: rotate(0deg); }
+      80%      { transform: rotate(0deg); }
+      84%      { transform: rotate(-3deg); }
+      88%      { transform: rotate(3deg); }
+      92%      { transform: rotate(0deg); }
+      100%     { transform: rotate(0deg); }
+    }
+
+    /* Tri-visor: three separate scan elements */
+    .v1 { animation: v-scan1 8s ease-in-out infinite -3.4s; }
+    .v2 { animation: v-scan2 8s ease-in-out infinite -3.4s; }
+    .v3 { animation: v-scan3 8s ease-in-out infinite -3.4s; }
+    @keyframes v-scan1 {
+      0%   { opacity: 0.8; fill: #4ade80; }
+      20%  { opacity: 1; fill: #4ade80; }
+      60%  { opacity: 0.6; fill: #4ade80; }
+      68%  { opacity: 1; fill: #fbbf24; }      /* alert after lever */
+      76%  { opacity: 0.8; fill: #4ade80; }
+      100% { opacity: 0.8; fill: #4ade80; }
+    }
+    @keyframes v-scan2 {
+      0%   { opacity: 0.6; fill: #4ade80; }
+      30%  { opacity: 1; fill: #4ade80; }
+      50%  { opacity: 0.8; fill: #4ade80; }
+      68%  { opacity: 1; fill: #f87171; }       /* red flash */
+      72%  { opacity: 0.6; fill: #4ade80; }
+      100% { opacity: 0.6; fill: #4ade80; }
+    }
+    @keyframes v-scan3 {
+      0%   { opacity: 0.5; fill: #4ade80; }
+      40%  { opacity: 0.9; fill: #4ade80; }
+      68%  { opacity: 1; fill: #fbbf24; }
+      74%  { opacity: 0.5; fill: #4ade80; }
+      100% { opacity: 0.5; fill: #4ade80; }
+    }
+
+    /* Chest: multi-row console with changing readouts */
+    .console-row1 { animation: row1 8s steps(1) infinite; }
+    .console-row2 { animation: row2 8s steps(1) infinite; }
+    .console-row3 { animation: row3 8s steps(1) infinite; }
+
+    @keyframes row1 {
+      0%    { width: 16px; }
+      12.5% { width: 24px; }
+      25%   { width: 12px; }
+      37.5% { width: 30px; }
+      50%   { width: 20px; }
+      62.5% { width: 36px; }
+      75%   { width: 8px; }
+      87.5% { width: 28px; }
+      100%  { width: 16px; }
+    }
+    @keyframes row2 {
+      0%    { width: 28px; }
+      12.5% { width: 14px; }
+      25%   { width: 32px; }
+      37.5% { width: 18px; }
+      50%   { width: 38px; }
+      62.5% { width: 10px; }
+      75%   { width: 24px; }
+      87.5% { width: 34px; }
+      100%  { width: 28px; }
+    }
+    @keyframes row3 {
+      0%    { width: 22px; }
+      12.5% { width: 36px; }
+      25%   { width: 18px; }
+      37.5% { width: 8px; }
+      50%   { width: 28px; }
+      62.5% { width: 40px; }
+      75%   { width: 16px; }
+      87.5% { width: 20px; }
+      100%  { width: 22px; }
+    }
+
+    /* Status lights: cycle through states */
+    .led1 { animation: led-cycle 8s steps(1) infinite; }
+    .led2 { animation: led-cycle 8s steps(1) infinite -2.4s; }
+    .led3 { animation: led-cycle 8s steps(1) infinite -1.4s; }
+    .led4 { animation: led-cycle 8s steps(1) infinite -0.3999999999999999s; }
+    @keyframes led-cycle {
+      0%    { fill: #4ade80; }
+      25%   { fill: #fbbf24; }
+      50%   { fill: #4ade80; }
+      62.5% { fill: #f87171; }
+      75%   { fill: #fbbf24; }
+      87.5% { fill: #4ade80; }
+      100%  { fill: #4ade80; }
+    }
+
+    .antenna-led { animation: ant-pulse 1s ease-in-out infinite -3.4s; }
+    @keyframes ant-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+  </style>
+
+  <!-- Dual antenna -->
+  <line x1="50" y1="18" x2="50" y2="26" stroke="#6d8a6d" stroke-width="2"/>
+  <line x1="70" y1="18" x2="70" y2="26" stroke="#6d8a6d" stroke-width="2"/>
+  <circle class="antenna-led" cx="50" cy="14" r="3" fill="#4ade80"/>
+  <circle class="antenna-led" cx="70" cy="14" r="3" fill="#60a5fa" style="animation-delay: -2.9s"/>
+
+  <!-- Head -->
+  <g class="head">
+    <rect x="32" y="26" width="56" height="38" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+    <!-- Triple visor -->
+    <rect x="38" y="32" width="12" height="10" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+    <rect x="54" y="32" width="12" height="10" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+    <rect x="70" y="32" width="12" height="10" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+    <rect class="v1" x="39" y="33" width="10" height="8" rx="1" fill="#4ade80" opacity="0.8"/>
+    <rect class="v2" x="55" y="33" width="10" height="8" rx="1" fill="#4ade80" opacity="0.6"/>
+    <rect class="v3" x="71" y="33" width="10" height="8" rx="1" fill="#4ade80" opacity="0.5"/>
+    <!-- Mouth: series of dots -->
+    <circle cx="46" cy="54" r="1.5" fill="#3a5a3a"/>
+    <circle cx="52" cy="54" r="1.5" fill="#3a5a3a"/>
+    <circle cx="58" cy="54" r="1.5" fill="#3a5a3a"/>
+    <circle cx="64" cy="54" r="1.5" fill="#3a5a3a"/>
+    <circle cx="70" cy="54" r="1.5" fill="#3a5a3a"/>
+  </g>
+
+  <!-- Neck -->
+  <rect x="52" y="64" width="16" height="8" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+
+  <!-- Body -->
+  <rect x="28" y="72" width="64" height="42" rx="3" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Console display -->
+  <rect x="34" y="76" width="52" height="20" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <rect class="console-row1" x="36" y="78" width="16" height="3" rx="1" fill="#4ade80" opacity="0.7"/>
+  <rect class="console-row2" x="36" y="83" width="28" height="3" rx="1" fill="#4ade80" opacity="0.7"/>
+  <rect class="console-row3" x="36" y="88" width="22" height="3" rx="1" fill="#4ade80" opacity="0.7"/>
+
+  <!-- Status LED row -->
+  <circle class="led1" cx="40" cy="102" r="2.5" fill="#4ade80"/>
+  <circle class="led2" cx="50" cy="102" r="2.5" fill="#4ade80"/>
+  <circle class="led3" cx="60" cy="102" r="2.5" fill="#4ade80"/>
+  <circle class="led4" cx="70" cy="102" r="2.5" fill="#4ade80"/>
+  <circle cx="80" cy="102" r="2.5" fill="#4a6a4a" opacity="0.3"/>
+
+  <!-- Left Arm -->
+  <g class="arm-l">
+    <rect x="10" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="14" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="11" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Right Arm -->
+  <g class="arm-r">
+    <rect x="94" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="98" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="95" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Legs -->
+  <rect x="36" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="68" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="32" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="64" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+</svg>

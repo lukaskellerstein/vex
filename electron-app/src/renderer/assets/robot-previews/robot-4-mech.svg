@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    .mech-arm-l { animation: mech-type-l 0.7s ease-in-out infinite; transform-origin: 24px 80px; }
+    .mech-arm-r { animation: mech-type-r 0.7s ease-in-out infinite 0.35s; transform-origin: 96px 80px; }
+    .core-pulse { animation: core 1.4s ease-in-out infinite; }
+    .head-tilt { animation: tilt 2s ease-in-out infinite; transform-origin: 60px 44px; }
+    .shoulder-l { animation: shoulder-rotate-l 0.7s ease-in-out infinite; transform-origin: 30px 74px; }
+    .shoulder-r { animation: shoulder-rotate-r 0.7s ease-in-out infinite 0.35s; transform-origin: 90px 74px; }
+    .exhaust { animation: exhaust-puff 1s ease-out infinite; }
+
+    @keyframes mech-type-l {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-15deg); }
+    }
+    @keyframes mech-type-r {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(15deg); }
+    }
+    @keyframes core {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    @keyframes tilt {
+      0%, 100% { transform: rotate(0deg) translateY(0); }
+      25% { transform: rotate(-2deg) translateY(-1px); }
+      75% { transform: rotate(2deg) translateY(-1px); }
+    }
+    @keyframes shoulder-rotate-l {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-8deg); }
+    }
+    @keyframes shoulder-rotate-r {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(8deg); }
+    }
+    @keyframes exhaust-puff {
+      0% { opacity: 0.6; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-8px) scale(1.5); }
+    }
+  </style>
+
+  <!-- Head -->
+  <g class="head-tilt">
+    <!-- Helmet -->
+    <path d="M36 28 L40 16 L80 16 L84 28 Z" fill="#2a2a40" stroke="#5a5a80" stroke-width="1.5"/>
+    <!-- Head casing -->
+    <rect x="36" y="28" width="48" height="32" rx="4" fill="#252540" stroke="#5a5a80" stroke-width="1.5"/>
+    <!-- Face plate -->
+    <rect x="40" y="32" width="40" height="18" rx="2" fill="#15152a"/>
+
+    <!-- Eyes — angular -->
+    <polygon points="46,38 52,35 56,38 56,44 52,47 46,44" fill="#60a5fa" opacity="0.9"/>
+    <polygon points="64,38 68,35 74,38 74,44 68,47 64,44" fill="#60a5fa" opacity="0.9"/>
+    <!-- Eye highlights -->
+    <polygon points="48,39 51,37 53,39" fill="white" opacity="0.4"/>
+    <polygon points="66,39 69,37 71,39" fill="white" opacity="0.4"/>
+
+    <!-- Jaw -->
+    <rect x="44" y="52" width="32" height="6" rx="2" fill="#1e1e38" stroke="#4a4a6a" stroke-width="1"/>
+    <rect x="48" y="53" width="4" height="3" rx="0.5" fill="#3a3a5a"/>
+    <rect x="54" y="53" width="4" height="3" rx="0.5" fill="#3a3a5a"/>
+    <rect x="60" y="53" width="4" height="3" rx="0.5" fill="#3a3a5a"/>
+    <rect x="66" y="53" width="4" height="3" rx="0.5" fill="#3a3a5a"/>
+
+    <!-- Side vents -->
+    <rect x="33" y="34" width="3" height="3" rx="0.5" fill="#3a3a5a"/>
+    <rect x="33" y="39" width="3" height="3" rx="0.5" fill="#3a3a5a"/>
+    <rect x="84" y="34" width="3" height="3" rx="0.5" fill="#3a3a5a"/>
+    <rect x="84" y="39" width="3" height="3" rx="0.5" fill="#3a3a5a"/>
+  </g>
+
+  <!-- Neck — hydraulic -->
+  <rect x="50" y="60" width="8" height="4" rx="1" fill="#3a3a5a"/>
+  <rect x="53" y="64" width="14" height="6" rx="1" fill="#2a2a40" stroke="#4a4a6a" stroke-width="1"/>
+
+  <!-- Shoulder joints -->
+  <g class="shoulder-l">
+    <circle cx="30" cy="74" r="6" fill="#2a2a40" stroke="#5a5a80" stroke-width="1.5"/>
+    <circle cx="30" cy="74" r="2" fill="#4a4a6a"/>
+    <!-- Upper arm -->
+    <g class="mech-arm-l">
+      <rect x="16" y="78" width="12" height="22" rx="3" fill="#252540" stroke="#5a5a80" stroke-width="1.5"/>
+      <!-- Forearm -->
+      <rect x="14" y="98" width="16" height="8" rx="2" fill="#2a2a40" stroke="#4a4a6a" stroke-width="1"/>
+      <!-- Claw -->
+      <path d="M16 106 L14 112 L18 112 Z" fill="#3a3a5a"/>
+      <path d="M24 106 L22 112 L26 112 Z" fill="#3a3a5a"/>
+    </g>
+  </g>
+
+  <g class="shoulder-r">
+    <circle cx="90" cy="74" r="6" fill="#2a2a40" stroke="#5a5a80" stroke-width="1.5"/>
+    <circle cx="90" cy="74" r="2" fill="#4a4a6a"/>
+    <!-- Upper arm -->
+    <g class="mech-arm-r">
+      <rect x="92" y="78" width="12" height="22" rx="3" fill="#252540" stroke="#5a5a80" stroke-width="1.5"/>
+      <!-- Forearm -->
+      <rect x="90" y="98" width="16" height="8" rx="2" fill="#2a2a40" stroke="#4a4a6a" stroke-width="1"/>
+      <!-- Claw -->
+      <path d="M92 106 L90 112 L94 112 Z" fill="#3a3a5a"/>
+      <path d="M100 106 L98 112 L102 112 Z" fill="#3a3a5a"/>
+    </g>
+  </g>
+
+  <!-- Torso — armored plates -->
+  <rect x="34" y="70" width="52" height="38" rx="4" fill="#252540" stroke="#5a5a80" stroke-width="1.5"/>
+  <!-- Chest plate detail -->
+  <path d="M42 74 L60 72 L78 74 L78 82 L60 84 L42 82 Z" fill="#1e1e38" stroke="#4a4a6a" stroke-width="1"/>
+  <!-- Core -->
+  <circle class="core-pulse" cx="60" cy="78" r="4" fill="#60a5fa"/>
+  <circle cx="60" cy="78" r="2" fill="white" opacity="0.6"/>
+
+  <!-- Waist -->
+  <rect x="40" y="96" width="40" height="6" rx="2" fill="#2a2a40" stroke="#4a4a6a" stroke-width="1"/>
+
+  <!-- Exhaust vents on back/sides -->
+  <circle class="exhaust" cx="38" cy="100" r="2" fill="#60a5fa" opacity="0.3"/>
+  <circle class="exhaust" cx="82" cy="100" r="2" fill="#60a5fa" opacity="0.3" style="animation-delay: 0.5s"/>
+
+  <!-- Legs — armored -->
+  <rect x="38" y="108" width="16" height="20" rx="3" fill="#252540" stroke="#5a5a80" stroke-width="1.5"/>
+  <rect x="66" y="108" width="16" height="20" rx="3" fill="#252540" stroke="#5a5a80" stroke-width="1.5"/>
+  <!-- Knee joints -->
+  <circle cx="46" cy="118" r="3" fill="#2a2a40" stroke="#4a4a6a" stroke-width="1"/>
+  <circle cx="74" cy="118" r="3" fill="#2a2a40" stroke="#4a4a6a" stroke-width="1"/>
+
+  <!-- Feet — heavy -->
+  <rect x="34" y="128" width="22" height="8" rx="3" fill="#2a2a40" stroke="#5a5a80" stroke-width="1.5"/>
+  <rect x="64" y="128" width="22" height="8" rx="3" fill="#2a2a40" stroke="#5a5a80" stroke-width="1.5"/>
+</svg>

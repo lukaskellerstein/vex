@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    .piston-l { animation: piston-down 0.5s steps(2) infinite; transform-origin: 18px 78px; }
+    .piston-r { animation: piston-down 0.5s steps(2) infinite 0.25s; transform-origin: 102px 78px; }
+    .screen-text { animation: text-scroll 1.5s steps(4) infinite; }
+    .visor { animation: visor-scan 2s linear infinite; }
+    .gear { animation: spin 3s linear infinite; transform-origin: 60px 92px; }
+
+    @keyframes piston-down {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(6px); }
+    }
+    @keyframes text-scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-20px); }
+    }
+    @keyframes visor-scan {
+      0%, 100% { transform: translateX(-8px); }
+      50% { transform: translateX(8px); }
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
+  <!-- Antenna — zigzag -->
+  <polyline points="60,26 56,18 64,10 60,2" fill="none" stroke="#6d8a6d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="57" y="0" width="6" height="6" fill="#4ade80" opacity="0.8">
+    <animate attributeName="opacity" values="0.4;1;0.4" dur="0.6s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Head — blocky -->
+  <rect x="32" y="26" width="56" height="38" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+
+  <!-- Visor -->
+  <rect x="38" y="32" width="44" height="14" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <!-- Scanning eye bar -->
+  <g class="visor" clip-path="url(#visor-clip)">
+    <rect x="44" y="34" width="16" height="10" rx="1" fill="#4ade80" opacity="0.8"/>
+  </g>
+  <defs>
+    <clipPath id="visor-clip">
+      <rect x="39" y="33" width="42" height="12"/>
+    </clipPath>
+  </defs>
+
+  <!-- Mouth — speaker grille -->
+  <line x1="44" y1="52" x2="76" y2="52" stroke="#3a5a3a" stroke-width="1.5"/>
+  <line x1="44" y1="55" x2="76" y2="55" stroke="#3a5a3a" stroke-width="1.5"/>
+  <line x1="44" y1="58" x2="76" y2="58" stroke="#3a5a3a" stroke-width="1.5"/>
+
+  <!-- Neck bolts -->
+  <rect x="52" y="64" width="16" height="8" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <circle cx="56" cy="68" r="1.5" fill="#4a6a4a"/>
+  <circle cx="64" cy="68" r="1.5" fill="#4a6a4a"/>
+
+  <!-- Body — boxy industrial -->
+  <rect x="28" y="72" width="64" height="42" rx="3" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+
+  <!-- Chest panel -->
+  <rect x="36" y="78" width="48" height="16" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <!-- Scrolling code text -->
+  <g class="screen-text" clip-path="url(#screen-clip)">
+    <text x="38" y="89" fill="#4ade80" font-family="monospace" font-size="8" opacity="0.9">10110 RUN</text>
+  </g>
+  <defs>
+    <clipPath id="screen-clip">
+      <rect x="37" y="79" width="46" height="14"/>
+    </clipPath>
+  </defs>
+
+  <!-- Gear on belly -->
+  <g class="gear">
+    <circle cx="60" cy="104" r="5" fill="none" stroke="#4a6a4a" stroke-width="1.5"/>
+    <line x1="60" y1="99" x2="60" y2="109" stroke="#4a6a4a" stroke-width="1.5"/>
+    <line x1="55" y1="104" x2="65" y2="104" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Left Arm — piston style -->
+  <g class="piston-l">
+    <rect x="10" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="14" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="11" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Right Arm — piston style -->
+  <g class="piston-r">
+    <rect x="94" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="98" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="95" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Legs — chunky -->
+  <rect x="36" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="68" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <!-- Treads -->
+  <rect x="32" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="64" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+</svg>

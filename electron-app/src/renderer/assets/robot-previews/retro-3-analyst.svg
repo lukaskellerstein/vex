@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    /* Head: slow deliberate scanning — reads left, reads right, thinks up, nods, repeats */
+    .head { animation: scan-think 6s ease-in-out infinite; }
+    @keyframes scan-think {
+      0%, 5%   { transform: rotate(0deg) translateY(0); }
+      10%      { transform: rotate(-4deg) translateY(0); }    /* look left */
+      18%      { transform: rotate(-4deg) translateY(0); }    /* hold — reading */
+      24%      { transform: rotate(4deg) translateY(0); }     /* look right */
+      32%      { transform: rotate(4deg) translateY(0); }     /* hold — reading */
+      38%      { transform: rotate(0deg) translateY(0); }     /* center */
+      42%      { transform: rotate(0deg) translateY(-3px); }  /* look up — thinking */
+      52%      { transform: rotate(0deg) translateY(-3px); }  /* hold — processing */
+      56%      { transform: rotate(0deg) translateY(0); }     /* back */
+      60%      { transform: rotate(0deg) translateY(2px); }   /* nod down */
+      63%      { transform: rotate(0deg) translateY(0); }     /* nod up */
+      66%      { transform: rotate(0deg) translateY(2px); }   /* nod down — "got it" */
+      69%      { transform: rotate(0deg) translateY(0); }
+      72%      { transform: rotate(-3deg) translateY(0); }    /* one more look left */
+      80%      { transform: rotate(-3deg) translateY(0); }
+      86%      { transform: rotate(0deg) translateY(0); }
+      100%     { transform: rotate(0deg) translateY(0); }     /* rest */
+    }
+
+    /* Visor: two separate scan bars — like dual monitors */
+    .visor-top { animation: scan-top 6s ease-in-out infinite; }
+    .visor-bot { animation: scan-bot 6s ease-in-out infinite 0.5s; }
+    @keyframes scan-top {
+      0%       { transform: translateX(-6px); width: 12px; }
+      15%      { transform: translateX(6px); width: 16px; }
+      30%      { transform: translateX(-2px); width: 20px; }
+      42%, 52% { transform: translateX(0); width: 8px; }       /* shrink while thinking */
+      60%      { transform: translateX(-4px); width: 14px; }
+      80%      { transform: translateX(4px); width: 18px; }
+      100%     { transform: translateX(-6px); width: 12px; }
+    }
+    @keyframes scan-bot {
+      0%       { transform: translateX(4px); width: 10px; }
+      20%      { transform: translateX(-6px); width: 14px; }
+      35%      { transform: translateX(2px); width: 18px; }
+      42%, 52% { transform: translateX(0); width: 6px; }
+      65%      { transform: translateX(6px); width: 12px; }
+      85%      { transform: translateX(-4px); width: 16px; }
+      100%     { transform: translateX(4px); width: 10px; }
+    }
+
+    /* Arms: mostly still, occasional gesture — points at screen, takes notes */
+    .arm-l { animation: arm-point 6s ease-in-out infinite; transform-origin: 18px 78px; }
+    .arm-r { animation: arm-note 6s ease-in-out infinite; transform-origin: 102px 78px; }
+    @keyframes arm-point {
+      0%, 8%   { transform: rotate(0deg); }
+      12%      { transform: rotate(-20deg); }  /* point left */
+      18%      { transform: rotate(-20deg); }
+      24%      { transform: rotate(0deg); }
+      28%      { transform: rotate(15deg); }   /* point right */
+      32%      { transform: rotate(15deg); }
+      36%      { transform: rotate(0deg); }
+      42%      { transform: rotate(-8deg); }   /* slight gesture */
+      48%      { transform: rotate(-8deg); }
+      52%      { transform: rotate(0deg); }
+      100%     { transform: rotate(0deg); }
+    }
+    @keyframes arm-note {
+      0%, 55%  { transform: translateY(0); }
+      58%      { transform: translateY(4px); }  /* scribble */
+      60%      { transform: translateY(0); }
+      62%      { transform: translateY(4px); }
+      64%      { transform: translateY(0); }
+      66%      { transform: translateY(4px); }
+      68%      { transform: translateY(0); }
+      70%      { transform: translateY(4px); }
+      72%      { transform: translateY(0); }
+      100%     { transform: translateY(0); }
+    }
+
+    /* Chest display: data readout cycling */
+    .data-bar1 { animation: data1 6s steps(1) infinite; }
+    .data-bar2 { animation: data2 6s steps(1) infinite; }
+    .data-bar3 { animation: data3 6s steps(1) infinite; }
+    @keyframes data1 {
+      0%   { width: 20px; fill: #4ade80; }
+      16%  { width: 32px; fill: #4ade80; }
+      33%  { width: 14px; fill: #4ade80; }
+      50%  { width: 38px; fill: #fbbf24; }  /* anomaly */
+      66%  { width: 26px; fill: #4ade80; }
+      83%  { width: 20px; fill: #4ade80; }
+      100% { width: 20px; fill: #4ade80; }
+    }
+    @keyframes data2 {
+      0%   { width: 28px; fill: #4ade80; }
+      16%  { width: 18px; fill: #4ade80; }
+      33%  { width: 36px; fill: #4ade80; }
+      50%  { width: 10px; fill: #f87171; }  /* alert */
+      66%  { width: 30px; fill: #4ade80; }
+      83%  { width: 24px; fill: #4ade80; }
+      100% { width: 28px; fill: #4ade80; }
+    }
+    @keyframes data3 {
+      0%   { width: 15px; fill: #4ade80; }
+      16%  { width: 40px; fill: #4ade80; }
+      33%  { width: 22px; fill: #4ade80; }
+      50%  { width: 42px; fill: #fbbf24; }
+      66%  { width: 18px; fill: #4ade80; }
+      83%  { width: 34px; fill: #4ade80; }
+      100% { width: 15px; fill: #4ade80; }
+    }
+
+    .antenna-led { animation: ant 1.2s ease-in-out infinite; }
+    @keyframes ant { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+  </style>
+
+  <!-- Antenna: radar dish style -->
+  <line x1="60" y1="18" x2="60" y2="26" stroke="#6d8a6d" stroke-width="2"/>
+  <ellipse cx="60" cy="14" rx="10" ry="4" fill="none" stroke="#4a6a4a" stroke-width="1.5"/>
+  <circle class="antenna-led" cx="60" cy="14" r="3" fill="#4ade80"/>
+
+  <!-- Head -->
+  <g class="head">
+    <rect x="32" y="26" width="56" height="38" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+    <!-- Dual visor -->
+    <rect x="38" y="32" width="44" height="6" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+    <rect x="38" y="40" width="44" height="6" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+    <g clip-path="url(#vt)">
+      <rect class="visor-top" x="44" y="33" width="12" height="4" rx="1" fill="#4ade80" opacity="0.8"/>
+    </g>
+    <g clip-path="url(#vb)">
+      <rect class="visor-bot" x="44" y="41" width="10" height="4" rx="1" fill="#4ade80" opacity="0.6"/>
+    </g>
+    <defs>
+      <clipPath id="vt"><rect x="39" y="32" width="42" height="6"/></clipPath>
+      <clipPath id="vb"><rect x="39" y="40" width="42" height="6"/></clipPath>
+    </defs>
+    <!-- Mouth: single line -->
+    <line x1="48" y1="54" x2="72" y2="54" stroke="#3a5a3a" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- Neck -->
+  <rect x="52" y="64" width="16" height="8" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+
+  <!-- Body -->
+  <rect x="28" y="72" width="64" height="42" rx="3" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Data bars display -->
+  <rect x="36" y="78" width="48" height="22" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <rect class="data-bar1" x="38" y="80" width="20" height="4" rx="1" fill="#4ade80" opacity="0.8"/>
+  <rect class="data-bar2" x="38" y="86" width="28" height="4" rx="1" fill="#4ade80" opacity="0.8"/>
+  <rect class="data-bar3" x="38" y="92" width="15" height="4" rx="1" fill="#4ade80" opacity="0.8"/>
+
+  <!-- Status dots -->
+  <circle cx="40" cy="106" r="2" fill="#4ade80" opacity="0.6">
+    <animate attributeName="fill" values="#4ade80;#4ade80;#fbbf24;#4ade80" dur="6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="48" cy="106" r="2" fill="#4ade80" opacity="0.6"/>
+  <circle cx="56" cy="106" r="2" fill="#4ade80" opacity="0.6">
+    <animate attributeName="fill" values="#4ade80;#f87171;#4ade80;#4ade80" dur="6s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Left Arm -->
+  <g class="arm-l">
+    <rect x="10" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="14" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="11" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Right Arm -->
+  <g class="arm-r">
+    <rect x="94" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="98" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="95" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Legs -->
+  <rect x="36" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="68" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="32" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="64" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+</svg>

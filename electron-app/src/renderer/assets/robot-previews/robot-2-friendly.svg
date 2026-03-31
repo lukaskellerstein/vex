@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    .arm-l { animation: wave-left 0.8s ease-in-out infinite; transform-origin: 22px 80px; }
+    .arm-r { animation: wave-right 0.8s ease-in-out infinite 0.4s; transform-origin: 98px 80px; }
+    .body-bounce { animation: bounce 1s ease-in-out infinite; }
+    .antenna-glow { animation: glow 1s ease-in-out infinite; }
+    .cheek-l, .cheek-r { animation: blush 2s ease-in-out infinite; }
+    .eye-l, .eye-r { animation: look 3s ease-in-out infinite; }
+
+    @keyframes wave-left {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(-18deg); }
+    }
+    @keyframes wave-right {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(18deg); }
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes glow {
+      0%, 100% { r: 5; opacity: 0.5; }
+      50% { r: 7; opacity: 1; }
+    }
+    @keyframes blush {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.6; }
+    }
+    @keyframes look {
+      0%, 40% { transform: translateX(0); }
+      50%, 60% { transform: translateX(2px); }
+      70%, 100% { transform: translateX(0); }
+    }
+  </style>
+
+  <g class="body-bounce">
+    <!-- Antenna stalk -->
+    <line x1="60" y1="14" x2="60" y2="28" stroke="#7c7c9a" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Antenna glow ball -->
+    <circle class="antenna-glow" cx="60" cy="11" r="5" fill="#f0abfc"/>
+
+    <!-- Head — big round -->
+    <ellipse cx="60" cy="46" rx="30" ry="24" fill="#2e2e45" stroke="#5a5a80" stroke-width="1.5"/>
+
+    <!-- Eyes — big cute circles -->
+    <g class="eye-l">
+      <circle cx="48" cy="42" r="8" fill="#1a1a2e"/>
+      <circle cx="48" cy="42" r="6" fill="#7dd3fc"/>
+      <circle cx="50" cy="40" r="2.5" fill="white" opacity="0.9"/>
+    </g>
+    <g class="eye-r">
+      <circle cx="72" cy="42" r="8" fill="#1a1a2e"/>
+      <circle cx="72" cy="42" r="6" fill="#7dd3fc"/>
+      <circle cx="74" cy="40" r="2.5" fill="white" opacity="0.9"/>
+    </g>
+
+    <!-- Smile -->
+    <path d="M50 55 Q60 62 70 55" fill="none" stroke="#6d6d8a" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Cheeks -->
+    <ellipse class="cheek-l" cx="38" cy="52" rx="5" ry="3" fill="#f0abfc" opacity="0.3"/>
+    <ellipse class="cheek-r" cx="82" cy="52" rx="5" ry="3" fill="#f0abfc" opacity="0.3"/>
+
+    <!-- Neck -->
+    <rect x="54" y="68" width="12" height="6" rx="3" fill="#3a3a55"/>
+
+    <!-- Body — rounded rectangle -->
+    <rect x="34" y="74" width="52" height="36" rx="14" fill="#2e2e45" stroke="#5a5a80" stroke-width="1.5"/>
+
+    <!-- Belly button / power core -->
+    <circle cx="60" cy="90" r="7" fill="#1a1a2e" stroke="#f0abfc" stroke-width="1" opacity="0.5"/>
+    <circle cx="60" cy="90" r="3" fill="#f0abfc" opacity="0.7"/>
+
+    <!-- Left Arm -->
+    <g class="arm-l">
+      <rect x="14" y="76" width="18" height="24" rx="9" fill="#2e2e45" stroke="#5a5a80" stroke-width="1.5"/>
+      <circle cx="23" cy="98" r="5" fill="#3a3a55"/>
+    </g>
+
+    <!-- Right Arm -->
+    <g class="arm-r">
+      <rect x="88" y="76" width="18" height="24" rx="9" fill="#2e2e45" stroke="#5a5a80" stroke-width="1.5"/>
+      <circle cx="97" cy="98" r="5" fill="#3a3a55"/>
+    </g>
+
+    <!-- Legs -->
+    <ellipse cx="47" cy="118" rx="8" ry="12" fill="#2e2e45" stroke="#5a5a80" stroke-width="1.5"/>
+    <ellipse cx="73" cy="118" rx="8" ry="12" fill="#2e2e45" stroke="#5a5a80" stroke-width="1.5"/>
+
+    <!-- Feet -->
+    <ellipse cx="45" cy="130" rx="10" ry="5" fill="#3a3a55"/>
+    <ellipse cx="75" cy="130" rx="10" ry="5" fill="#3a3a55"/>
+  </g>
+</svg>

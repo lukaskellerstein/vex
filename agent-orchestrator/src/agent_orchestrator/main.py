@@ -3,6 +3,12 @@
 import logging
 from contextlib import asynccontextmanager
 
+# Configure application-level logging (uvicorn only configures its own loggers)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:     %(name)s - %(message)s",
+)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

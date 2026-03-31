@@ -322,10 +322,24 @@ def _build_prompt(
     screenshot_before: str | None = None,
     screenshot_after: str | None = None,
 ) -> str:
-    """Build prompt for a single action."""
+    """Build prompt for a single action.
+
+    Two modes:
+    - **Prompt-driven** (insert/replaceImage/generateSection with a generation prompt):
+      The user's creative prompt is the primary task. The selector/position is context
+      for WHERE to apply the result in the code.
+    - **Delta-driven** (styleChange, resize, editText, move, delete, etc.):
+      The structural DOM change is the primary task. Apply it precisely.
+    """
     action_type = action["type"]
     selector = action["selector"]
     instruction = action_data.get("instruction", "")
+    generation_prompt = action_data.get("prompt", "")
+
+    # Detect prompt-driven actions
+    is_prompt_driven = bool(generation_prompt) and action_type in (
+        "insert", "replaceImage", "generateSection",
+    )
 
     parts = [
         f"Project: {project['path']}",
@@ -333,24 +347,56 @@ def _build_prompt(
         f"Styling: {project['styling_approach'] or 'unknown'}",
     ]
 
-    # Include URL when available
     url = action_data.get("url")
     if url:
         parts.append(f"URL: {url}")
 
-    parts.extend([
-        "",
-        "## Task",
-        "Apply the following visual edit:",
-        "",
-        f"**Action**: [{action_type}] `{selector}`",
-    ])
+    parts.append("")
 
-    if instruction:
-        parts.append(f"**Instruction**: {instruction}")
+    if is_prompt_driven:
+        # ── Prompt-driven: user's creative intent is the task ──
+        parts.extend([
+            "## Task",
+            f"{generation_prompt}",
+            "",
+            "## Where to apply",
+            f"**Action**: [{action_type}] at `{selector}`",
+        ])
+        if action_type == "insert":
+            pos = action_data.get("position", "after")
+            ref = action_data.get("reference_selector", "")
+            content = action_data.get("content", {})
+            parts.append(f"**Position**: {pos}" + (f" relative to `{ref}`" if ref else ""))
+            if content:
+                tag = content.get("tag", "div")
+                parts.append(f"**Element to create**: `<{tag}>`")
+        elif action_type == "replaceImage":
+            if action_data.get("original_src"):
+                parts.append(f"**Replace image at**: `{action_data['original_src']}`")
+            if action_data.get("dimensions"):
+                d = action_data["dimensions"]
+                parts.append(f"**Dimensions**: {d.get('width', '?')}x{d.get('height', '?')}px")
+        elif action_type == "generateSection":
+            pos = action_data.get("position", "after")
+            ref = action_data.get("reference_selector", "")
+            parts.append(f"**Position**: {pos}" + (f" relative to `{ref}`" if ref else ""))
+            if action_data.get("style_hint"):
+                parts.append(f"**Style hint**: {action_data['style_hint']}")
 
-    # --- Action-specific details ---
-    _append_action_details(parts, action_type, action_data)
+        if instruction:
+            parts.append(f"**Additional instruction**: {instruction}")
+
+    else:
+        # ── Delta-driven: structural change is the task ──
+        parts.extend([
+            "## Task",
+            "Apply the following visual edit:",
+            "",
+            f"**Action**: [{action_type}] `{selector}`",
+        ])
+        if instruction:
+            parts.append(f"**Instruction**: {instruction}")
+        _append_action_details(parts, action_type, action_data)
 
     # --- Element context (select actions carry rich metadata) ---
     _append_element_context(parts, action_data)

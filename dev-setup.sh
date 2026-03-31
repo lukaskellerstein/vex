@@ -163,6 +163,12 @@ done
 ELECTRON_DIR="${ROOT_DIR}/electron-app"
 VITE_PORT=5199
 
+# Ensure Electron dependencies are installed
+if [[ ! -d "$ELECTRON_DIR/node_modules" ]]; then
+  echo "Installing Electron app dependencies..."
+  (cd "$ELECTRON_DIR" && npm install)
+fi
+
 # Compile TypeScript (main process needs this; renderer output is unused in dev mode)
 echo "Compiling Electron TypeScript..."
 (cd "$ELECTRON_DIR" && npx tsc 2>&1 | sed 's/^/[build] /')

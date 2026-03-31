@@ -252,6 +252,13 @@ body {
   gap: 8px;
   padding: 8px 6px;
   border-bottom: 1px solid #2d2d44;
+  border-radius: 6px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.selection-item:hover {
+  background: rgba(99, 102, 241, 0.1);
+  box-shadow: inset 2px 0 0 #6366f1;
 }
 
 .selection-badge {
@@ -533,7 +540,8 @@ body {
 }
 
 .popup-action-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(99, 102, 241, 0.1);
+  box-shadow: inset 2px 0 0 #6366f1;
 }
 
 .popup-action-num {
@@ -700,6 +708,70 @@ body {
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 100px;
+}
+
+/* Prompt inline edit */
+.popup-detail-prompt-clickable {
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s;
+}
+
+.popup-detail-prompt-clickable:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.popup-detail-prompt-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.popup-detail-prompt-textarea {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #6366f1;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  background: #1a1a2e;
+  color: #e5e7eb;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.popup-detail-prompt-btns {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.popup-detail-prompt-save,
+.popup-detail-prompt-cancel {
+  padding: 2px 8px;
+  border: 1px solid #3d3d5c;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  background: #252540;
+  color: #d1d5db;
+}
+
+.popup-detail-prompt-save {
+  background: #4f46e5;
+  color: #fff;
+  border-color: #6366f1;
+}
+
+.popup-detail-prompt-save:hover {
+  background: #4338ca;
+}
+
+.popup-detail-prompt-cancel:hover {
+  background: #2d2d4a;
 }
 
 /* Edit panel with CodeMirror */

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
+import { WindowControls } from "./WindowControls";
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(true);
@@ -15,6 +16,7 @@ export function AppShell() {
 
   return (
     <div style={{ position: "relative" }}>
+      <WindowControls />
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <main style={contentStyle}>
         <Outlet />

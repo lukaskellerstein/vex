@@ -15,12 +15,6 @@ import { StylePanel } from "./components/StylePanel";
 
 const HOST_ID = "__web-selector-root";
 
-const MODE_KEY_MAP: Record<string, InteractionMode> = {
-  "1": "select",
-  "2": "edit",
-  "3": "resize",
-  "4": "style",
-};
 
 interface PopupState {
   element: Element;
@@ -67,26 +61,6 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   const [highlightedActionIndex, setHighlightedActionIndex] = useState<number | null>(null);
 
-  // Keyboard shortcuts for mode switching
-  useEffect(() => {
-    if (stateRef.current === "inactive") return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (stateRef.current === "inactive") return;
-      if (stateRef.current === "selected") return; // don't switch while popup open
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-
-      const keyMode = MODE_KEY_MAP[e.key];
-      if (keyMode) {
-        e.preventDefault();
-        setMode((prev) => prev === keyMode ? "idle" : keyMode);
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [state, setMode]);
 
   // Send handler
   const handleSend = useCallback(() => {

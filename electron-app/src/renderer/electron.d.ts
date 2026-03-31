@@ -39,6 +39,13 @@ declare global {
       unsubscribeAgentSteps: (agentId: string) => Promise<{ ok: boolean }>;
       onAgentStep: (callback: (data: Record<string, unknown>) => void) => () => void;
       onAgentStatus: (callback: (data: Record<string, unknown>) => void) => () => void;
+      onAgentHook: (callback: (data: Record<string, unknown>) => void) => () => void;
+      // Window controls
+      windowMinimize: () => Promise<void>;
+      windowMaximize: () => Promise<void>;
+      windowClose: () => Promise<void>;
+      windowIsMaximized: () => Promise<boolean>;
+      onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
     };
   }
 }

@@ -18,6 +18,7 @@ import {
 import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
 import { AgentWorkingAnimation } from "../components/project-detail/AgentWorkingAnimation";
+import { hookEventToStep } from "../utils/hook-steps";
 
 /* ─── Types ──────────────────────────────────────── */
 
@@ -175,9 +176,17 @@ export function AgentTrace() {
       setAgentStatus(status);
     });
 
+    const removeHookListener = window.electronAPI.onAgentHook((data) => {
+      if (data.agentId !== aid) return;
+      const hookStep = hookEventToStep(data);
+      if (!hookStep) return;
+      setLiveSteps((prev) => [...prev, hookStep]);
+    });
+
     cleanupRef.current = () => {
       removeStepListener();
       removeStatusListener();
+      removeHookListener();
       window.electronAPI.unsubscribeAgentSteps(aid);
     };
   }, [fetchPersistedTrace]);

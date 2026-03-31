@@ -19,6 +19,7 @@ import {
   Scissors,
   PaintBucket,
 } from "lucide-react";
+import { OperatorRobot } from "../projects/OperatorRobot";
 
 interface BatchAction {
   id?: string;
@@ -195,12 +196,6 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
         transition: "border-color 0.15s",
       }}
     >
-      <style>{`
-        @keyframes agents-badge-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 hsla(263, 82%, 57.5%, 0.3); }
-          50% { box-shadow: 0 0 8px 2px hsla(263, 82%, 57.5%, 0.15); }
-        }
-      `}</style>
       {/* Header */}
       <div
         role="button"
@@ -302,52 +297,46 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
               display: "inline-flex",
               alignItems: "center",
               gap: "4px",
-              padding: "2px 8px",
+              padding: "2px 6px",
               borderRadius: "9999px",
-              fontSize: "11px",
-              fontWeight: 500,
-              fontFamily: "var(--font-mono)",
               flexShrink: 0,
               cursor: "pointer",
               transition: "all 0.2s",
-              background: hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.1)" : "var(--surface-elevated)",
-              color: hasRunningAgents ? "var(--primary)" : "var(--foreground-muted)",
-              border: `1px solid ${hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.3)" : "var(--border)"}`,
-              animation: hasRunningAgents ? "agents-badge-pulse 2s ease-in-out infinite" : "none",
+              background: hasRunningAgents ? "hsla(142, 69%, 45%, 0.06)" : "var(--surface-elevated)",
+              border: `1px solid ${hasRunningAgents ? "hsla(142, 69%, 45%, 0.2)" : "var(--border)"}`,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "hsla(263, 82%, 57.5%, 0.15)";
-              e.currentTarget.style.color = "var(--primary)";
-              e.currentTarget.style.borderColor = "hsla(263, 82%, 57.5%, 0.4)";
-              e.currentTarget.style.boxShadow = "0 0 8px hsla(263, 82%, 57.5%, 0.2)";
+              e.currentTarget.style.background = "hsla(142, 69%, 45%, 0.12)";
+              e.currentTarget.style.borderColor = "hsla(142, 69%, 45%, 0.3)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.1)" : "var(--surface-elevated)";
-              e.currentTarget.style.color = hasRunningAgents ? "var(--primary)" : "var(--foreground-muted)";
-              e.currentTarget.style.borderColor = hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.3)" : "var(--border)";
-              e.currentTarget.style.boxShadow = "none";
+              e.currentTarget.style.background = hasRunningAgents ? "hsla(142, 69%, 45%, 0.06)" : "var(--surface-elevated)";
+              e.currentTarget.style.borderColor = hasRunningAgents ? "hsla(142, 69%, 45%, 0.2)" : "var(--border)";
             }}
           >
-            <Bot size={10} className={hasRunningAgents ? "spin" : ""} />
-            {agentCount} {agentCount === 1 ? "Agent" : "Agents"}
+            {Array.from({ length: agentCount }).map((_, i) => (
+              <OperatorRobot key={i} size={14} idle={!hasRunningAgents} />
+            ))}
           </span>
         )}
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            flexShrink: 0,
-            fontSize: "11px",
-            color: "var(--foreground-dim)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          <span>{formatDuration(batch.duration_ms)}</span>
-          <span style={{ color: "var(--foreground-disabled)" }}>&middot;</span>
-          <span>{formatCost(batch.cost_usd)}</span>
-        </div>
+        {(batch.duration_ms != null || batch.cost_usd != null) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              flexShrink: 0,
+              fontSize: "11px",
+              color: "var(--foreground-dim)",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            <span>{formatDuration(batch.duration_ms)}</span>
+            <span style={{ color: "var(--foreground-disabled)" }}>&middot;</span>
+            <span>{formatCost(batch.cost_usd)}</span>
+          </div>
+        )}
 
         <span style={{ fontSize: "11px", color: "var(--foreground-disabled)", flexShrink: 0 }}>
           {formatTimestamp(batch.submitted_at || batch.created_at || "")}

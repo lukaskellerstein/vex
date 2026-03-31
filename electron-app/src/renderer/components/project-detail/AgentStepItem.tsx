@@ -243,30 +243,83 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
   const meta = step.metadata ?? {};
 
   switch (step.type) {
-    case "thinking":
+    case "thinking": {
+      const thinkGray = "hsl(0, 0%, 55%)";
       return (
-        <div style={rowBase}>
-          <Brain size={14} style={iconStyle("var(--foreground-dim)")} />
+        <div
+          style={{
+            ...rowBase,
+            padding: "14px 18px",
+            borderRadius: "var(--radius)",
+            border: "1px solid hsl(0, 0%, 20%)",
+            borderLeftWidth: "3px",
+            borderLeftStyle: "solid",
+            borderLeftColor: thinkGray,
+            background: "hsl(0, 0%, 12%)",
+          }}
+        >
+          <Brain size={18} style={{ ...iconStyle(thinkGray), marginTop: "1px" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
+            <span
+              style={{
+                display: "inline-block",
+                fontSize: "11px",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: thinkGray,
+                marginBottom: "6px",
+              }}
+            >
+              Thinking
+            </span>
             <CollapsibleText
               text={content}
-              style={{ color: "var(--foreground-dim)", fontStyle: "italic" }}
+              style={{ color: "hsl(0, 0%, 65%)", fontStyle: "italic", fontSize: "13px" }}
             />
           </div>
           <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
       );
+    }
 
-    case "text":
+    case "text": {
+      const msgBlue = "hsl(195, 85%, 55%)";
       return (
-        <div style={rowBase}>
-          <MessageSquare size={14} style={iconStyle("var(--foreground-muted)")} />
+        <div
+          style={{
+            ...rowBase,
+            padding: "16px 20px",
+            borderRadius: "var(--radius)",
+            border: `1px solid color-mix(in srgb, ${msgBlue} 25%, transparent)`,
+            borderLeftWidth: "4px",
+            borderLeftStyle: "solid",
+            borderLeftColor: msgBlue,
+            background: `color-mix(in srgb, ${msgBlue} 12%, transparent)`,
+            boxShadow: `0 2px 8px color-mix(in srgb, ${msgBlue} 10%, transparent)`,
+          }}
+        >
+          <MessageSquare size={20} style={{ ...iconStyle(msgBlue), marginTop: "1px" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <CollapsibleText text={content} style={{ color: "var(--foreground)" }} />
+            <span
+              style={{
+                display: "inline-block",
+                fontSize: "11px",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: msgBlue,
+                marginBottom: "6px",
+              }}
+            >
+              Message
+            </span>
+            <CollapsibleText text={content} style={{ color: "var(--foreground)", fontSize: "14px", lineHeight: "1.7" }} />
           </div>
           <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
       );
+    }
 
     case "tool_call":
     case "tool_use": {

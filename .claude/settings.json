@@ -1,7 +1,5 @@
 {
-  "companyAnnouncements": [
-    "Welcome to VEX"
-  ],
+  "companyAnnouncements": ["Welcome to VEX"],
   "permissions": {
     "allow": [
       "Agent",
@@ -32,7 +30,7 @@
       "Write",
       "WebSearch",
       "WebFetch",
-      "mcp__webselector-chrome"
+      "mcp__vex-chrome"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -197,7 +195,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__webselector-chrome__navigate_page",
+        "matcher": "mcp__vex-chrome__navigate_page",
         "hooks": [
           {
             "type": "command",
@@ -206,7 +204,7 @@
         ]
       },
       {
-        "matcher": "mcp__webselector-chrome__(navigate_page|evaluate_script|take_snapshot)",
+        "matcher": "mcp__vex-chrome__(navigate_page|evaluate_script|take_snapshot)",
         "hooks": [
           {
             "type": "command",
@@ -218,7 +216,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__webselector-chrome__(navigate_page|evaluate_script|take_snapshot)",
+        "matcher": "mcp__vex-chrome__(navigate_page|evaluate_script|take_snapshot)",
         "hooks": [
           {
             "type": "command",
@@ -244,6 +242,5 @@
     "dev-tools-plugin@claude-my-marketplace": true,
     "documentation-plugin@claude-my-marketplace": true,
     "plugin-dev@claude-plugins-official": true
-  },
-  "additionalDirectories": ["/home/lukas/Projects/Github/lukaskellerstein/claude-my-marketplace/plugins/web-selector-plugin"]
+  }
 }

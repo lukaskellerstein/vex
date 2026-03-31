@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, globalShortcut } from "electron";
 import path from "path";
+import fs from "fs";
 import http from "http";
 import net from "net";
 import WebSocket from "ws";
@@ -7,6 +8,16 @@ import { ProcessManager } from "./process-manager.js";
 import { DevServerManager } from "./dev-server-manager.js";
 import { cloneRepo } from "./github-cloner.js";
 import { installDependencies } from "./dependency-installer.js";
+
+// Disable GPU acceleration on WSL — its virtual GPU misrenders semi-transparent surfaces
+try {
+  const procVersion = fs.readFileSync("/proc/version", "utf-8");
+  if (/microsoft|wsl/i.test(procVersion)) {
+    app.disableHardwareAcceleration();
+  }
+} catch {
+  // Not Linux or /proc/version unreadable — no-op
+}
 
 // nats.ws expects a global WebSocket — provide it via the ws package in Node.js
 (globalThis as any).WebSocket = WebSocket;
@@ -67,12 +78,14 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    frame: false,
     backgroundColor: "#1a1a2e",
     icon: path.join(__dirname, "..", "..", "resources", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
     },
   });
 
@@ -84,10 +97,49 @@ function createWindow(): void {
     );
   }
 
+  // Notify renderer when maximized/fullscreen state changes
+  mainWindow.on("maximize", () => {
+    mainWindow?.webContents.send("window-maximized-changed", true);
+  });
+  mainWindow.on("unmaximize", () => {
+    if (!mainWindow?.isFullScreen()) {
+      mainWindow?.webContents.send("window-maximized-changed", false);
+    }
+  });
+  mainWindow.on("enter-full-screen", () => {
+    mainWindow?.webContents.send("window-maximized-changed", true);
+  });
+  mainWindow.on("leave-full-screen", () => {
+    mainWindow?.webContents.send("window-maximized-changed", false);
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  // F12 opens DevTools
+  mainWindow.webContents.on("before-input-event", (_event, input) => {
+    if (input.key === "F12") {
+      mainWindow?.webContents.toggleDevTools();
+    }
+  });
 }
+
+// --- Window control IPC handlers ---
+ipcMain.handle("window-minimize", () => mainWindow?.minimize());
+ipcMain.handle("window-maximize", () => {
+  if (!mainWindow) return;
+  // On Linux/WSL, maximize leaves WM borders. Use fullscreen instead.
+  if (mainWindow.isFullScreen()) {
+    mainWindow.setFullScreen(false);
+  } else {
+    mainWindow.setFullScreen(true);
+  }
+});
+ipcMain.handle("window-close", () => mainWindow?.close());
+ipcMain.handle("window-is-maximized", () =>
+  (mainWindow?.isFullScreen() || mainWindow?.isMaximized()) ?? false
+);
 
 // --- API helpers ---
 
@@ -400,9 +452,10 @@ ipcMain.handle("subscribe-agent-steps", async (_event, agentId: string) => {
 
   const stepSubject = `vex.agent.${agentId}.step`;
   const statusSubject = `vex.agent.${agentId}.status`;
+  const hooksSubject = `vex.agent.${agentId}.hooks`;
 
   // Unsubscribe existing if any
-  for (const subject of [stepSubject, statusSubject]) {
+  for (const subject of [stepSubject, statusSubject, hooksSubject]) {
     const existing = natsSubscriptions.get(subject);
     if (existing) {
       existing.unsubscribe();
@@ -434,12 +487,24 @@ ipcMain.handle("subscribe-agent-steps", async (_event, agentId: string) => {
     }
   })();
 
-  console.log(`[nats-bridge] Subscribed to ${stepSubject} and ${statusSubject}`);
+  // Subscribe to hook messages (SubagentStart/Stop, Skill/Agent tool use)
+  const hooksSub = nc.subscribe(hooksSubject);
+  natsSubscriptions.set(hooksSubject, hooksSub);
+  (async () => {
+    for await (const msg of hooksSub) {
+      try {
+        const data = natsJsonDecode(msg.data);
+        mainWindow?.webContents.send("agent-hook", { agentId, ...data as object });
+      } catch { /* decode error */ }
+    }
+  })();
+
+  console.log(`[nats-bridge] Subscribed to ${stepSubject}, ${statusSubject}, and ${hooksSubject}`);
   return { ok: true };
 });
 
 ipcMain.handle("unsubscribe-agent-steps", async (_event, agentId: string) => {
-  for (const suffix of ["step", "status"]) {
+  for (const suffix of ["step", "status", "hooks"]) {
     const subject = `vex.agent.${agentId}.${suffix}`;
     const sub = natsSubscriptions.get(subject);
     if (sub) {
