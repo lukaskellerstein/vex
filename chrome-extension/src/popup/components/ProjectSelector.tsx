@@ -4,7 +4,7 @@ import { AGENT_MANAGER_URL } from "../../shared/messages";
 export interface Project {
   id: string;
   name: string;
-  devServerUrl?: string;
+  dev_server_url?: string;
 }
 
 interface ProjectSelectorProps {

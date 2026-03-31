@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Play, Square, Loader2, Layers, FileText } from "lucide-react";
+import { ArrowLeft, Play, Square, Loader2, Layers, FileText, Bot, Check, AlertCircle } from "lucide-react";
 import { FrameworkBadge } from "../components/projects/FrameworkBadge";
 import { StatusIndicator } from "../components/projects/StatusIndicator";
 import { ProjectInfoPanel } from "../components/project-detail/ProjectInfoPanel";
@@ -22,7 +22,29 @@ interface ProjectData {
   started_at?: string | null;
 }
 
-type TabId = "batches" | "logs";
+interface AgentData {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  project_id: string;
+  tasks_completed: number;
+  tasks_failed: number;
+  total_cost_usd: number;
+  created_at: string;
+}
+
+interface AgentsSummary {
+  total: number;
+  running: number;
+  completed: number;
+  failed: number;
+}
+
+type TabId = "batches" | "agents" | "logs";
+
+/** Track which projects already had their browser opened (survives component remounts). */
+const browserOpenedForProject = new Set<string>();
 
 export function ProjectDetail() {
   const { id: projectId = "" } = useParams<{ id: string }>();
@@ -33,7 +55,11 @@ export function ProjectDetail() {
   const [batchCount, setBatchCount] = useState(0);
   const [actionCount, setActionCount] = useState(0);
   const [lastBatchTime, setLastBatchTime] = useState<string | null>(null);
-  const browserOpenedRef = useRef(false);
+
+
+  // Agent state
+  const [agents, setAgents] = useState<AgentData[]>([]);
+  const [agentSummary, setAgentSummary] = useState<AgentsSummary>({ total: 0, running: 0, completed: 0, failed: 0 });
 
   async function fetchProject() {
     try {
@@ -73,9 +99,22 @@ export function ProjectDetail() {
     }
   }
 
+  async function fetchAgents() {
+    try {
+      const result = await window.electronAPI.getProjectAgents(projectId);
+      if (result && Array.isArray(result.agents)) {
+        setAgents(result.agents);
+        setAgentSummary(result.summary ?? { total: 0, running: 0, completed: 0, failed: 0 });
+      }
+    } catch {
+      // Silently handle
+    }
+  }
+
   useEffect(() => {
     fetchProject();
     fetchBatchStats();
+    fetchAgents();
   }, [projectId]);
 
   // Poll project status while starting/running
@@ -90,13 +129,20 @@ export function ProjectDetail() {
     return () => clearInterval(interval);
   }, [project?.status, projectId]);
 
-  // Open browser once when URL becomes available
+  // Poll agents every 3s when on agents tab
   useEffect(() => {
-    if (project?.status === "running" && project.dev_server_url && !browserOpenedRef.current) {
-      browserOpenedRef.current = true;
+    if (activeTab !== "agents") return;
+    const interval = setInterval(fetchAgents, 3000);
+    return () => clearInterval(interval);
+  }, [activeTab, projectId]);
+
+  // Open browser once when URL becomes available (per project, survives remounts)
+  useEffect(() => {
+    if (project?.status === "running" && project.dev_server_url && !browserOpenedForProject.has(projectId)) {
+      browserOpenedForProject.add(projectId);
       window.electronAPI.openExternal(project.dev_server_url);
     }
-  }, [project?.status, project?.dev_server_url]);
+  }, [project?.status, project?.dev_server_url, projectId]);
 
   async function handleServerToggle() {
     if (!project) return;
@@ -104,9 +150,9 @@ export function ProjectDetail() {
 
     if (status === "running" || status === "starting") {
       await window.electronAPI.stopDevServer(projectId);
-      browserOpenedRef.current = false;
+      browserOpenedForProject.delete(projectId);
     } else {
-      browserOpenedRef.current = false;
+      browserOpenedForProject.delete(projectId);
       const result = await window.electronAPI.startDevServer(projectId);
       if (result?.status === "error") {
         console.error("Failed to start dev server:", result.detail);
@@ -117,6 +163,14 @@ export function ProjectDetail() {
 
   function handleViewTrace(traceId: string) {
     navigate(`/project/${projectId}/trace/${traceId}`);
+  }
+
+  async function handleDeleteBatch(batchId: string) {
+    try {
+      await window.electronAPI.deleteBatch(projectId!, batchId);
+    } catch {
+      // Silently handle — batch list will refresh on next poll
+    }
   }
 
   if (!projectId) {
@@ -146,6 +200,7 @@ export function ProjectDetail() {
   const status = project.status ?? "stopped";
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: "batches", label: "Batches", icon: <Layers size={14} /> },
+    { id: "agents", label: `Agents${agentSummary.total > 0 ? ` (${agentSummary.total})` : ""}`, icon: <Bot size={14} /> },
     { id: "logs", label: "Dev Server Logs", icon: <FileText size={14} /> },
   ];
 
@@ -272,7 +327,14 @@ export function ProjectDetail() {
           {/* Tab Content */}
           <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
             {activeTab === "batches" && (
-              <BatchList projectId={projectId} onViewTrace={handleViewTrace} />
+              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onViewBatchAgents={(batchId) => navigate(`/project/${projectId}/batch/${batchId}/agents`)} onDeleteBatch={handleDeleteBatch} />
+            )}
+            {activeTab === "agents" && (
+              <AgentsPanel
+                agents={agents}
+                summary={agentSummary}
+                onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)}
+              />
             )}
             {activeTab === "logs" && (
               <DevServerLogs
@@ -355,5 +417,127 @@ function ServerHeaderButton({ status, onToggle }: { status: string; onToggle: ()
       <Square size={14} />
       Stop Server
     </button>
+  );
+}
+
+function AgentsPanel({
+  agents,
+  summary,
+  onViewAgent,
+}: {
+  agents: AgentData[];
+  summary: AgentsSummary;
+  onViewAgent: (agentId: string) => void;
+}) {
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
+      {/* Summary header */}
+      {summary.total > 0 && (
+        <div style={{ fontSize: "12px", color: "var(--foreground-dim)", marginBottom: "12px" }}>
+          {summary.running > 0 && <span style={{ color: "var(--primary)" }}>{summary.running} running</span>}
+          {summary.running > 0 && (summary.completed > 0 || summary.failed > 0) && ", "}
+          {summary.completed > 0 && <span style={{ color: "var(--status-success)" }}>{summary.completed} completed</span>}
+          {summary.completed > 0 && summary.failed > 0 && ", "}
+          {summary.failed > 0 && <span style={{ color: "var(--status-error)" }}>{summary.failed} failed</span>}
+        </div>
+      )}
+
+      {agents.length === 0 && (
+        <p style={{ color: "var(--foreground-dim)", fontSize: "13px" }}>
+          No agents yet. Submit a batch from the Chrome Extension to trigger agent processing.
+        </p>
+      )}
+
+      {agents.map((agent) => (
+        <button
+          key={agent.id}
+          onClick={() => onViewAgent(agent.id)}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            width: "100%", padding: "10px 12px", marginBottom: "4px",
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: "var(--radius)", cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.background = "var(--surface-elevated)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface)"; }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Bot size={14} style={{ color: "var(--foreground-dim)" }} />
+            <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
+              {agent.name}
+            </span>
+            <AgentStatusBadge status={agent.status} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <AgentModelBadge type={agent.type} />
+            <span style={{ fontSize: "11px", color: "var(--foreground-dim)" }}>
+              {new Date(agent.created_at).toLocaleTimeString()}
+            </span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentStatusBadge({ status }: { status: string }) {
+  let color = "var(--foreground-dim)";
+  let bg = "transparent";
+  let icon: React.ReactNode = null;
+
+  if (status === "running" || status === "starting") {
+    color = "var(--primary)";
+    bg = "hsla(217, 92%, 56%, 0.1)";
+    icon = <Loader2 size={10} className="spin" />;
+  } else if (status === "completed" || status === "stopped") {
+    color = "var(--status-success)";
+    bg = "hsla(142, 69%, 45%, 0.1)";
+    icon = <Check size={10} />;
+  } else if (status === "failed" || status === "error") {
+    color = "var(--status-error)";
+    bg = "hsla(0, 84%, 60%, 0.1)";
+    icon = <AlertCircle size={10} />;
+  }
+
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: "4px",
+      fontSize: "11px", fontWeight: 500, color, background: bg,
+      padding: "2px 6px", borderRadius: "4px",
+    }}>
+      {icon}
+      {status}
+    </span>
+  );
+}
+
+function AgentModelBadge({ type }: { type: string }) {
+  const modelMap: Record<string, string> = {
+    "claude-code-sdk": "Sonnet 4.5",
+    "cli-wrapper": "CLI",
+    "external": "External",
+  };
+  const label = modelMap[type] || type;
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        padding: "2px 8px",
+        borderRadius: "9999px",
+        fontSize: "11px",
+        fontWeight: 500,
+        background: "hsla(263, 82%, 57.5%, 0.08)",
+        color: "var(--primary)",
+        border: "1px solid hsla(263, 82%, 57.5%, 0.2)",
+        flexShrink: 0,
+      }}
+    >
+      <Bot size={10} />
+      {label}
+    </span>
   );
 }

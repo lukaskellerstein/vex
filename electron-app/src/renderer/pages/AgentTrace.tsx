@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -10,9 +10,14 @@ import {
   XCircle,
   Loader2,
   Bot,
+  MessageSquare,
+  ChevronDown,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
+import { AgentWorkingAnimation } from "../components/project-detail/AgentWorkingAnimation";
 
 /* ─── Types ──────────────────────────────────────── */
 
@@ -26,6 +31,7 @@ interface TraceData {
   total_duration_ms: number | null;
   total_cost_usd: number | null;
   total_tokens: number | null;
+  prompt: string | null;
   steps: AgentStep[];
   created_at: string;
   completed_at: string | null;
@@ -80,38 +86,154 @@ const STATUS_CONFIG: Record<
   },
 };
 
+/** Convert a live step from NATS/steps API into the AgentStep shape used by the UI. */
+function liveStepToAgentStep(step: Record<string, unknown>, index: number): AgentStep {
+  return {
+    id: `live-${index}`,
+    sequence_index: index,
+    type: (step.type as AgentStep["type"]) ?? "text",
+    content: (step.content as string) ?? null,
+    metadata: step.tool_name ? { tool_name: step.tool_name } : null,
+    duration_ms: (step.duration_ms as number) ?? null,
+    token_count: (step.token_count as number) ?? null,
+    created_at: (step.timestamp as string) ?? new Date().toISOString(),
+  };
+}
+
 /* ─── Component ──────────────────────────────────── */
 
 export function AgentTrace() {
-  const { id: projectId, traceId } = useParams<{ id: string; traceId: string }>();
+  const { id: projectId, traceId, agentId } = useParams<{ id: string; traceId: string; agentId: string }>();
   const navigate = useNavigate();
   const [trace, setTrace] = useState<TraceData | null>(null);
+  const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
+  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
+  // Fetch the final persisted trace (for completed/failed agents or by traceId)
+  const fetchPersistedTrace = useCallback(async () => {
+    try {
+      let data;
+      if (traceId) {
+        data = await window.electronAPI.getAgentTrace(traceId);
+      } else if (agentId) {
+        data = await window.electronAPI.getAgentTraceByAgent(agentId);
+      }
+      if (!data || data.detail) return null;
+      return data as TraceData;
+    } catch {
+      return null;
+    }
+  }, [traceId, agentId]);
+
+  // Subscribe to NATS for live steps
+  const subscribeToAgent = useCallback(async (aid: string) => {
+    // First, try to load any steps already accumulated
+    try {
+      const stepsData = await window.electronAPI.getAgentSteps(aid);
+      if (stepsData?.steps?.length > 0) {
+        setLiveSteps(stepsData.steps.map((s: Record<string, unknown>, i: number) => liveStepToAgentStep(s, i)));
+      }
+      if (stepsData?.status && stepsData.status !== "running") {
+        // Agent already finished — fetch persisted trace
+        const persisted = await fetchPersistedTrace();
+        if (persisted) {
+          setTrace(persisted);
+          setAgentStatus(persisted.status);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch { /* steps endpoint might 404 if agent hasn't started */ }
+
+    setAgentStatus("running");
+    setLoading(false);
+
+    // Subscribe via NATS
+    await window.electronAPI.subscribeAgentSteps(aid);
+
+    const removeStepListener = window.electronAPI.onAgentStep((data) => {
+      if (data.agentId !== aid) return;
+      const idx = typeof data.index === "number" ? data.index : -1;
+      const step = liveStepToAgentStep(data, idx >= 0 ? idx : Date.now());
+      setLiveSteps((prev) => {
+        // Deduplicate by index
+        if (idx >= 0) {
+          const existing = prev.findIndex((s) => s.sequence_index === idx);
+          if (existing >= 0) return prev;
+        }
+        return [...prev, step];
+      });
+    });
+
+    const removeStatusListener = window.electronAPI.onAgentStatus((data) => {
+      if (data.agentId !== aid) return;
+      const status = data.status as "completed" | "failed";
+      setAgentStatus(status);
+    });
+
+    cleanupRef.current = () => {
+      removeStepListener();
+      removeStatusListener();
+      window.electronAPI.unsubscribeAgentSteps(aid);
+    };
+  }, [fetchPersistedTrace]);
+
+  // When status changes to completed/failed, fetch the full persisted trace
   useEffect(() => {
-    if (!traceId) return;
+    if (!agentStatus || agentStatus === "running" || trace) return;
     let cancelled = false;
 
-    async function fetchTrace() {
-      try {
-        const data = await (window as any).electronAPI.getAgentTrace(traceId);
-        if (cancelled) return;
-        if (!data || data.detail) {
-          setError(data?.detail ?? "Trace not found");
-        } else {
-          setTrace(data);
-        }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message ?? "Failed to load trace");
-      } finally {
-        if (!cancelled) setLoading(false);
+    // Small delay to let the backend persist the trace
+    const timer = setTimeout(async () => {
+      const persisted = await fetchPersistedTrace();
+      if (cancelled) return;
+      if (persisted) {
+        setTrace(persisted);
+      }
+    }, 1500);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [agentStatus, trace, fetchPersistedTrace]);
+
+  // Main mount effect
+  useEffect(() => {
+    if (!traceId && !agentId) return;
+    let cancelled = false;
+
+    async function init() {
+      // Try fetching persisted trace first
+      const persisted = await fetchPersistedTrace();
+      if (cancelled) return;
+
+      if (persisted) {
+        setTrace(persisted);
+        setLoading(false);
+        return;
+      }
+
+      // No persisted trace — agent is likely still running. Subscribe to NATS.
+      if (agentId) {
+        await subscribeToAgent(agentId);
+      } else {
+        setError("Trace not found");
+        setLoading(false);
       }
     }
 
-    fetchTrace();
-    return () => { cancelled = true; };
-  }, [traceId]);
+    init();
+
+    return () => {
+      cancelled = true;
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [traceId, agentId, fetchPersistedTrace, subscribeToAgent]);
 
   // Loading state
   if (loading) {
@@ -136,8 +258,8 @@ export function AgentTrace() {
     );
   }
 
-  // Error / 404 state
-  if (error || !trace) {
+  // Error state (only if no live data either)
+  if (error && !agentStatus) {
     return (
       <div
         style={{
@@ -177,8 +299,15 @@ export function AgentTrace() {
     );
   }
 
-  const statusCfg = STATUS_CONFIG[trace.status] ?? STATUS_CONFIG.completed;
+  // Determine what to display
+  const displayStatus = trace?.status ?? agentStatus ?? "running";
+  const displaySteps = trace?.steps ?? liveSteps;
+  const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId.slice(0, 8)}` : "Agent");
+  const agentModel = trace?.agent_model ?? "claude-sonnet-4-5";
+
+  const statusCfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.running;
   const StatusIcon = statusCfg.icon;
+  const isRunning = displayStatus === "running";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -201,7 +330,6 @@ export function AgentTrace() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* Back button */}
             <button
               onClick={() => navigate(-1)}
               style={{
@@ -229,7 +357,6 @@ export function AgentTrace() {
               <ArrowLeft size={16} />
             </button>
 
-            {/* Agent info */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Bot size={16} style={{ color: "var(--primary)" }} />
               <span
@@ -239,7 +366,7 @@ export function AgentTrace() {
                   color: "var(--foreground)",
                 }}
               >
-                {trace.agent_name}
+                {agentName}
               </span>
               <span
                 style={{
@@ -255,7 +382,7 @@ export function AgentTrace() {
                   border: "1px solid var(--border)",
                 }}
               >
-                {trace.agent_model}
+                {agentModel}
               </span>
             </div>
           </div>
@@ -279,7 +406,7 @@ export function AgentTrace() {
               size={11}
               style={{
                 color: statusCfg.iconColor,
-                ...(trace.status === "running" ? { animation: "spin 1s linear infinite" } : {}),
+                ...(isRunning ? { animation: "spin 1s linear infinite" } : {}),
               }}
             />
             {statusCfg.label}
@@ -297,18 +424,70 @@ export function AgentTrace() {
             fontFamily: "var(--font-mono)",
           }}
         >
-          <MetricItem icon={<Clock size={12} />} label="duration" value={formatDuration(trace.total_duration_ms)} />
+          <MetricItem icon={<Clock size={12} />} label="duration" value={formatDuration(trace?.total_duration_ms ?? null)} />
           <Separator />
-          <MetricItem icon={<DollarSign size={12} />} label="cost" value={formatCost(trace.total_cost_usd)} />
+          <MetricItem icon={<DollarSign size={12} />} label="cost" value={formatCost(trace?.total_cost_usd ?? null)} />
           <Separator />
-          <MetricItem icon={<Hash size={12} />} label="tokens" value={formatTokens(trace.total_tokens)} />
+          <MetricItem icon={<Hash size={12} />} label="tokens" value={formatTokens(trace?.total_tokens ?? null)} />
           <Separator />
-          <MetricItem icon={<Layers size={12} />} label="steps" value={String(trace.steps.length)} />
+          <MetricItem icon={<Layers size={12} />} label="steps" value={String(displaySteps.length)} />
         </div>
       </header>
 
+      {/* ─── Prompt (collapsible) ────────────────── */}
+      {trace?.prompt && (
+        <div
+          style={{
+            flexShrink: 0,
+            borderBottom: "1px solid var(--border)",
+            background: "color-mix(in srgb, var(--primary) 4%, var(--background))",
+          }}
+        >
+          <button
+            onClick={() => setPromptExpanded((v) => !v)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              width: "100%",
+              padding: "10px 20px",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "var(--foreground-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            <MessageSquare size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />
+            <span>Prompt</span>
+            {promptExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </button>
+          {promptExpanded && (
+            <div
+              style={{
+                padding: "0 20px 14px 41px",
+                fontSize: "13px",
+                lineHeight: "1.5",
+                color: "var(--foreground-muted)",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              <PromptContent text={trace.prompt} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── Body ────────────────────────────────── */}
-      <AgentStepList steps={trace.steps} status={trace.status} />
+      {isRunning && displaySteps.length === 0 ? (
+        <AgentWorkingAnimation />
+      ) : (
+        <AgentStepList steps={displaySteps} status={displayStatus} />
+      )}
 
       {/* Spin keyframes (shared) */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -339,5 +518,100 @@ function MetricItem({
 function Separator() {
   return (
     <span style={{ color: "var(--foreground-dim)", userSelect: "none" }}>|</span>
+  );
+}
+
+/* ─── Screenshot path detection & inline preview ── */
+
+const SCREENSHOT_BASE = "http://localhost:8420/api/storage/screenshot?path=";
+const SCREENSHOT_PATH_RE = /`([^`]+\.(?:png|jpg|jpeg))`/i;
+
+function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "rgba(0,0,0,0.85)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "zoom-out",
+      }}
+    >
+      <button
+        onClick={onClose}
+        style={{
+          position: "absolute",
+          top: "16px",
+          right: "16px",
+          background: "rgba(255,255,255,0.1)",
+          border: "none",
+          borderRadius: "50%",
+          width: "36px",
+          height: "36px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          color: "#fff",
+        }}
+      >
+        <X size={18} />
+      </button>
+      <img
+        src={src}
+        alt="Screenshot full size"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "90vw",
+          maxHeight: "90vh",
+          borderRadius: "8px",
+          cursor: "default",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+        }}
+      />
+    </div>
+  );
+}
+
+function PromptContent({ text }: { text: string }) {
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const lines = text.split("\n");
+
+  return (
+    <>
+      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+      {lines.map((line, i) => {
+        const match = SCREENSHOT_PATH_RE.exec(line);
+        if (!match) return <div key={i}>{line || "\u00A0"}</div>;
+
+        const filePath = match[1];
+        const imgUrl = `${SCREENSHOT_BASE}${encodeURIComponent(filePath)}`;
+
+        return (
+          <div key={i}>
+            <div>{line}</div>
+            <img
+              src={imgUrl}
+              alt={filePath}
+              onClick={() => setLightboxSrc(imgUrl)}
+              style={{
+                maxWidth: "400px",
+                maxHeight: "300px",
+                marginTop: "6px",
+                marginBottom: "8px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                cursor: "zoom-in",
+                display: "block",
+              }}
+            />
+          </div>
+        );
+      })}
+    </>
   );
 }

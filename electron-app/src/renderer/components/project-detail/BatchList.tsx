@@ -11,13 +11,14 @@ interface BatchData {
     type: string;
     selector?: string;
     description?: string;
-    before_value?: string;
-    after_value?: string;
+    before?: string;
+    after?: string;
   }>;
   action_count?: number;
   duration_ms?: number | null;
   cost_usd?: number | null;
-  created_at: string;
+  created_at?: string;
+  submitted_at?: string;
   error_message?: string | null;
   agent_trace_id?: string | null;
 }
@@ -25,6 +26,9 @@ interface BatchData {
 interface BatchListProps {
   projectId: string;
   onViewTrace?: (traceId: string) => void;
+  onViewAgent?: (agentId: string) => void;
+  onViewBatchAgents?: (batchId: string) => void;
+  onDeleteBatch?: (batchId: string) => void;
 }
 
 const STATUS_FILTERS = [
@@ -35,7 +39,7 @@ const STATUS_FILTERS = [
   { value: "queued", label: "Queued" },
 ] as const;
 
-export function BatchList({ projectId, onViewTrace }: BatchListProps) {
+export function BatchList({ projectId, onViewTrace, onViewAgent, onViewBatchAgents, onDeleteBatch }: BatchListProps) {
   const [batches, setBatches] = useState<BatchData[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -195,7 +199,7 @@ export function BatchList({ projectId, onViewTrace }: BatchListProps) {
           </div>
         ) : (
           filtered.map((batch) => (
-            <BatchCard key={batch.id} batch={batch} onViewTrace={onViewTrace} />
+            <BatchCard key={batch.id} batch={batch} projectId={projectId} onViewTrace={onViewTrace} onViewAgent={onViewAgent} onViewBatchAgents={onViewBatchAgents} onDelete={onDeleteBatch} />
           ))
         )}
       </div>

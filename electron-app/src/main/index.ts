@@ -2,10 +2,18 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from "electron";
 import path from "path";
 import http from "http";
 import net from "net";
+import WebSocket from "ws";
 import { ProcessManager } from "./process-manager.js";
 import { DevServerManager } from "./dev-server-manager.js";
 import { cloneRepo } from "./github-cloner.js";
 import { installDependencies } from "./dependency-installer.js";
+
+// nats.ws expects a global WebSocket — provide it via the ws package in Node.js
+(globalThis as any).WebSocket = WebSocket;
+
+// Dynamic import after WebSocket polyfill is in place
+let natsWs: typeof import("nats.ws") | null = null;
+const natsWsReady = import("nats.ws").then((mod) => { natsWs = mod; });
 
 Menu.setApplicationMenu(null);
 
@@ -256,8 +264,24 @@ ipcMain.handle("get-agents", async () => {
   return apiGet("/api/agents");
 });
 
+ipcMain.handle("get-project-agents", async (_event, projectId: string) => {
+  return apiGet(`/api/projects/${projectId}/agents`);
+});
+
+ipcMain.handle("get-batch-tasks", async (_event, projectId: string, batchId: string) => {
+  return apiGet(`/api/projects/${projectId}/batches/${batchId}/tasks`);
+});
+
+ipcMain.handle("get-agent-steps", async (_event, agentId: string) => {
+  return apiGet(`/api/agents/${agentId}/steps`);
+});
+
 ipcMain.handle("get-agent-logs", async (_event, agentId: string) => {
   return apiGet(`/api/agents/${agentId}/logs`);
+});
+
+ipcMain.handle("get-agent-trace-by-agent", async (_event, agentId: string) => {
+  return apiGet(`/api/agents/${agentId}/trace`);
 });
 
 ipcMain.handle("get-nats-status", async () => {
@@ -276,8 +300,9 @@ ipcMain.handle("update-config", async (_event, config: Record<string, unknown>) 
   return apiPatch("/api/config", config);
 });
 
-ipcMain.handle("delete-project", async (_event, projectId: string) => {
-  return apiDelete(`/api/projects/${projectId}`);
+ipcMain.handle("delete-project", async (_event, projectId: string, deleteSource: boolean = false) => {
+  const qs = deleteSource ? "?delete_source=true" : "";
+  return apiDelete(`/api/projects/${projectId}${qs}`);
 });
 
 ipcMain.handle("get-project", async (_event, projectId: string) => {
@@ -290,6 +315,10 @@ ipcMain.handle("get-batches", async (_event, projectId: string) => {
 
 ipcMain.handle("get-batch", async (_event, projectId: string, batchId: string) => {
   return apiGet(`/api/projects/${projectId}/batches/${batchId}`);
+});
+
+ipcMain.handle("delete-batch", async (_event, projectId: string, batchId: string) => {
+  return apiDelete(`/api/projects/${projectId}/batches/${batchId}`);
 });
 
 ipcMain.handle("get-agent-trace", async (_event, batchId: string) => {
@@ -330,6 +359,96 @@ ipcMain.handle("get-app-info", async () => {
     node: process.versions.node,
     platform: process.platform,
   };
+});
+
+// --- NATS WebSocket subscription bridge ---
+
+const NATS_WS_PORT = 4223;
+let natsConnection: any = null;
+const natsSubscriptions = new Map<string, any>();
+
+async function ensureNatsConnection(): Promise<any> {
+  if (natsConnection && !natsConnection.isClosed()) return natsConnection;
+  await natsWsReady;
+  if (!natsWs) return null;
+  try {
+    natsConnection = await natsWs.connect({
+      servers: `ws://localhost:${NATS_WS_PORT}`,
+      name: "vex-electron-main",
+    });
+    console.log("[nats-bridge] Connected to NATS WS");
+    natsConnection.closed().then((err: Error | undefined) => {
+      if (err) console.warn("[nats-bridge] NATS closed with error:", err.message);
+      else console.log("[nats-bridge] NATS connection closed");
+      natsConnection = null;
+    });
+    return natsConnection;
+  } catch (err: unknown) {
+    console.warn("[nats-bridge] Failed to connect to NATS WS:", err);
+    return null;
+  }
+}
+
+function natsJsonDecode(data: Uint8Array): unknown {
+  if (!natsWs) return null;
+  return natsWs.JSONCodec().decode(data);
+}
+
+ipcMain.handle("subscribe-agent-steps", async (_event, agentId: string) => {
+  const nc = await ensureNatsConnection();
+  if (!nc) return { ok: false, error: "NATS not connected" };
+
+  const stepSubject = `vex.agent.${agentId}.step`;
+  const statusSubject = `vex.agent.${agentId}.status`;
+
+  // Unsubscribe existing if any
+  for (const subject of [stepSubject, statusSubject]) {
+    const existing = natsSubscriptions.get(subject);
+    if (existing) {
+      existing.unsubscribe();
+      natsSubscriptions.delete(subject);
+    }
+  }
+
+  // Subscribe to step messages
+  const stepSub = nc.subscribe(stepSubject);
+  natsSubscriptions.set(stepSubject, stepSub);
+  (async () => {
+    for await (const msg of stepSub) {
+      try {
+        const data = natsJsonDecode(msg.data);
+        mainWindow?.webContents.send("agent-step", { agentId, ...data as object });
+      } catch { /* decode error */ }
+    }
+  })();
+
+  // Subscribe to status messages
+  const statusSub = nc.subscribe(statusSubject);
+  natsSubscriptions.set(statusSubject, statusSub);
+  (async () => {
+    for await (const msg of statusSub) {
+      try {
+        const data = natsJsonDecode(msg.data);
+        mainWindow?.webContents.send("agent-status", { agentId, ...data as object });
+      } catch { /* decode error */ }
+    }
+  })();
+
+  console.log(`[nats-bridge] Subscribed to ${stepSubject} and ${statusSubject}`);
+  return { ok: true };
+});
+
+ipcMain.handle("unsubscribe-agent-steps", async (_event, agentId: string) => {
+  for (const suffix of ["step", "status"]) {
+    const subject = `vex.agent.${agentId}.${suffix}`;
+    const sub = natsSubscriptions.get(subject);
+    if (sub) {
+      sub.unsubscribe();
+      natsSubscriptions.delete(subject);
+    }
+  }
+  console.log(`[nats-bridge] Unsubscribed from agent ${agentId}`);
+  return { ok: true };
 });
 
 // --- Standalone health-check helpers ---
@@ -404,6 +523,15 @@ app.on("activate", () => {
 
 app.on("before-quit", async (event) => {
   event.preventDefault();
+  // Clean up NATS subscriptions and connection
+  for (const sub of natsSubscriptions.values()) {
+    try { sub.unsubscribe(); } catch { /* already closed */ }
+  }
+  natsSubscriptions.clear();
+  if (natsConnection && !natsConnection.isClosed()) {
+    try { await natsConnection.drain(); } catch { /* ignore */ }
+    natsConnection = null;
+  }
   try {
     await devServerManager.stopAll();
   } catch (err) {

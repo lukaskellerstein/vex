@@ -1,4 +1,5 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback } from "react";
+import gsap from "gsap";
 import { AgentStepItem } from "./AgentStepItem";
 import type { AgentStep } from "./AgentStepItem";
 
@@ -9,9 +10,51 @@ interface AgentStepListProps {
 
 export function AgentStepList({ steps, status }: AgentStepListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(0);
   const isRunning = status === "running";
 
-  // Auto-scroll to bottom when new steps arrive while running
+  // Animate new steps in via GSAP
+  const animateNewSteps = useCallback((startIndex: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const stepEls = el.querySelectorAll<HTMLElement>("[data-step-index]");
+    const targets: HTMLElement[] = [];
+    stepEls.forEach((node) => {
+      const idx = parseInt(node.dataset.stepIndex ?? "-1", 10);
+      if (idx >= startIndex) targets.push(node);
+    });
+    if (targets.length === 0) return;
+
+    gsap.fromTo(
+      targets,
+      { opacity: 0, x: -20, scale: 0.97 },
+      {
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        duration: 0.4,
+        ease: "power2.out",
+        stagger: 0.06,
+        onComplete: () => {
+          // Auto-scroll to bottom after animation
+          if (isRunning && el) {
+            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          }
+        },
+      },
+    );
+  }, [isRunning]);
+
+  useEffect(() => {
+    const prevCount = prevCountRef.current;
+    if (steps.length > prevCount && prevCount > 0) {
+      // New steps arrived — animate them
+      animateNewSteps(prevCount);
+    }
+    prevCountRef.current = steps.length;
+  }, [steps.length, animateNewSteps]);
+
+  // Auto-scroll when running
   useEffect(() => {
     if (!isRunning) return;
     const el = scrollRef.current;
@@ -62,10 +105,10 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
         {steps.map((step, index) => (
           <div
             key={step.id}
+            data-step-index={index}
             style={{
               position: "relative",
               paddingLeft: "24px",
-              animation: `fade-in-up 0.3s ease-out ${index * 0.04}s both`,
             }}
           >
             {/* Timeline node */}

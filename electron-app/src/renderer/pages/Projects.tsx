@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 import { AddProjectDialog } from "../components/AddProjectDialog";
 import { ProjectCard } from "../components/projects/ProjectCard";
 import { ProjectListHeader } from "../components/projects/ProjectListHeader";
@@ -16,6 +17,155 @@ interface Project {
 
 type ViewMode = "grid" | "list";
 
+function DeleteProjectDialog({
+  project,
+  onDelete,
+  onCancel,
+}: {
+  project: Project;
+  onDelete: (deleteSource: boolean) => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.style.opacity = "0";
+    el.style.transform = "scale(0.95)";
+    el.style.transition = "opacity 250ms ease-out, transform 250ms ease-out";
+    requestAnimationFrame(() => {
+      el.style.opacity = "1";
+      el.style.transform = "scale(1)";
+    });
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(13,14,20,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 60,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        style={{
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid var(--glass-border)",
+          borderRadius: "12px",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
+          padding: "24px",
+          width: "400px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        <AlertTriangle
+          size={24}
+          style={{ color: "var(--status-error)", marginBottom: "12px" }}
+          strokeWidth={1.5}
+        />
+        <div
+          style={{
+            fontSize: "18px",
+            fontWeight: 700,
+            color: "var(--foreground)",
+            textAlign: "center",
+            letterSpacing: "-0.02em",
+            marginBottom: "8px",
+          }}
+        >
+          Delete project &ldquo;{project.name}&rdquo;?
+        </div>
+        <div
+          style={{
+            fontSize: "13px",
+            color: "var(--foreground-muted)",
+            textAlign: "center",
+            lineHeight: "1.5",
+            marginBottom: "6px",
+          }}
+        >
+          This will remove the project from Vex and delete all associated data (batches, traces, screenshots).
+        </div>
+        <div
+          style={{
+            fontSize: "12px",
+            color: "var(--foreground-dim)",
+            textAlign: "center",
+            lineHeight: "1.4",
+            marginBottom: "20px",
+            fontFamily: "monospace",
+            wordBreak: "break-all",
+          }}
+        >
+          {project.path}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+          <button
+            onClick={() => onDelete(false)}
+            style={{
+              width: "100%",
+              height: "36px",
+              borderRadius: "6px",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "var(--primary-foreground)",
+              background: "var(--status-error)",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            Remove from Vex
+          </button>
+          <button
+            onClick={() => onDelete(true)}
+            style={{
+              width: "100%",
+              height: "36px",
+              borderRadius: "6px",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "var(--primary-foreground)",
+              background: "#7c2d12",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            Delete files from disk too
+          </button>
+          <button
+            onClick={onCancel}
+            style={{
+              width: "100%",
+              height: "36px",
+              borderRadius: "6px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--foreground-muted)",
+              background: "transparent",
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Projects() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -23,6 +173,7 @@ export function Projects() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
 
   async function fetchProjects() {
     try {
@@ -66,17 +217,21 @@ export function Projects() {
     }
   }
 
-  async function handleDelete(id: string) {
+  function handleDelete(id: string) {
     const project = projects.find((p) => p.id === id);
     if (!project) return;
-    const confirmed = window.confirm(`Delete project "${project.name}"? This cannot be undone.`);
-    if (!confirmed) return;
+    setDeleteTarget(project);
+  }
+
+  async function confirmDelete(deleteSource: boolean) {
+    if (!deleteTarget) return;
     try {
-      await window.electronAPI.updateProject(id, { deleted: true });
-      fetchProjects();
+      await window.electronAPI.deleteProject(deleteTarget.id, deleteSource);
     } catch {
-      fetchProjects();
+      // ignore
     }
+    setDeleteTarget(null);
+    fetchProjects();
   }
 
   if (loading) {
@@ -174,6 +329,14 @@ export function Projects() {
             setShowAddDialog(false);
             fetchProjects();
           }}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteProjectDialog
+          project={deleteTarget}
+          onDelete={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>

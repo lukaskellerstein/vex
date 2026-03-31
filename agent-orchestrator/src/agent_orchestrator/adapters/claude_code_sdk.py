@@ -14,6 +14,8 @@ from claude_agent_sdk.types import (
     ResultMessage,
     TaskProgressMessage,
     TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
     ToolUseBlock,
 )
 
@@ -34,6 +36,7 @@ class SDKAgentSession:
     current_task_id: str | None = None
     project_path: str = ""
     log_buffer: list[str] = field(default_factory=list)
+    steps: list[dict] = field(default_factory=list)
 
 
 class ClaudeCodeSDKAdapter(AgentAdapter):
@@ -45,9 +48,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
     def __init__(self) -> None:
         self._sessions: dict[str, SDKAgentSession] = {}
 
-    async def start(self, project_id: str, project_path: str) -> AgentProcess:
+    async def start(self, project_id: str, project_path: str, agent_id: str | None = None) -> AgentProcess:
         """Create a ClaudeSDKClient session for the given project."""
-        agent_id = uuid.uuid4().hex
+        agent_id = agent_id or uuid.uuid4().hex
 
         options = ClaudeAgentOptions(
             system_prompt={
@@ -169,13 +172,57 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             result_text = ""
             cost_usd = None
             duration_ms = None
+            session.steps.clear()
+
+            # Notify subscribers that agent is now running
+            await nats_service.publish(
+                f"vex.agent.{agent_id}.status",
+                {"agent_id": agent_id, "status": "running", "timestamp": datetime.now(UTC).isoformat()},
+            )
+
+            step_index = 0
 
             async for message in session.client.receive_response():
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
-                        if isinstance(block, TextBlock):
+                        now_ts = datetime.now(UTC).isoformat()
+                        if isinstance(block, ThinkingBlock):
+                            log_line = f"[thinking] {block.thinking[:200]}"
+                            session.log_buffer.append(log_line)
+                            self._mark_previous_steps_past(session)
+                            step_data = {
+                                "type": "thinking",
+                                "content": block.thinking[:2000],
+                                "timestamp": now_ts,
+                                "status": "current",
+                            }
+                            session.steps.append(step_data)
+                            await nats_service.publish(
+                                f"vex.task.{task_id}.progress",
+                                {
+                                    "task_id": task_id,
+                                    "agent_id": agent_id,
+                                    "type": "thinking",
+                                    "content": block.thinking[:500],
+                                    "timestamp": now_ts,
+                                },
+                            )
+                            await nats_service.publish(
+                                f"vex.agent.{agent_id}.step",
+                                {"index": step_index, **step_data},
+                            )
+                            step_index += 1
+                        elif isinstance(block, TextBlock):
                             log_line = block.text
                             session.log_buffer.append(log_line)
+                            self._mark_previous_steps_past(session)
+                            step_data = {
+                                "type": "text",
+                                "content": log_line[:2000],
+                                "timestamp": now_ts,
+                                "status": "current",
+                            }
+                            session.steps.append(step_data)
                             await nats_service.publish(
                                 f"vex.task.{task_id}.progress",
                                 {
@@ -183,31 +230,131 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                     "agent_id": agent_id,
                                     "type": "text",
                                     "content": log_line[:500],
-                                    "timestamp": datetime.now(UTC).isoformat(),
+                                    "timestamp": now_ts,
                                 },
                             )
+                            await nats_service.publish(
+                                f"vex.agent.{agent_id}.step",
+                                {"index": step_index, **step_data},
+                            )
+                            step_index += 1
                         elif isinstance(block, ToolUseBlock):
                             log_line = f"[tool] {block.name}"
                             session.log_buffer.append(log_line)
+                            self._mark_previous_steps_past(session)
+                            input_json = json.dumps(block.input) if block.input else ""
+                            step_data = {
+                                "type": "tool_call",
+                                "content": input_json[:2000],
+                                "tool_name": block.name,
+                                "tool_input": block.input,
+                                "timestamp": now_ts,
+                                "status": "current",
+                            }
+                            session.steps.append(step_data)
                             await nats_service.publish(
                                 f"vex.task.{task_id}.progress",
                                 {
                                     "task_id": task_id,
                                     "agent_id": agent_id,
-                                    "type": "tool_use",
+                                    "type": "tool_call",
+                                    "tool_name": block.name,
                                     "content": log_line,
-                                    "timestamp": datetime.now(UTC).isoformat(),
+                                    "timestamp": now_ts,
                                 },
                             )
+                            await nats_service.publish(
+                                f"vex.agent.{agent_id}.step",
+                                {
+                                    "index": step_index,
+                                    "type": "tool_call",
+                                    "content": input_json[:2000],
+                                    "tool_name": block.name,
+                                    "timestamp": now_ts,
+                                    "status": "current",
+                                },
+                            )
+                            step_index += 1
+                            # Emit diff step for Edit tool calls
+                            if block.name == "Edit" and block.input:
+                                diff_step = self._emit_diff_step(session, block.input, now_ts)
+                                if diff_step:
+                                    await nats_service.publish(
+                                        f"vex.agent.{agent_id}.step",
+                                        {"index": step_index, **diff_step},
+                                    )
+                                    step_index += 1
+                        elif isinstance(block, ToolResultBlock):
+                            content_text = ""
+                            if isinstance(block.content, str):
+                                content_text = block.content
+                            elif isinstance(block.content, list):
+                                content_text = " ".join(
+                                    item.get("text", "") for item in block.content if isinstance(item, dict)
+                                )
+                            session.log_buffer.append(f"[result] {content_text[:200]}")
+                            self._mark_previous_steps_past(session)
+                            step_data = {
+                                "type": "tool_result",
+                                "content": content_text[:2000],
+                                "timestamp": now_ts,
+                                "status": "current",
+                            }
+                            session.steps.append(step_data)
+                            await nats_service.publish(
+                                f"vex.task.{task_id}.progress",
+                                {
+                                    "task_id": task_id,
+                                    "agent_id": agent_id,
+                                    "type": "tool_result",
+                                    "content": content_text[:500],
+                                    "timestamp": now_ts,
+                                },
+                            )
+                            await nats_service.publish(
+                                f"vex.agent.{agent_id}.step",
+                                {"index": step_index, **step_data},
+                            )
+                            step_index += 1
 
                 elif isinstance(message, TaskProgressMessage):
                     log_line = f"[progress] {getattr(message, 'progress', '')}"
                     session.log_buffer.append(log_line)
+                    now_ts = datetime.now(UTC).isoformat()
+                    self._mark_previous_steps_past(session)
+                    step_data = {
+                        "type": "progress",
+                        "content": getattr(message, "progress", ""),
+                        "timestamp": now_ts,
+                        "status": "current",
+                    }
+                    session.steps.append(step_data)
+                    await nats_service.publish(
+                        f"vex.agent.{agent_id}.step",
+                        {"index": step_index, **step_data},
+                    )
+                    step_index += 1
 
                 elif isinstance(message, ResultMessage):
                     cost_usd = getattr(message, "total_cost_usd", None)
                     duration_ms = getattr(message, "duration_ms", None)
                     result_text = f"Completed in {duration_ms}ms" if duration_ms else "Completed"
+                    now_ts = datetime.now(UTC).isoformat()
+                    self._mark_previous_steps_past(session)
+                    step_data = {
+                        "type": "completed",
+                        "content": result_text,
+                        "timestamp": now_ts,
+                        "status": "past",
+                        "cost_usd": cost_usd,
+                        "duration_ms": duration_ms,
+                    }
+                    session.steps.append(step_data)
+                    await nats_service.publish(
+                        f"vex.agent.{agent_id}.step",
+                        {"index": step_index, **step_data},
+                    )
+                    step_index += 1
 
             session.status = "completed"
 
@@ -224,11 +371,23 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
+            await nats_service.publish(
+                f"vex.agent.{agent_id}.status",
+                {"agent_id": agent_id, "status": "completed", "timestamp": datetime.now(UTC).isoformat()},
+            )
 
         except Exception as e:
             session.status = "failed"
             error_msg = self._classify_error(e)
             session.log_buffer.append(f"[error] {error_msg}")
+            now_ts = datetime.now(UTC).isoformat()
+            self._mark_previous_steps_past(session)
+            session.steps.append({
+                "type": "error",
+                "content": error_msg,
+                "timestamp": now_ts,
+                "status": "past",
+            })
 
             await nats_service.publish(
                 f"vex.task.{task_id}.complete",
@@ -243,10 +402,43 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
+            await nats_service.publish(
+                f"vex.agent.{agent_id}.status",
+                {"agent_id": agent_id, "status": "failed", "error": error_msg, "timestamp": datetime.now(UTC).isoformat()},
+            )
             logger.exception("Task %s failed for agent %s", task_id, agent_id)
 
         finally:
             session.current_task_id = None
+
+    @staticmethod
+    def _mark_previous_steps_past(session: SDKAgentSession) -> None:
+        """Mark all existing steps as 'past'."""
+        for step in session.steps:
+            if step["status"] == "current":
+                step["status"] = "past"
+
+    @staticmethod
+    def _emit_diff_step(session: SDKAgentSession, tool_input: dict, timestamp: str) -> dict | None:
+        """Emit a diff step from an Edit tool call's old_string/new_string. Returns the step dict."""
+        file_path = tool_input.get("file_path", "")
+        old_string = tool_input.get("old_string", "")
+        new_string = tool_input.get("new_string", "")
+        if not old_string and not new_string:
+            return None
+        lines = [file_path]
+        for line in old_string.splitlines():
+            lines.append(f"- {line}")
+        for line in new_string.splitlines():
+            lines.append(f"+ {line}")
+        step_data = {
+            "type": "diff",
+            "content": "\n".join(lines),
+            "timestamp": timestamp,
+            "status": "current",
+        }
+        session.steps.append(step_data)
+        return step_data
 
     async def get_status(self, agent_id: str) -> str:
         """Return real session status."""

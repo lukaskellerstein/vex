@@ -28,6 +28,72 @@ const COMPUTED_PROPS = [
   "gridTemplateColumns",
 ] as const;
 
+/** Build a human-readable accessibility path from the element to the root. */
+function buildAccessibilityPath(el: Element): string | null {
+  const parts: string[] = [];
+  let current: Element | null = el;
+  while (current && current !== document.documentElement) {
+    const role = current.getAttribute("role");
+    const ariaLabel = current.getAttribute("aria-label");
+    const tag = current.tagName.toLowerCase();
+
+    // Use semantic landmarks and labeled elements
+    if (role || ariaLabel || ["main", "nav", "header", "footer", "aside", "section", "article", "form", "h1", "h2", "h3", "h4", "h5", "h6", "button", "a", "input", "select", "textarea"].includes(tag)) {
+      let part = role || tag;
+      if (ariaLabel) {
+        part += `[aria-label="${ariaLabel}"]`;
+      } else if (tag === "a" || tag === "button") {
+        const text = (current.textContent || "").trim().slice(0, 30);
+        if (text) part += ` "${text}"`;
+      }
+      parts.unshift(part);
+    }
+    current = current.parentElement;
+  }
+  return parts.length > 0 ? parts.join(" > ") : null;
+}
+
+/** Extract the nearest React component name from React Fiber internals. */
+function getReactComponent(el: Element): string | null {
+  // React attaches fiber nodes with keys like __reactFiber$xxx or __reactInternalInstance$xxx
+  const fiberKey = Object.keys(el).find(
+    (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"),
+  );
+  if (!fiberKey) return null;
+
+  let fiber = (el as unknown as Record<string, unknown>)[fiberKey] as Record<string, unknown> | null;
+  while (fiber) {
+    const type = fiber.type;
+    if (typeof type === "function" || typeof type === "object") {
+      const name = typeof type === "function"
+        ? (type as { displayName?: string; name?: string }).displayName || (type as { name?: string }).name
+        : (type as { displayName?: string })?.displayName;
+      // Component names start with uppercase
+      if (name && /^[A-Z]/.test(name)) return name;
+    }
+    fiber = fiber.return as Record<string, unknown> | null;
+  }
+  return null;
+}
+
+/** Extract source file location from React Fiber _debugSource (dev builds only). */
+function getReactSourceFile(el: Element): string | null {
+  const fiberKey = Object.keys(el).find(
+    (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"),
+  );
+  if (!fiberKey) return null;
+
+  let fiber = (el as unknown as Record<string, unknown>)[fiberKey] as Record<string, unknown> | null;
+  while (fiber) {
+    const source = fiber._debugSource as { fileName?: string; lineNumber?: number } | undefined;
+    if (source?.fileName) {
+      return source.lineNumber ? `${source.fileName}:${source.lineNumber}` : source.fileName;
+    }
+    fiber = fiber.return as Record<string, unknown> | null;
+  }
+  return null;
+}
+
 export function collectMetadata(el: Element): Selection {
   const htmlEl = el as HTMLElement;
   const rect = el.getBoundingClientRect();
@@ -66,5 +132,9 @@ export function collectMetadata(el: Element): Selection {
     childCount: el.children.length,
     instruction: "",
     screenshot: "",
+    url: window.location.href,
+    accessibilityPath: buildAccessibilityPath(el),
+    reactComponent: getReactComponent(el),
+    reactSourceFile: getReactSourceFile(el),
   };
 }

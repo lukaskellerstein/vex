@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -6,15 +6,29 @@ import {
   Clock,
   ChevronDown,
   ExternalLink,
+  Bot,
+  Type,
+  Palette,
+  Move,
+  Copy,
+  Trash2,
+  MousePointer,
+  Image,
+  LayoutGrid,
+  Maximize2,
+  Scissors,
+  PaintBucket,
 } from "lucide-react";
 
 interface BatchAction {
-  id: string;
+  id?: string;
   type: string;
   selector?: string;
   description?: string;
-  before_value?: string;
-  after_value?: string;
+  instruction?: string;
+  before?: string;
+  after?: string;
+  data?: Record<string, unknown>;
 }
 
 interface Batch {
@@ -25,14 +39,20 @@ interface Batch {
   action_count?: number;
   duration_ms?: number | null;
   cost_usd?: number | null;
-  created_at: string;
+  created_at?: string;
+  submitted_at?: string;
+  completed_at?: string | null;
   error_message?: string | null;
   agent_trace_id?: string | null;
 }
 
 interface BatchCardProps {
   batch: Batch;
+  projectId: string;
   onViewTrace?: (traceId: string) => void;
+  onViewAgent?: (agentId: string) => void;
+  onViewBatchAgents?: (batchId: string) => void;
+  onDelete?: (batchId: string) => void;
 }
 
 function formatTimestamp(iso: string): string {
@@ -65,6 +85,14 @@ function formatPagePath(url?: string): string {
   }
 }
 
+function formatModelName(model?: string): string {
+  if (!model) return "Agent";
+  if (model.includes("sonnet")) return "Sonnet 4.5";
+  if (model.includes("opus")) return "Opus 4.6";
+  if (model.includes("haiku")) return "Haiku 4.5";
+  return model.split("-").slice(0, 2).join(" ");
+}
+
 const STATUS_CONFIG: Record<string, { Icon: React.ElementType; color: string }> = {
   completed:  { Icon: CheckCircle2, color: "var(--status-success)" },
   failed:     { Icon: XCircle, color: "var(--status-error)" },
@@ -74,8 +102,33 @@ const STATUS_CONFIG: Record<string, { Icon: React.ElementType; color: string }> 
   pending:    { Icon: Clock, color: "var(--status-idle)" },
 };
 
-export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
+const ACTION_ICONS: Record<string, React.ElementType> = {
+  select: MousePointer,
+  editText: Type,
+  styleChange: Palette,
+  move: Move,
+  duplicate: Copy,
+  delete: Trash2,
+  insert: LayoutGrid,
+  replaceImage: Image,
+  resize: Maximize2,
+  wrap: Scissors,
+  copyStyle: PaintBucket,
+  generateSection: LayoutGrid,
+};
+
+interface TaskInfo {
+  agent_id: string;
+  agent_name?: string;
+  status: string;
+}
+
+export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBatchAgents, onDelete }: BatchCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [loadedActions, setLoadedActions] = useState<BatchAction[] | null>(null);
+  const [actionTasks, setActionTasks] = useState<TaskInfo[]>([]);
+  const [agentCount, setAgentCount] = useState(0);
+  const [hasRunningAgents, setHasRunningAgents] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const config = STATUS_CONFIG[batch.status] || STATUS_CONFIG.pending;
@@ -83,6 +136,54 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
   const isSpinning = batch.status === "running" || batch.status === "processing";
   const pagePath = formatPagePath(batch.page_url);
   const actionCount = batch.action_count ?? batch.actions?.length ?? 0;
+
+  // Fetch agent count eagerly on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const tasksResult = await window.electronAPI.getBatchTasks(projectId, batch.id);
+        if (cancelled || !tasksResult?.tasks) return;
+        const uniqueAgents = new Set<string>();
+        let anyRunning = false;
+        for (const t of tasksResult.tasks) {
+          if (t.agent_id) uniqueAgents.add(t.agent_id);
+          if (t.status === "in_progress" || t.status === "running") anyRunning = true;
+        }
+        setAgentCount(uniqueAgents.size);
+        setHasRunningAgents(anyRunning);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId, batch.id, batch.status]);
+
+  // Fetch full batch with actions + tasks on expand
+  useEffect(() => {
+    if (!expanded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Fetch actions
+        if (!batch.actions || batch.actions.length === 0) {
+          const full = await window.electronAPI.getBatch(projectId, batch.id);
+          if (!cancelled && full?.actions) setLoadedActions(full.actions);
+        } else {
+          setLoadedActions(batch.actions);
+        }
+        // Fetch tasks (agent mapping)
+        const tasksResult = await window.electronAPI.getBatchTasks(projectId, batch.id);
+        if (!cancelled && tasksResult?.tasks) {
+          setActionTasks(tasksResult.tasks.map((t: any) => ({
+            agent_id: t.agent_id,
+            status: t.status,
+          })));
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [expanded, batch.id, projectId, batch.status]);
+
+  const displayActions = loadedActions ?? batch.actions ?? [];
 
   return (
     <div
@@ -94,6 +195,12 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
         transition: "border-color 0.15s",
       }}
     >
+      <style>{`
+        @keyframes agents-badge-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 hsla(263, 82%, 57.5%, 0.3); }
+          50% { box-shadow: 0 0 8px 2px hsla(263, 82%, 57.5%, 0.15); }
+        }
+      `}</style>
       {/* Header */}
       <div
         role="button"
@@ -115,8 +222,16 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
           transition: "background 0.15s",
           textAlign: "left",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-elevated)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-elevated)";
+          const btn = e.currentTarget.querySelector(".batch-delete-btn") as HTMLElement | null;
+          if (btn) btn.style.opacity = "1";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          const btn = e.currentTarget.querySelector(".batch-delete-btn") as HTMLElement | null;
+          if (btn) btn.style.opacity = "0";
+        }}
       >
         <StatusIcon
           size={15}
@@ -131,13 +246,9 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
                 fontFamily: "var(--font-mono)",
                 fontSize: "11px",
                 color: "var(--foreground-dim)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                maxWidth: "120px",
               }}
             >
-              {batch.id.length > 12 ? batch.id.slice(0, 12) + "\u2026" : batch.id}
+              {batch.id}
             </code>
             <span
               style={{
@@ -172,6 +283,56 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
           {actionCount} actions
         </span>
 
+        {agentCount > 0 && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewBatchAgents?.(batch.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onViewBatchAgents?.(batch.id);
+              }
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "2px 8px",
+              borderRadius: "9999px",
+              fontSize: "11px",
+              fontWeight: 500,
+              fontFamily: "var(--font-mono)",
+              flexShrink: 0,
+              cursor: "pointer",
+              transition: "all 0.2s",
+              background: hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.1)" : "var(--surface-elevated)",
+              color: hasRunningAgents ? "var(--primary)" : "var(--foreground-muted)",
+              border: `1px solid ${hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.3)" : "var(--border)"}`,
+              animation: hasRunningAgents ? "agents-badge-pulse 2s ease-in-out infinite" : "none",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "hsla(263, 82%, 57.5%, 0.15)";
+              e.currentTarget.style.color = "var(--primary)";
+              e.currentTarget.style.borderColor = "hsla(263, 82%, 57.5%, 0.4)";
+              e.currentTarget.style.boxShadow = "0 0 8px hsla(263, 82%, 57.5%, 0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.1)" : "var(--surface-elevated)";
+              e.currentTarget.style.color = hasRunningAgents ? "var(--primary)" : "var(--foreground-muted)";
+              e.currentTarget.style.borderColor = hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.3)" : "var(--border)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <Bot size={10} className={hasRunningAgents ? "spin" : ""} />
+            {agentCount} {agentCount === 1 ? "Agent" : "Agents"}
+          </span>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -189,8 +350,33 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
         </div>
 
         <span style={{ fontSize: "11px", color: "var(--foreground-disabled)", flexShrink: 0 }}>
-          {formatTimestamp(batch.created_at)}
+          {formatTimestamp(batch.submitted_at || batch.created_at || "")}
         </span>
+
+        {onDelete && (
+          <button
+            className="batch-delete-btn"
+            onClick={(e) => { e.stopPropagation(); onDelete(batch.id); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onDelete(batch.id); } }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              background: "none",
+              border: "none",
+              padding: "2px",
+              color: "var(--foreground-dim)",
+              opacity: 0,
+              cursor: "pointer",
+              transition: "opacity 0.15s, color 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--status-error)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--foreground-dim)")}
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
 
         <ChevronDown
           size={14}
@@ -222,11 +408,18 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
             </div>
           )}
 
-          {batch.actions && batch.actions.length > 0 && (
+          {displayActions.length > 0 && (
             <div style={{ borderTop: "1px solid var(--border)", paddingTop: "4px", paddingBottom: "8px" }}>
-              {batch.actions.map((action) => (
-                <ActionRow key={action.id} action={action} />
+              {displayActions.map((action, idx) => (
+                <ActionRow key={action.id || idx} action={action} index={idx} task={actionTasks[idx]} onViewAgent={onViewAgent} />
               ))}
+            </div>
+          )}
+
+          {displayActions.length === 0 && loadedActions === null && (
+            <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", fontSize: "12px", color: "var(--foreground-dim)" }}>
+              <Loader2 size={12} className="spin" style={{ marginRight: "6px" }} />
+              Loading actions...
             </div>
           )}
 
@@ -269,88 +462,207 @@ export function BatchCard({ batch, onViewTrace }: BatchCardProps) {
   );
 }
 
-function ActionRow({ action }: { action: BatchAction }) {
+// Color mapping matching the Chrome extension
+const TYPE_BADGE_COLORS: Record<string, string> = {
+  select: "#3b82f6",
+  insert: "#22c55e",
+  editText: "#eab308",
+  delete: "#ef4444",
+  duplicate: "#06b6d4",
+  move: "#8b5cf6",
+  wrap: "#64748b",
+  resize: "#a855f7",
+  styleChange: "#f97316",
+  replaceImage: "#ec4899",
+  generateSection: "#14b8a6",
+  copyStyle: "#6366f1",
+};
+
+const SCREENSHOT_BASE = "http://localhost:8420/api/storage/screenshot?path=";
+
+function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; index: number; task?: TaskInfo; onViewAgent?: (agentId: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const ActionIcon = ACTION_ICONS[action.type] || MousePointer;
+  const badgeColor = TYPE_BADGE_COLORS[action.type] || "#6b7280";
+
+  const instruction = (action.instruction || action.description || "") as string;
+  const screenshotBefore = (action as any).screenshot_before as string | null;
+  const screenshotAfter = (action as any).screenshot_after as string | null;
+  const deltas = (action as any).deltas as any[] | null;
+  const changes = (action as any).changes as any[] | null;
+  const dimensions = (action as any).dimensions as any | null;
+  const hasDetails = instruction || action.before || action.after || screenshotBefore || screenshotAfter || deltas || changes || dimensions;
+
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: "12px",
-        padding: "6px 16px",
-        transition: "background 0.1s",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
-          <span style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 500 }}>
-            {action.type}
+    <div style={{ borderBottom: "1px solid var(--border)" }}>
+      {/* Header row */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => hasDetails && setExpanded(!expanded)}
+        onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && hasDetails) { e.preventDefault(); setExpanded(!expanded); } }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "8px 16px",
+          cursor: hasDetails ? "pointer" : "default",
+          transition: "background 0.1s",
+        }}
+        onMouseEnter={(e) => { if (hasDetails) e.currentTarget.style.background = "var(--surface-hover)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
+        {/* Index number */}
+        <span style={{
+          width: "18px", height: "18px", display: "inline-flex", alignItems: "center", justifyContent: "center",
+          borderRadius: "9999px", fontSize: "10px", fontWeight: 600, flexShrink: 0,
+          background: "var(--surface-elevated)", color: "var(--foreground-dim)", border: "1px solid var(--border)",
+        }}>
+          {index + 1}
+        </span>
+
+        {/* Colored type badge */}
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          padding: "1px 6px", borderRadius: "3px", color: "#fff",
+          fontSize: "10px", fontWeight: 600, lineHeight: "18px", flexShrink: 0, background: badgeColor,
+        }}>
+          <ActionIcon size={10} />
+          {action.type}
+        </span>
+
+        {/* Selector */}
+        <span style={{
+          fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--foreground-dim)",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0,
+        }}>
+          {action.selector}
+        </span>
+
+        {/* Instruction preview (collapsed) */}
+        {!expanded && instruction && (
+          <span style={{
+            fontSize: "11px", color: "var(--foreground-dim)", overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "200px", flexShrink: 1,
+          }}>
+            {instruction}
           </span>
-          {action.selector && (
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                color: "var(--foreground-dim)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {action.selector}
-            </span>
-          )}
-        </div>
-        {action.description && (
-          <p style={{ fontSize: "12px", color: "var(--foreground-muted)", lineHeight: "1.5" }}>
-            {action.description}
-          </p>
         )}
-        {(action.before_value || action.after_value) && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-            {action.before_value && (
-              <code
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "var(--foreground-dim)",
-                  background: "var(--surface-elevated)",
-                  padding: "1px 6px",
-                  borderRadius: "2px",
-                  maxWidth: "180px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {action.before_value}
-              </code>
-            )}
-            {action.before_value && action.after_value && (
-              <span style={{ color: "var(--foreground-disabled)", fontSize: "10px" }}>&rarr;</span>
-            )}
-            {action.after_value && (
-              <code
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "var(--status-success)",
-                  background: "hsla(142, 69%, 45%, 0.08)",
-                  padding: "1px 6px",
-                  borderRadius: "2px",
-                  maxWidth: "180px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {action.after_value}
-              </code>
-            )}
-          </div>
+
+        {/* Agent badge */}
+        {task && (
+          <span
+            role={onViewAgent ? "button" : undefined}
+            tabIndex={onViewAgent ? 0 : undefined}
+            onClick={onViewAgent ? (e) => { e.stopPropagation(); onViewAgent(task.agent_id); } : undefined}
+            onKeyDown={onViewAgent ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onViewAgent(task.agent_id); } } : undefined}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "4px",
+              padding: "2px 8px", borderRadius: "9999px", fontSize: "10px", fontWeight: 500, flexShrink: 0,
+              background: task.status === "completed" ? "hsla(142, 69%, 45%, 0.08)"
+                : task.status === "failed" ? "hsla(0, 84%, 60%, 0.08)" : "hsla(263, 82%, 57.5%, 0.08)",
+              color: task.status === "completed" ? "var(--status-success)"
+                : task.status === "failed" ? "var(--status-error)" : "var(--primary)",
+              border: `1px solid ${task.status === "completed" ? "hsla(142, 69%, 45%, 0.2)"
+                : task.status === "failed" ? "hsla(0, 84%, 60%, 0.2)" : "hsla(263, 82%, 57.5%, 0.2)"}`,
+              cursor: onViewAgent ? "pointer" : "default",
+              transition: "filter 0.15s",
+            }}
+            onMouseEnter={onViewAgent ? (e) => { e.currentTarget.style.filter = "brightness(1.3)"; } : undefined}
+            onMouseLeave={onViewAgent ? (e) => { e.currentTarget.style.filter = "none"; } : undefined}
+          >
+            <Bot size={9} />
+            {task.status === "in_progress" ? "running" : task.status}
+          </span>
+        )}
+
+        {hasDetails && (
+          <ChevronDown size={12} style={{
+            flexShrink: 0, color: "var(--foreground-dim)", transition: "transform 0.2s",
+            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+          }} />
         )}
       </div>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div style={{ padding: "4px 16px 12px 42px" }}>
+          {instruction && (
+            <p style={{ fontSize: "12px", color: "var(--foreground-muted)", lineHeight: 1.5, margin: "0 0 8px" }}>
+              {instruction}
+            </p>
+          )}
+
+          {(action.before || action.after) && (
+            <ValueDiff before={action.before} after={action.after} />
+          )}
+
+          {deltas && Array.isArray(deltas) && deltas.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" }}>
+              {deltas.map((d: any, i: number) => (
+                <ValueDiff key={i} label={d.property} before={d.before} after={d.after} />
+              ))}
+            </div>
+          )}
+
+          {dimensions && (
+            <ValueDiff
+              label="dimensions"
+              before={`${dimensions.beforeWidth}x${dimensions.beforeHeight}`}
+              after={`${dimensions.afterWidth}x${dimensions.afterHeight}`}
+            />
+          )}
+
+          {changes && Array.isArray(changes) && changes.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" }}>
+              {changes.map((c: any, i: number) => (
+                <ValueDiff key={i} label={c.property} before={c.before} after={c.after} />
+              ))}
+            </div>
+          )}
+
+          {(screenshotBefore || screenshotAfter) && (
+            <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
+              {screenshotBefore && (
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>Before</span>
+                  <img src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotBefore)}`} alt="Before"
+                    style={{ width: "100%", borderRadius: "4px", border: "1px solid var(--border)" }} />
+                </div>
+              )}
+              {screenshotAfter && (
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>After</span>
+                  <img src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotAfter)}`} alt="After"
+                    style={{ width: "100%", borderRadius: "4px", border: "1px solid var(--border)" }} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ValueDiff({ label, before, after }: { label?: string; before?: string | null; after?: string | null }) {
+  if (!before && !after) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+      {label && <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--foreground-dim)" }}>{label}:</span>}
+      {before && (
+        <code style={{
+          fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--foreground-dim)",
+          background: "var(--surface-elevated)", padding: "1px 6px", borderRadius: "2px",
+        }}>{before}</code>
+      )}
+      {before && after && <span style={{ color: "var(--foreground-disabled)", fontSize: "10px" }}>&rarr;</span>}
+      {after && (
+        <code style={{
+          fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--status-success)",
+          background: "hsla(142, 69%, 45%, 0.08)", padding: "1px 6px", borderRadius: "2px",
+        }}>{after}</code>
+      )}
     </div>
   );
 }

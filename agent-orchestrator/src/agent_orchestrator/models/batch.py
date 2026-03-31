@@ -1,6 +1,5 @@
 """Batch and Action models for the REST API."""
 
-from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
@@ -28,6 +27,16 @@ class ActionData(BaseModel):
     # select
     instruction: str | None = None
     element_info: dict | None = None
+    url: str | None = None
+    accessibility_path: str | None = None
+    react_component: str | None = None
+    react_source_file: str | None = None
+    tag_name: str | None = None
+    class_list: list[str] | None = None
+    text_content: str | None = None
+    computed_styles: dict | None = None
+    parent_tag: str | None = None
+    child_count: int | None = None
 
     # insert
     position: str | None = None  # after|before|firstChild|lastChild

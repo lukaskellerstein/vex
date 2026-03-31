@@ -1,12 +1,13 @@
 """Project CRUD endpoints (T019)."""
 
+import shutil
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response, status
 
-from agent_orchestrator.db.database import get_db
+from agent_orchestrator.db.database import DATA_DIR, get_db
 from agent_orchestrator.models.project import Project, ProjectCreate, ProjectUpdate
 from agent_orchestrator.services.project_detector import detect as detect_project
 
@@ -102,12 +103,74 @@ async def update_project(project_id: str, body: ProjectUpdate):
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: str):
+async def delete_project(project_id: str, delete_source: bool = False):
     db = await get_db()
-    cursor = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
-    if await cursor.fetchone() is None:
+    cursor = await db.execute(
+        "SELECT id, path FROM projects WHERE id = ?", (project_id,)
+    )
+    row = await cursor.fetchone()
+    if row is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    project_path = row["path"]
 
+    # Delete trace steps and agent traces for all batches in this project
+    await db.execute(
+        "DELETE FROM trace_steps WHERE trace_id IN "
+        "(SELECT id FROM agent_traces WHERE batch_id IN "
+        "(SELECT id FROM batches WHERE project_id = ?))",
+        (project_id,),
+    )
+    await db.execute(
+        "DELETE FROM agent_traces WHERE batch_id IN "
+        "(SELECT id FROM batches WHERE project_id = ?)",
+        (project_id,),
+    )
+
+    # Delete agents spawned for this project's batches (via tasks)
+    agent_cursor = await db.execute(
+        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id IN "
+        "(SELECT id FROM batches WHERE project_id = ?)",
+        (project_id,),
+    )
+    agent_ids = [row["agent_id"] for row in await agent_cursor.fetchall()]
+
+    await db.execute(
+        "DELETE FROM tasks WHERE batch_id IN "
+        "(SELECT id FROM batches WHERE project_id = ?)",
+        (project_id,),
+    )
+
+    if agent_ids:
+        placeholders = ",".join("?" * len(agent_ids))
+        await db.execute(
+            f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})",
+            agent_ids,
+        )
+        await db.execute(
+            f"DELETE FROM agents WHERE id IN ({placeholders})", agent_ids
+        )
+
+    # Delete any remaining activity events linked directly to the project
+    await db.execute(
+        "DELETE FROM activity_events WHERE project_id = ?", (project_id,)
+    )
+
+    # Delete any remaining agents linked directly to the project
+    await db.execute("DELETE FROM agents WHERE project_id = ?", (project_id,))
+
+    # Delete the project row (batches, actions, config cascade via FK)
     await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     await db.commit()
+
+    # Clean up screenshot directory from filesystem
+    project_data_dir = DATA_DIR / project_id
+    if project_data_dir.exists():
+        shutil.rmtree(project_data_dir)
+
+    # Optionally delete the project source directory
+    if delete_source and project_path:
+        source_dir = Path(project_path)
+        if source_dir.exists() and source_dir.is_dir():
+            shutil.rmtree(source_dir)
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)

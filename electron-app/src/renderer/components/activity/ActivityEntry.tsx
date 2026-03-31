@@ -13,6 +13,7 @@ import {
 
 export type TimelineEventType =
   | "batch_submitted"
+  | "batch_processing"
   | "batch_completed"
   | "batch_failed"
   | "task_started"
@@ -27,14 +28,17 @@ export type TimelineEventType =
 export interface TimelineEvent {
   id: string;
   type: TimelineEventType;
-  timestamp: string;
+  timestamp?: string;
+  created_at?: string;
   summary: string;
   project_name: string;
   project_id?: string;
+  agent_id?: string;
   agent_name?: string;
   batch_id?: string;
   action_count?: number;
   cost_usd?: number;
+  meta?: string | null;
 }
 
 interface EventNodeConfig {
@@ -51,6 +55,11 @@ function getNodeConfig(type: TimelineEventType): EventNodeConfig {
       return {
         color: "var(--status-info)",
         icon: <Send size={size} strokeWidth={sw} />,
+      };
+    case "batch_processing":
+      return {
+        color: "var(--status-info)",
+        icon: <Play size={size} strokeWidth={sw} />,
       };
     case "batch_completed":
       return {
@@ -126,8 +135,9 @@ interface ActivityEntryProps {
 
 export function ActivityEntry({ event }: ActivityEntryProps) {
   const [hovered, setHovered] = useState(false);
-  const config = getNodeConfig(event.type);
+  const config = getNodeConfig(event.type) ?? { color: "var(--foreground-dim)", icon: <Send size={14} strokeWidth={1.5} /> };
   const failed = isFailedEvent(event.type);
+  const eventTime = event.timestamp || event.created_at || "";
   const hasMeta = event.batch_id || event.action_count !== undefined || event.cost_usd !== undefined;
 
   return (
@@ -206,16 +216,20 @@ export function ActivityEntry({ event }: ActivityEntryProps) {
           {event.agent_name && (
             <span
               style={{
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: "3px",
+                gap: "4px",
+                padding: "2px 8px",
+                borderRadius: "9999px",
                 fontSize: "11px",
-                fontFamily: "var(--font-ui)",
-                color: "var(--foreground-dim)",
+                fontWeight: 500,
+                background: "hsla(263, 82%, 57.5%, 0.08)",
+                color: "var(--primary)",
+                border: "1px solid hsla(263, 82%, 57.5%, 0.2)",
               }}
             >
               <Bot size={10} strokeWidth={1.5} />
-              via {event.agent_name}
+              {event.agent_name}
             </span>
           )}
 
@@ -228,7 +242,7 @@ export function ActivityEntry({ event }: ActivityEntryProps) {
               flexShrink: 0,
             }}
           >
-            {formatRelativeTime(event.timestamp)}
+            {formatRelativeTime(eventTime)}
           </span>
         </div>
 

@@ -5,9 +5,12 @@ from pydantic import BaseModel
 
 
 class AgentStatus(StrEnum):
+    CREATED = "created"
     REGISTERED = "registered"
     STARTING = "starting"
     RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
     STOPPING = "stopping"
     STOPPED = "stopped"
     ERROR = "error"

@@ -719,19 +719,12 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
     };
   }, [cleanupHoverStyle]);
 
-  // Apply and commit styles
+  // Apply and commit styles, then close panel
   const handleApply = useCallback(async () => {
     await finalizeAction();
-    if (selectedElRef.current) {
-      initialStylesRef.current = captureTrackedStyles(selectedElRef.current);
-      initialCssTextRef.current = selectedElRef.current.style.cssText;
-      try {
-        screenshotBeforeRef.current = await captureScreenshot(selectedElRef.current, 0, hostElement);
-      } catch {
-        screenshotBeforeRef.current = null;
-      }
-    }
-  }, [finalizeAction, hostElement]);
+    cleanupHoverStyle();
+    setSelectedEl(null);
+  }, [finalizeAction, cleanupHoverStyle]);
 
   // Cancel: revert styles and close panel
   const handleCancel = useCallback(() => {

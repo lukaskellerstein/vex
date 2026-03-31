@@ -1,4 +1,17 @@
 import { useCallback, useState } from "react";
+import {
+  MousePointer,
+  Type,
+  Palette,
+  Move,
+  Copy,
+  Trash2,
+  LayoutGrid,
+  Image,
+  Maximize2,
+  Scissors,
+  PaintBucket,
+} from "lucide-react";
 import type { Action, ActionType } from "../../shared/types";
 
 interface ActionListProps {
@@ -20,6 +33,21 @@ const TYPE_BADGE_COLORS: Record<ActionType, string> = {
   replaceImage: "#ec4899",
   generateSection: "#14b8a6",
   copyStyle: "#6366f1",
+};
+
+const TYPE_ICONS: Record<ActionType, React.ElementType> = {
+  select: MousePointer,
+  insert: LayoutGrid,
+  editText: Type,
+  delete: Trash2,
+  duplicate: Copy,
+  move: Move,
+  wrap: Scissors,
+  resize: Maximize2,
+  styleChange: Palette,
+  replaceImage: Image,
+  generateSection: LayoutGrid,
+  copyStyle: PaintBucket,
 };
 
 function truncate(s: string, max: number): string {
@@ -63,12 +91,8 @@ export function ActionList({ actions, onRemove, onUpdateInstruction }: ActionLis
         return (
           <div key={action.selector + i}>
             <div className="selection-item">
-              <span
-                className="action-type-badge"
-                style={{ backgroundColor: TYPE_BADGE_COLORS[action.type] }}
-              >
-                {action.type}
-              </span>
+              <span className="action-index-badge">{i + 1}</span>
+              <ActionTypeBadge type={action.type} />
               <div className="selection-info">
                 <div className="selection-tag" title={action.selector}>
                   {truncate(action.selector, 40)}
@@ -118,5 +142,19 @@ export function ActionList({ actions, onRemove, onUpdateInstruction }: ActionLis
         );
       })}
     </div>
+  );
+}
+
+function ActionTypeBadge({ type }: { type: ActionType }) {
+  const Icon = TYPE_ICONS[type];
+  const color = TYPE_BADGE_COLORS[type];
+  return (
+    <span
+      className="action-type-badge"
+      style={{ backgroundColor: color }}
+    >
+      <Icon size={10} />
+      {type}
+    </span>
   );
 }
