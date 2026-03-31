@@ -11,6 +11,7 @@ class BatchStatus(StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ActionData(BaseModel):

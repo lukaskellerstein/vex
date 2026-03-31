@@ -373,6 +373,14 @@ ipcMain.handle("delete-batch", async (_event, projectId: string, batchId: string
   return apiDelete(`/api/projects/${projectId}/batches/${batchId}`);
 });
 
+ipcMain.handle("stop-batch", async (_event, projectId: string, batchId: string) => {
+  return apiPost(`/api/projects/${projectId}/batches/${batchId}/stop`);
+});
+
+ipcMain.handle("stop-agent", async (_event, agentId: string) => {
+  return apiPost(`/api/agents/${agentId}/stop`);
+});
+
 ipcMain.handle("get-agent-trace", async (_event, batchId: string) => {
   return apiGet(`/api/batches/${batchId}/trace`);
 });

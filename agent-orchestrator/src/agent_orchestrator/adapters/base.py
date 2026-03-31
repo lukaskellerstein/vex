@@ -35,6 +35,10 @@ class AgentAdapter(ABC):
     async def send_task(self, agent_id: str, task: dict) -> None:
         """Send a task to the agent."""
 
+    async def abort(self, agent_id: str) -> None:
+        """Abort a running agent task. Default falls back to stop()."""
+        await self.stop(agent_id)
+
     @abstractmethod
     async def get_status(self, agent_id: str) -> str:
         """Get the current status of the agent."""

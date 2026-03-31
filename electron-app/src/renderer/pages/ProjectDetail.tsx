@@ -172,6 +172,14 @@ export function ProjectDetail() {
     }
   }
 
+  async function handleStopBatch(batchId: string) {
+    try {
+      await window.electronAPI.stopBatch(projectId!, batchId);
+    } catch {
+      // Silently handle — batch list will refresh on next poll
+    }
+  }
+
   if (!projectId) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
@@ -322,7 +330,7 @@ export function ProjectDetail() {
           {/* Tab Content */}
           <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
             {activeTab === "batches" && (
-              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onDeleteBatch={handleDeleteBatch} />
+              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onDeleteBatch={handleDeleteBatch} onStopBatch={handleStopBatch} />
             )}
             {activeTab === "agents" && (
               <AgentsPanel

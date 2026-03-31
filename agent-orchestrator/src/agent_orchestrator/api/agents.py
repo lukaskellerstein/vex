@@ -279,9 +279,19 @@ async def start_agent(agent_id: str):
 @router.post("/agents/{agent_id}/stop")
 async def stop_agent(agent_id: str):
     db = await get_db()
-    cursor = await db.execute("SELECT id FROM agents WHERE id = ?", (agent_id,))
-    if await cursor.fetchone() is None:
+    cursor = await db.execute("SELECT id, status FROM agents WHERE id = ?", (agent_id,))
+    row = await cursor.fetchone()
+    if row is None:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    if row["status"] not in ("running", "starting", "created"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent is already {row['status']}",
+        )
+
+    # Actually interrupt the agent's SDK session
+    aborted = await batch_processor.abort_agent(agent_id)
 
     await db.execute(
         "UPDATE agents SET status = 'stopping' WHERE id = ?", (agent_id,)
@@ -289,5 +299,7 @@ async def stop_agent(agent_id: str):
     await db.commit()
 
     cursor = await db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,))
-    row = await cursor.fetchone()
-    return _row_to_agent(row)
+    result_row = await cursor.fetchone()
+    result = _row_to_agent(result_row)
+    result["aborted"] = aborted
+    return result

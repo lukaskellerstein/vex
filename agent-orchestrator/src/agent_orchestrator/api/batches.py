@@ -90,8 +90,9 @@ async def submit_batch(project_id: str, body: BatchSubmission):
 
     await db.commit()
 
-    # Fire-and-forget: trigger batch processing
-    asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
+    # Fire-and-forget: trigger batch processing (store ref for cancellation)
+    task = asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
+    batch_processor.register_batch_task(batch_id, task)
 
     cursor = await db.execute("SELECT * FROM batches WHERE id = ?", (batch_id,))
     row = await cursor.fetchone()
@@ -294,6 +295,32 @@ async def get_active_cursors(page_url: str):
             })
 
     return {"agents": all_agents}
+
+
+@router.post("/projects/{project_id}/batches/{batch_id}/stop")
+async def stop_batch(project_id: str, batch_id: str):
+    """Stop a running batch and all its agents."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT id, status FROM batches WHERE id = ? AND project_id = ?",
+        (batch_id, project_id),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    if row["status"] not in ("pending", "processing"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Batch is already {row['status']}",
+        )
+
+    stopped = await batch_processor.stop_batch(batch_id)
+    return {
+        "batch_id": batch_id,
+        "status": "cancelled",
+        "stopped": stopped,
+    }
 
 
 @router.delete(

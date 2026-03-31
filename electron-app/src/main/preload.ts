@@ -48,6 +48,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("get-batch", projectId, batchId),
   deleteBatch: (projectId: string, batchId: string) =>
     ipcRenderer.invoke("delete-batch", projectId, batchId),
+  stopBatch: (projectId: string, batchId: string) =>
+    ipcRenderer.invoke("stop-batch", projectId, batchId),
+  stopAgent: (agentId: string) =>
+    ipcRenderer.invoke("stop-agent", agentId),
   getAgentTrace: (batchId: string) =>
     ipcRenderer.invoke("get-agent-trace", batchId),
   getActivity: (filters?: { projectId?: string; type?: string; since?: string }) =>

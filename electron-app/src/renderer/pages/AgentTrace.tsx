@@ -14,6 +14,8 @@ import {
   ChevronDown,
   ChevronRight,
   X,
+  Square,
+  Ban,
 } from "lucide-react";
 import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
@@ -28,7 +30,7 @@ interface TraceData {
   agent_id: string;
   agent_name: string;
   agent_model: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "stopped" | "cancelled";
   total_duration_ms: number | null;
   total_cost_usd: number | null;
   total_tokens: number | null;
@@ -85,6 +87,22 @@ const STATUS_CONFIG: Record<
     fg: "var(--primary)",
     border: "color-mix(in srgb, var(--primary) 20%, transparent)",
   },
+  stopped: {
+    icon: Ban,
+    iconColor: "var(--status-warning)",
+    label: "Stopped",
+    bg: "color-mix(in srgb, var(--status-warning) 10%, transparent)",
+    fg: "var(--status-warning)",
+    border: "color-mix(in srgb, var(--status-warning) 20%, transparent)",
+  },
+  cancelled: {
+    icon: Ban,
+    iconColor: "var(--status-warning)",
+    label: "Cancelled",
+    bg: "color-mix(in srgb, var(--status-warning) 10%, transparent)",
+    fg: "var(--status-warning)",
+    border: "color-mix(in srgb, var(--status-warning) 20%, transparent)",
+  },
 };
 
 /** Convert a live step from NATS/steps API into the AgentStep shape used by the UI. */
@@ -108,7 +126,7 @@ export function AgentTrace() {
   const navigate = useNavigate();
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
-  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | null>(null);
+  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
@@ -172,8 +190,10 @@ export function AgentTrace() {
 
     const removeStatusListener = window.electronAPI.onAgentStatus((data) => {
       if (data.agentId !== aid) return;
-      const status = data.status as "completed" | "failed";
-      setAgentStatus(status);
+      const status = data.status as "completed" | "failed" | "stopped" | "cancelled";
+      if (status === "completed" || status === "failed" || status === "stopped" || status === "cancelled") {
+        setAgentStatus(status);
+      }
     });
 
     const removeHookListener = window.electronAPI.onAgentHook((data) => {
@@ -318,6 +338,16 @@ export function AgentTrace() {
   const StatusIcon = statusCfg.icon;
   const isRunning = displayStatus === "running";
 
+  async function handleStopAgent() {
+    if (!agentId) return;
+    try {
+      await window.electronAPI.stopAgent(agentId);
+      setAgentStatus("stopped");
+    } catch {
+      // Status will update via NATS
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* ─── Header ──────────────────────────────── */}
@@ -396,30 +426,59 @@ export function AgentTrace() {
             </div>
           </div>
 
-          {/* Status badge */}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "4px 10px",
-              borderRadius: "999px",
-              fontSize: "11px",
-              fontWeight: 500,
-              background: statusCfg.bg,
-              color: statusCfg.fg,
-              border: `1px solid ${statusCfg.border}`,
-            }}
-          >
-            <StatusIcon
-              size={11}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {isRunning && (
+              <button
+                onClick={handleStopAgent}
+                title="Stop agent"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  flexShrink: 0,
+                  background: "hsla(0, 84%, 60%, 0.08)",
+                  border: "1px solid hsla(0, 84%, 60%, 0.2)",
+                  borderRadius: "9999px",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  color: "var(--status-error)",
+                  cursor: "pointer",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.08)")}
+              >
+                <Square size={8} fill="currentColor" />
+                Stop
+              </button>
+            )}
+
+            {/* Status badge */}
+            <span
               style={{
-                color: statusCfg.iconColor,
-                ...(isRunning ? { animation: "spin 1s linear infinite" } : {}),
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                borderRadius: "999px",
+                fontSize: "11px",
+                fontWeight: 500,
+                background: statusCfg.bg,
+                color: statusCfg.fg,
+                border: `1px solid ${statusCfg.border}`,
               }}
-            />
-            {statusCfg.label}
-          </span>
+            >
+              <StatusIcon
+                size={11}
+                style={{
+                  color: statusCfg.iconColor,
+                  ...(isRunning ? { animation: "spin 1s linear infinite" } : {}),
+                }}
+              />
+              {statusCfg.label}
+            </span>
+          </div>
         </div>
 
         {/* Metrics row */}

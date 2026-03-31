@@ -91,7 +91,8 @@ class SDKAgentSession:
     client: ClaudeSDKClient | None = None
     options: ClaudeAgentOptions | None = None
     session_id: str | None = None
-    status: str = "idle"  # idle, running, completed, failed
+    status: str = "idle"  # idle, running, completed, failed, cancelled
+    cancelled: bool = False
     current_task_id: str | None = None
     project_path: str = ""
     log_buffer: list[str] = field(default_factory=list)
@@ -185,6 +186,19 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             logger.info("Stopped claude-code-sdk agent %s", agent_id)
         else:
             logger.warning("Agent %s not found in sessions", agent_id)
+
+    async def abort(self, agent_id: str) -> None:
+        """Interrupt a running agent task via the SDK interrupt signal."""
+        session = self._sessions.get(agent_id)
+        if not session or not session.client:
+            logger.warning("Agent %s not found for abort", agent_id)
+            return
+        session.cancelled = True
+        try:
+            session.client.interrupt()
+            logger.info("Sent interrupt to agent %s", agent_id)
+        except Exception:
+            logger.exception("Error interrupting agent %s", agent_id)
 
     async def send_task(self, agent_id: str, task: dict) -> None:
         """Send a task to the SDK agent, stream response, publish progress via NATS."""
@@ -466,73 +480,126 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     )
                     step_index += 1
 
-            session.status = "completed"
-            if session.file_logger:
-                session.file_logger.finish("completed", cost_usd, duration_ms)
-
-            await nats_service.publish(
-                f"vex.task.{task_id}.complete",
-                {
-                    "task_id": task_id,
-                    "agent_id": agent_id,
-                    "status": "completed",
-                    "result": result_text,
-                    "error": None,
-                    "cost_usd": cost_usd,
-                    "duration_ms": duration_ms,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
-            )
-            await nats_service.publish(
-                f"vex.agent.{agent_id}.status",
-                {
-                    "agent_id": agent_id,
-                    "status": "completed",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
-            )
+            if session.cancelled:
+                session.status = "cancelled"
+                if session.file_logger:
+                    session.file_logger.finish("cancelled", cost_usd, duration_ms)
+                await nats_service.publish(
+                    f"vex.task.{task_id}.complete",
+                    {
+                        "task_id": task_id,
+                        "agent_id": agent_id,
+                        "status": "cancelled",
+                        "result": "Cancelled by user",
+                        "error": None,
+                        "cost_usd": cost_usd,
+                        "duration_ms": duration_ms,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                await nats_service.publish(
+                    f"vex.agent.{agent_id}.status",
+                    {
+                        "agent_id": agent_id,
+                        "status": "stopped",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                logger.info("Task %s cancelled for agent %s", task_id, agent_id)
+            else:
+                session.status = "completed"
+                if session.file_logger:
+                    session.file_logger.finish("completed", cost_usd, duration_ms)
+                await nats_service.publish(
+                    f"vex.task.{task_id}.complete",
+                    {
+                        "task_id": task_id,
+                        "agent_id": agent_id,
+                        "status": "completed",
+                        "result": result_text,
+                        "error": None,
+                        "cost_usd": cost_usd,
+                        "duration_ms": duration_ms,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                await nats_service.publish(
+                    f"vex.agent.{agent_id}.status",
+                    {
+                        "agent_id": agent_id,
+                        "status": "completed",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
 
         except Exception as e:
-            session.status = "failed"
-            error_msg = self._classify_error(e)
-            session.log_buffer.append(f"[error] {error_msg}")
-            if session.file_logger:
-                session.file_logger.event("error", error_msg)
-                session.file_logger.finish("failed")
-            now_ts = datetime.now(UTC).isoformat()
-            self._mark_previous_steps_past(session)
-            session.steps.append(
-                {
-                    "type": "error",
-                    "content": error_msg,
-                    "timestamp": now_ts,
-                    "status": "past",
-                }
-            )
-
-            await nats_service.publish(
-                f"vex.task.{task_id}.complete",
-                {
-                    "task_id": task_id,
-                    "agent_id": agent_id,
-                    "status": "failed",
-                    "result": None,
-                    "error": error_msg,
-                    "cost_usd": None,
-                    "duration_ms": None,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
-            )
-            await nats_service.publish(
-                f"vex.agent.{agent_id}.status",
-                {
-                    "agent_id": agent_id,
-                    "status": "failed",
-                    "error": error_msg,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
-            )
-            logger.exception("Task %s failed for agent %s", task_id, agent_id)
+            if session.cancelled:
+                session.status = "cancelled"
+                session.log_buffer.append("[cancelled] Stopped by user")
+                if session.file_logger:
+                    session.file_logger.finish("cancelled")
+                await nats_service.publish(
+                    f"vex.task.{task_id}.complete",
+                    {
+                        "task_id": task_id,
+                        "agent_id": agent_id,
+                        "status": "cancelled",
+                        "result": "Cancelled by user",
+                        "error": None,
+                        "cost_usd": None,
+                        "duration_ms": None,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                await nats_service.publish(
+                    f"vex.agent.{agent_id}.status",
+                    {
+                        "agent_id": agent_id,
+                        "status": "stopped",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                logger.info("Task %s cancelled (via exception) for agent %s", task_id, agent_id)
+            else:
+                session.status = "failed"
+                error_msg = self._classify_error(e)
+                session.log_buffer.append(f"[error] {error_msg}")
+                if session.file_logger:
+                    session.file_logger.event("error", error_msg)
+                    session.file_logger.finish("failed")
+                now_ts = datetime.now(UTC).isoformat()
+                self._mark_previous_steps_past(session)
+                session.steps.append(
+                    {
+                        "type": "error",
+                        "content": error_msg,
+                        "timestamp": now_ts,
+                        "status": "past",
+                    }
+                )
+                await nats_service.publish(
+                    f"vex.task.{task_id}.complete",
+                    {
+                        "task_id": task_id,
+                        "agent_id": agent_id,
+                        "status": "failed",
+                        "result": None,
+                        "error": error_msg,
+                        "cost_usd": None,
+                        "duration_ms": None,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                await nats_service.publish(
+                    f"vex.agent.{agent_id}.status",
+                    {
+                        "agent_id": agent_id,
+                        "status": "failed",
+                        "error": error_msg,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+                logger.exception("Task %s failed for agent %s", task_id, agent_id)
 
         finally:
             session.current_task_id = None

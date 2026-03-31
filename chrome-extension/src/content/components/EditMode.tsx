@@ -169,7 +169,6 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
               },
               ".cm-content": {
                 padding: "8px 10px",
-                minHeight: "70px",
                 color: "#cdd6f4",
                 caretColor: "#cdd6f4",
               },

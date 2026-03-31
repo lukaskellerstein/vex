@@ -14,12 +14,83 @@ from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile
 logger = logging.getLogger(__name__)
 
 _agent_manager: AgentManagerService | None = None
+_running_batches: dict[str, dict] = {}  # batch_id → {"task": asyncio.Task, "agent_ids": list[str]}
 
 
 def init(agent_manager: AgentManagerService) -> None:
     """Initialize batch processor with agent manager reference."""
     global _agent_manager
     _agent_manager = agent_manager
+
+
+def register_batch_task(batch_id: str, task: asyncio.Task) -> None:
+    """Store a reference to the batch processing task for cancellation."""
+    entry = _running_batches.setdefault(batch_id, {})
+    entry["task"] = task
+    entry.setdefault("agent_ids", [])
+
+
+async def stop_batch(batch_id: str) -> bool:
+    """Stop a running batch by interrupting its agents and cancelling the task.
+
+    Returns True if the batch was found and stopped.
+    """
+    entry = _running_batches.get(batch_id)
+    if entry is None:
+        return False
+
+    # Phase 1: Interrupt all active SDK sessions for this batch's agents
+    if _agent_manager:
+        adapter = _agent_manager._adapters.get("claude-code-sdk")
+        if adapter:
+            for agent_id in entry.get("agent_ids", []):
+                try:
+                    await adapter.abort(agent_id)
+                except Exception:
+                    logger.exception("Error aborting agent %s in batch %s", agent_id, batch_id)
+
+    # Phase 2: Cancel the asyncio task as backstop
+    task = entry.get("task")
+    if task and not task.done():
+        task.cancel()
+
+    # Update DB status
+    db = await get_db()
+    await db.execute(
+        "UPDATE batches SET status = 'cancelled', completed_at = ? WHERE id = ? AND status IN ('pending', 'processing')",
+        (datetime.now(UTC).isoformat(), batch_id),
+    )
+    await db.commit()
+
+    # Publish batch status event
+    await nats_service.publish(
+        f"vex.batch.{batch_id}.status",
+        {"batch_id": batch_id, "status": "cancelled", "timestamp": datetime.now(UTC).isoformat()},
+    )
+
+    logger.info("Batch %s: stop requested", batch_id)
+    return True
+
+
+async def abort_agent(agent_id: str) -> bool:
+    """Abort a single running agent by interrupting its SDK session.
+
+    Returns True if the agent was found and interrupted.
+    """
+    if _agent_manager is None:
+        return False
+    adapter = _agent_manager._adapters.get("claude-code-sdk")
+    if adapter is None:
+        return False
+    session = adapter._sessions.get(agent_id)
+    if session is None or session.status != "running":
+        return False
+    try:
+        await adapter.abort(agent_id)
+        return True
+    except Exception:
+        logger.exception("Error aborting agent %s", agent_id)
+        return False
 
 
 async def process_batch(project_id: str, batch_id: str) -> None:
@@ -95,6 +166,10 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     logger.info("Publishing cursor init on %s: %d agents, pageUrl=%s", cursor_subject, len(cursor_agents), page_url)
     await nats_service.publish(cursor_subject, cursor_payload)
 
+    # Track agent IDs for cancellation support
+    entry = _running_batches.setdefault(batch_id, {})
+    entry["agent_ids"] = list(agent_ids)
+
     # Spawn one agent per action in parallel
     tasks = []
     for idx, action in enumerate(actions):
@@ -102,33 +177,89 @@ async def process_batch(project_id: str, batch_id: str) -> None:
             _process_action(project, batch_id, action, idx, agent_ids[idx])
         )
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Determine batch outcome
-    any_failed = any(isinstance(r, Exception) or r is False for r in results)
-    now = datetime.now(UTC).isoformat()
+        # Determine batch outcome
+        any_cancelled = any(isinstance(r, asyncio.CancelledError) for r in results)
+        any_failed = any(
+            (isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError))
+            or r is False
+            for r in results
+        )
 
-    db = await get_db()
-    batch_status = "failed" if any_failed else "completed"
-    await db.execute(
-        "UPDATE batches SET status = ?, completed_at = ? WHERE id = ?",
-        (batch_status, now, batch_id),
-    )
+        if any_cancelled:
+            batch_status = "cancelled"
+        elif any_failed:
+            batch_status = "failed"
+        else:
+            batch_status = "completed"
 
-    # Log activity event: batch completed/failed
-    event_id = uuid.uuid4().hex
-    succeeded = sum(1 for r in results if r is True)
-    failed_count = len(results) - succeeded
-    summary = f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
-    if failed_count > 0:
-        summary += f", {failed_count} failed"
-    await db.execute(
-        """INSERT INTO activity_events (id, type, project_id, project_name, summary, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (event_id, f"batch_{batch_status}", project_id, project["name"], summary, now),
-    )
-    await db.commit()
-    logger.info("Batch %s: %s", batch_id, batch_status)
+        now = datetime.now(UTC).isoformat()
+        db = await get_db()
+
+        # Compute batch duration from submitted_at → now
+        batch_cursor = await db.execute(
+            "SELECT submitted_at FROM batches WHERE id = ?", (batch_id,),
+        )
+        batch_row = await batch_cursor.fetchone()
+        batch_duration_ms = None
+        if batch_row and batch_row["submitted_at"]:
+            submitted = datetime.fromisoformat(batch_row["submitted_at"])
+            completed = datetime.fromisoformat(now)
+            batch_duration_ms = int((completed - submitted).total_seconds() * 1000)
+
+        # Sum cost from agent traces for this batch
+        cost_cursor = await db.execute(
+            "SELECT COALESCE(SUM(total_cost_usd), 0) AS total_cost FROM agent_traces WHERE batch_id = ?",
+            (batch_id,),
+        )
+        cost_row = await cost_cursor.fetchone()
+        batch_cost_usd = cost_row["total_cost"] if cost_row and cost_row["total_cost"] else None
+
+        await db.execute(
+            "UPDATE batches SET status = ?, completed_at = ?, duration_ms = ?, cost_usd = ? WHERE id = ? AND status NOT IN ('cancelled')",
+            (batch_status, now, batch_duration_ms, batch_cost_usd, batch_id),
+        )
+
+        # Log activity event: batch outcome
+        event_id = uuid.uuid4().hex
+        succeeded = sum(1 for r in results if r is True)
+        failed_count = len(results) - succeeded
+        summary = f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
+        if failed_count > 0:
+            summary += f", {failed_count} failed/cancelled"
+        await db.execute(
+            """INSERT INTO activity_events (id, type, project_id, project_name, summary, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (event_id, f"batch_{batch_status}", project_id, project["name"], summary, now),
+        )
+        await db.commit()
+
+        # Publish batch status event for real-time UI updates
+        await nats_service.publish(
+            f"vex.batch.{batch_id}.status",
+            {"batch_id": batch_id, "status": batch_status, "timestamp": now},
+        )
+        logger.info("Batch %s: %s", batch_id, batch_status)
+
+    except asyncio.CancelledError:
+        # Batch task itself was cancelled (backstop from stop_batch)
+        now = datetime.now(UTC).isoformat()
+        db = await get_db()
+        await db.execute(
+            "UPDATE batches SET status = 'cancelled', completed_at = ? WHERE id = ? AND status NOT IN ('cancelled')",
+            (now, batch_id),
+        )
+        await db.commit()
+        await nats_service.publish(
+            f"vex.batch.{batch_id}.status",
+            {"batch_id": batch_id, "status": "cancelled", "timestamp": now},
+        )
+        logger.info("Batch %s: cancelled via task cancellation", batch_id)
+
+    finally:
+        _running_batches.pop(batch_id, None)
 
 
 async def _process_action(
@@ -198,9 +329,9 @@ async def _process_action(
         session = adapter._sessions.get(agent_id)
         cost_usd = None
         duration_ms = None
+        was_cancelled = session and session.status == "cancelled"
 
         if session:
-            # Extract cost from last step if available
             for step in reversed(session.steps):
                 if step.get("type") == "completed":
                     cost_usd = step.get("cost_usd")
@@ -211,36 +342,60 @@ async def _process_action(
         completed_at = datetime.now(UTC).isoformat()
         await _persist_trace(db, batch_id, agent_id, agent_name, session, cost_usd, duration_ms, completed_at)
 
-        # Update task as completed
+        if was_cancelled:
+            await db.execute(
+                "UPDATE tasks SET status = 'cancelled', result = 'Cancelled by user', completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            await db.execute(
+                "UPDATE agents SET status = 'stopped' WHERE id = ?",
+                (agent_id,),
+            )
+            await db.commit()
+            logger.info("Action %d in batch %s cancelled for agent %s", action_idx, batch_id, agent_id)
+            return False
+        else:
+            await db.execute(
+                "UPDATE tasks SET status = 'completed', result = 'Action processed successfully', completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            await db.execute(
+                "UPDATE agents SET tasks_completed = tasks_completed + 1, total_cost_usd = total_cost_usd + ? WHERE id = ?",
+                (cost_usd or 0, agent_id),
+            )
+            await db.commit()
+
+            await db.execute(
+                """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (uuid.uuid4().hex, "task_completed", project["id"], project["name"], agent_id, agent_name,
+                 f"Agent {agent_name} completed action: {action['type']} on {action['selector']}",
+                 datetime.now(UTC).isoformat()),
+            )
+            await db.commit()
+
+            logger.info("Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id)
+            return True
+
+    except asyncio.CancelledError:
+        # Task was cancelled via asyncio (backstop from stop_batch)
+        logger.info("Action %d in batch %s cancelled (asyncio) for agent %s", action_idx, batch_id, agent_id)
+        db = await get_db()
+        completed_at = datetime.now(UTC).isoformat()
         await db.execute(
-            "UPDATE tasks SET status = 'completed', result = 'Action processed successfully', completed_at = ? WHERE id = ?",
+            "UPDATE tasks SET status = 'cancelled', result = 'Cancelled by user', completed_at = ? WHERE id = ?",
             (completed_at, task_id),
         )
-
-        # Update agent stats
         await db.execute(
-            "UPDATE agents SET tasks_completed = tasks_completed + 1, total_cost_usd = total_cost_usd + ? WHERE id = ?",
-            (cost_usd or 0, agent_id),
+            "UPDATE agents SET status = 'stopped' WHERE id = ?",
+            (agent_id,),
         )
         await db.commit()
-
-        # Log per-agent activity event: task completed
-        await db.execute(
-            """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uuid.uuid4().hex, "task_completed", project["id"], project["name"], agent_id, agent_name,
-             f"Agent {agent_name} completed action: {action['type']} on {action['selector']}",
-             datetime.now(UTC).isoformat()),
-        )
-        await db.commit()
-
-        logger.info("Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id)
-        return True
+        raise  # Re-raise so gather captures it
 
     except Exception as e:
         logger.exception("Action %d in batch %s failed: %s", action_idx, batch_id, e)
 
-        # Mark task as failed
         db = await get_db()
         error_msg = str(e)
         completed_at = datetime.now(UTC).isoformat()
@@ -254,7 +409,6 @@ async def _process_action(
             (agent_id,),
         )
 
-        # Log per-agent activity event: task failed
         await db.execute(
             """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",

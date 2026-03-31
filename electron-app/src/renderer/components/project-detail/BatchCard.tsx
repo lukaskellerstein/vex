@@ -18,6 +18,8 @@ import {
   Maximize2,
   Scissors,
   PaintBucket,
+  Square,
+  Ban,
 } from "lucide-react";
 import { OperatorRobot } from "../projects/OperatorRobot";
 
@@ -53,6 +55,7 @@ interface BatchCardProps {
   onViewTrace?: (traceId: string) => void;
   onViewAgent?: (agentId: string) => void;
   onDelete?: (batchId: string) => void;
+  onStop?: (batchId: string) => void;
 }
 
 function formatTimestamp(iso: string): string {
@@ -63,17 +66,6 @@ function formatTimestamp(iso: string): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHour < 24) return `${diffHour}h ago`;
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function formatDuration(ms: number | null | undefined): string {
-  if (ms == null) return "\u2014";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function formatCost(usd: number | null | undefined): string {
-  if (usd == null) return "\u2014";
-  return `$${usd.toFixed(3)}`;
 }
 
 function formatPagePath(url?: string): string {
@@ -100,6 +92,7 @@ const STATUS_CONFIG: Record<string, { Icon: React.ElementType; color: string }> 
   processing: { Icon: Loader2, color: "var(--status-info)" },
   queued:     { Icon: Clock, color: "var(--status-idle)" },
   pending:    { Icon: Clock, color: "var(--status-idle)" },
+  cancelled:  { Icon: Ban, color: "var(--status-warning)" },
 };
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
@@ -123,7 +116,7 @@ interface TaskInfo {
   status: string;
 }
 
-export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onDelete }: BatchCardProps) {
+export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onDelete, onStop }: BatchCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [loadedActions, setLoadedActions] = useState<BatchAction[] | null>(null);
   const [actionTasks, setActionTasks] = useState<TaskInfo[]>([]);
@@ -260,23 +253,33 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onDelete
           </div>
         </div>
 
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "2px 8px",
-            borderRadius: "9999px",
-            fontSize: "11px",
-            fontWeight: 500,
-            fontFamily: "var(--font-mono)",
-            background: "var(--surface-elevated)",
-            color: "var(--foreground-muted)",
-            border: "1px solid var(--border)",
-            flexShrink: 0,
-          }}
-        >
-          {actionCount} actions
-        </span>
+        {isSpinning && onStop && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onStop(batch.id); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onStop(batch.id); } }}
+            title="Stop batch"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              flexShrink: 0,
+              background: "hsla(0, 84%, 60%, 0.08)",
+              border: "1px solid hsla(0, 84%, 60%, 0.2)",
+              borderRadius: "9999px",
+              padding: "2px 8px",
+              fontSize: "10px",
+              fontWeight: 500,
+              color: "var(--status-error)",
+              cursor: "pointer",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.15)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.08)")}
+          >
+            <Square size={8} fill="currentColor" />
+            Stop
+          </button>
+        )}
 
         {agentCount > 0 && (
           <span
@@ -295,24 +298,6 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onDelete
               <OperatorRobot key={i} size={14} idle={!hasRunningAgents} />
             ))}
           </span>
-        )}
-
-        {(batch.duration_ms != null || batch.cost_usd != null) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              flexShrink: 0,
-              fontSize: "11px",
-              color: "var(--foreground-dim)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            <span>{formatDuration(batch.duration_ms)}</span>
-            <span style={{ color: "var(--foreground-disabled)" }}>&middot;</span>
-            <span>{formatCost(batch.cost_usd)}</span>
-          </div>
         )}
 
         <span style={{ fontSize: "11px", color: "var(--foreground-disabled)", flexShrink: 0 }}>
