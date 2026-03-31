@@ -6,6 +6,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import AsyncIterator
 
 from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
@@ -26,8 +27,60 @@ from claude_agent_sdk.types import (
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
 from agent_orchestrator.services import nats_service
+from agent_orchestrator.services import marketplace as marketplace_service
+from agent_orchestrator.services.agent_logger import AgentFileLogger
 
 logger = logging.getLogger(__name__)
+
+# ── ANSI colors for terminal output ─────────────────────────────
+_CYAN = "\033[96m"
+_YELLOW = "\033[93m"
+_GREEN = "\033[92m"
+_MAGENTA = "\033[95m"
+_BLUE = "\033[94m"
+_DIM = "\033[2m"
+_BOLD = "\033[1m"
+_RESET = "\033[0m"
+
+# Config loaded once at module level (set by load_config)
+_config: dict = {}
+
+CONFIG_PATH = Path(__file__).resolve().parents[3] / "config.json"
+
+
+def load_config(path: Path | None = None) -> dict:
+    """Load agent orchestrator config from JSON file."""
+    global _config
+    config_path = path or CONFIG_PATH
+    if config_path.exists():
+        _config = json.loads(config_path.read_text())
+        logger.info("Loaded config from %s", config_path)
+    else:
+        logger.warning("Config file not found at %s, using defaults", config_path)
+        _config = {}
+    return _config
+
+
+def get_config() -> dict:
+    """Return the loaded config."""
+    return _config
+
+
+def get_agent_profile(profile_name: str = "general") -> dict:
+    """Return an agent profile from config, or sensible defaults."""
+    agents = _config.get("agents", {})
+    profile = agents.get(profile_name)
+    if profile:
+        return profile
+    logger.warning("Agent profile '%s' not found, using defaults", profile_name)
+    return {
+        "model": "claude-sonnet-4-6",
+        "max_turns": None,
+        "plugins": [],
+        "allowed_tools": [],
+        "disallowed_tools": [],
+        "mcp_servers": {},
+    }
 
 
 @dataclass
@@ -43,6 +96,7 @@ class SDKAgentSession:
     project_path: str = ""
     log_buffer: list[str] = field(default_factory=list)
     steps: list[dict] = field(default_factory=list)
+    file_logger: AgentFileLogger | None = None
 
 
 class ClaudeCodeSDKAdapter(AgentAdapter):
@@ -51,89 +105,68 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
     name = "claude-code-sdk"
     capabilities = ["code-edit", "file-system", "section-generation"]
 
-    def __init__(self) -> None:
+    def __init__(self, profile_name: str = "general") -> None:
         self._sessions: dict[str, SDKAgentSession] = {}
+        self._profile_name = profile_name
 
     async def start(
         self, project_id: str, project_path: str, agent_id: str | None = None
     ) -> AgentProcess:
         """Create a ClaudeSDKClient session for the given project."""
         agent_id = agent_id or uuid.uuid4().hex
+        profile = get_agent_profile(self._profile_name)
+
+        # Resolve plugins from marketplace
+        plugin_refs = profile.get("plugins", [])
+        plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
 
         options = ClaudeAgentOptions(
-            model="claude-sonnet-4-6",
+            model=profile.get("model", "claude-sonnet-4-6"),
+            system_prompt={
+                "type": "preset",
+                "preset": "claude_code",
+                "append": profile.get("system_prompt", ""),
+            },
             cwd=project_path,
             setting_sources=["user", "project"],
-            max_turns=10,
-            permission_mode="bypassPermissions",
-            allowed_tools=[
-                "Agent",
-                "AskUserQuestion",
-                "Bash",
-                "CronCreate",
-                "CronDelete",
-                "CronList",
-                "Edit",
-                "EnterPlanMode",
-                "EnterWorktree",
-                "ExitPlanMode",
-                "ExitWorktree",
-                "Glob",
-                "Grep",
-                "ListMcpResourcesTool",
-                "NotebookEdit",
-                "Read",
-                "ReadMcpResourceTool",
-                "Skill",
-                "TaskCreate",
-                "TaskGet",
-                "TaskList",
-                "TaskOutput",
-                "TaskStop",
-                "TaskUpdate",
-                "ToolSearch",
-                "Write",
-                "WebSearch",
-                "WebFetch",
-                "mcp__vex-playwright",
-            ],
-            disallowed_tools=[
-                "Bash(rm -rf /)",
-                "Bash(rm -rf ~)",
-                "Bash(rm -rf /*)",
-                "Bash(rm -rf ~/)",
-                "Bash(rm -r -f /)",
-                "Bash(rm -r -f ~)",
-                "Bash(rm -r -f /*)",
-                "Bash(rm -r -f ~/)",
-                "Bash(sudo rm -rf /)",
-                "Bash(sudo rm -rf ~)",
-                "Bash(sudo rm -rf /*)",
-                "Bash(sudo rm -rf ~/)",
-            ],
-            mcp_servers={
-                "vex-playwright": {
-                    "command": "npx",
-                    "args": ["@playwright/mcp@latest", "--isolated"],
-                },
-            },
-            plugins=self._resolve_plugins(),
+            max_turns=profile.get("max_turns"),
+            allowed_tools=profile.get("allowed_tools", []),
+            disallowed_tools=profile.get("disallowed_tools", []),
+            mcp_servers=profile.get("mcp_servers", {}),
+            plugins=plugins,
             hooks=self._make_hooks(agent_id),
         )
 
         client = ClaudeSDKClient(options=options)
+
+        # Set up file logging if configured
+        log_dir_raw = profile.get("log_dir")
+        log_dir = Path(log_dir_raw).expanduser() if log_dir_raw else None
+        log_formats = profile.get("log_formats", [])
+        file_logger = None
+        if log_formats:
+            file_logger = AgentFileLogger(
+                agent_id=agent_id,
+                log_dir=log_dir,
+                formats=log_formats,
+            )
 
         session = SDKAgentSession(
             agent_id=agent_id,
             client=client,
             options=options,
             project_path=project_path,
+            file_logger=file_logger,
         )
         self._sessions[agent_id] = session
 
         logger.info(
-            "Started claude-code-sdk agent %s for project %s at %s",
+            "Started claude-code-sdk agent %s (profile=%s, model=%s, %d plugins) "
+            "for project %s at %s",
             agent_id,
+            self._profile_name,
+            profile.get("model", "?"),
+            len(plugins),
             project_id,
             project_path,
         )
@@ -166,19 +199,34 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
 
         prompt = self._format_prompt(task)
 
+        # Start file logger
+        if session.file_logger:
+            profile = get_agent_profile(self._profile_name)
+            session.file_logger.start(
+                profile_name=self._profile_name,
+                model=profile.get("model", "?"),
+                prompt=prompt,
+            )
+
         try:
             await session.client.__aenter__()
 
-            # ── Log resolved plugins (to AO log only, not to agent context) ──
-            resolved_plugins = [
+            # Log intended config (what we asked for)
+            intended_plugins = [
                 p.get("path", "")
                 for p in (session.options.plugins if session.options else [])
             ]
+            profile = get_agent_profile(self._profile_name)
             print(
-                f"[vex-agent] {agent_id} — Configured plugins ({len(resolved_plugins)}):"
+                f"\n{_BOLD}{_BLUE}{'─' * 60}{_RESET}"
+                f"\n{_BOLD}{_BLUE}  Agent {agent_id} — Intended Config{_RESET}"
+                f"\n{_BLUE}{'─' * 60}{_RESET}"
             )
-            for p in resolved_plugins:
-                print(f"  [plugin] {p}")
+            print(f"  {_BLUE}[CONFIG]{_RESET} Profile: {self._profile_name}")
+            print(f"  {_BLUE}[CONFIG]{_RESET} Model: {profile.get('model', '?')}")
+            print(f"  {_BLUE}[CONFIG]{_RESET} Plugins ({len(intended_plugins)}):")
+            for p in intended_plugins:
+                print(f"    {_CYAN}[PLUGIN]{_RESET} {p}")
 
             await session.client.query(prompt)
 
@@ -204,12 +252,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     subtype = getattr(message, "subtype", "")
                     data = getattr(message, "data", {})
                     if subtype == "init":
-                        tools_count = len(data.get("tools", []))
-                        mcp_servers = data.get("mcp_servers", [])
-                        skills = data.get("skills", [])
-                        print(
-                            f"[vex-agent] {agent_id} — init: {tools_count} tools, "
-                            f"{len(mcp_servers)} MCP servers, {len(skills)} skills"
+                        await self._log_agent_init(
+                            agent_id, data, profile, intended_plugins,
+                            session.file_logger,
                         )
                     continue
 
@@ -219,6 +264,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                         if isinstance(block, ThinkingBlock):
                             log_line = f"[thinking] {block.thinking[:200]}"
                             session.log_buffer.append(log_line)
+                            if session.file_logger:
+                                session.file_logger.event("thinking", block.thinking[:2000])
                             self._mark_previous_steps_past(session)
                             step_data = {
                                 "type": "thinking",
@@ -245,6 +292,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                         elif isinstance(block, TextBlock):
                             log_line = block.text
                             session.log_buffer.append(log_line)
+                            if session.file_logger:
+                                session.file_logger.event("text", log_line[:2000])
                             self._mark_previous_steps_past(session)
                             step_data = {
                                 "type": "text",
@@ -271,6 +320,12 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                         elif isinstance(block, ToolUseBlock):
                             log_line = f"[tool] {block.name}"
                             session.log_buffer.append(log_line)
+                            if session.file_logger:
+                                input_preview = json.dumps(block.input)[:2000] if block.input else ""
+                                session.file_logger.event(
+                                    "tool_call", input_preview,
+                                    tool_name=block.name, tool_input=block.input,
+                                )
                             self._mark_previous_steps_past(session)
                             input_json = json.dumps(block.input) if block.input else ""
                             step_data = {
@@ -327,6 +382,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                     if isinstance(item, dict)
                                 )
                             session.log_buffer.append(f"[result] {content_text[:200]}")
+                            if session.file_logger:
+                                session.file_logger.event("tool_result", content_text[:2000])
                             self._mark_previous_steps_past(session)
                             step_data = {
                                 "type": "tool_result",
@@ -354,6 +411,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 elif isinstance(message, TaskProgressMessage):
                     log_line = f"[progress] {getattr(message, 'progress', '')}"
                     session.log_buffer.append(log_line)
+                    if session.file_logger:
+                        session.file_logger.event("progress", getattr(message, "progress", ""))
                     now_ts = datetime.now(UTC).isoformat()
                     self._mark_previous_steps_past(session)
                     step_data = {
@@ -393,6 +452,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     step_index += 1
 
             session.status = "completed"
+            if session.file_logger:
+                session.file_logger.finish("completed", cost_usd, duration_ms)
 
             await nats_service.publish(
                 f"vex.task.{task_id}.complete",
@@ -420,6 +481,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             session.status = "failed"
             error_msg = self._classify_error(e)
             session.log_buffer.append(f"[error] {error_msg}")
+            if session.file_logger:
+                session.file_logger.event("error", error_msg)
+                session.file_logger.finish("failed")
             now_ts = datetime.now(UTC).isoformat()
             self._mark_previous_steps_past(session)
             session.steps.append(
@@ -459,6 +523,116 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             session.current_task_id = None
 
     @staticmethod
+    async def _log_agent_init(
+        agent_id: str,
+        init_data: dict,
+        intended_profile: dict,
+        intended_plugins: list[str],
+        file_logger: AgentFileLogger | None = None,
+    ) -> None:
+        """Print colored agent init summary and publish config to NATS."""
+        loaded_plugins = init_data.get("plugins", [])
+        loaded_skills = init_data.get("skills", [])
+        loaded_agents = init_data.get("agents", [])
+        loaded_tools = init_data.get("tools", [])
+        loaded_mcp = init_data.get("mcp_servers", [])
+        loaded_model = init_data.get("model", "?")
+
+        # ── Colored terminal output ──
+        print(
+            f"\n{_BOLD}{_GREEN}{'─' * 60}{_RESET}"
+            f"\n{_BOLD}{_GREEN}  Agent {agent_id} — Loaded (from SDK init){_RESET}"
+            f"\n{_GREEN}{'─' * 60}{_RESET}"
+        )
+        print(f"  {_GREEN}[MODEL]{_RESET}   {loaded_model}")
+        print(f"  {_GREEN}[TOOLS]{_RESET}   {len(loaded_tools)} tool(s)")
+
+        # Plugins
+        print(f"\n  {_CYAN}{_BOLD}/plugins ({len(loaded_plugins)}){_RESET}")
+        if loaded_plugins:
+            for p in loaded_plugins:
+                name = p.get("name", "?") if isinstance(p, dict) else str(p)
+                path = p.get("path", "") if isinstance(p, dict) else ""
+                print(f"    {_CYAN}[PLUGIN]{_RESET} {name}" + (f"  {_DIM}{path}{_RESET}" if path else ""))
+        else:
+            print(f"    {_DIM}(none){_RESET}")
+
+        # Skills
+        print(f"\n  {_YELLOW}{_BOLD}/skills ({len(loaded_skills)}){_RESET}")
+        if loaded_skills:
+            for s in loaded_skills:
+                name = s.get("name", s) if isinstance(s, dict) else str(s)
+                print(f"    {_YELLOW}[SKILL]{_RESET}  {name}")
+        else:
+            print(f"    {_DIM}(none){_RESET}")
+
+        # Agents
+        print(f"\n  {_MAGENTA}{_BOLD}/agents ({len(loaded_agents)}){_RESET}")
+        if loaded_agents:
+            for a in loaded_agents:
+                name = a.get("name", a) if isinstance(a, dict) else str(a)
+                print(f"    {_MAGENTA}[AGENT]{_RESET}  {name}")
+        else:
+            print(f"    {_DIM}(none){_RESET}")
+
+        # MCP servers
+        if loaded_mcp:
+            print(f"\n  {_BLUE}{_BOLD}MCP Servers ({len(loaded_mcp)}){_RESET}")
+            for m in loaded_mcp:
+                name = m.get("name", "?") if isinstance(m, dict) else str(m)
+                status = m.get("status", "?") if isinstance(m, dict) else ""
+                print(f"    {_BLUE}[MCP]{_RESET}    {name}" + (f"  {_DIM}({status}){_RESET}" if status else ""))
+
+        print(f"{_GREEN}{'─' * 60}{_RESET}\n")
+
+        # ── File logger: config section ──
+        if file_logger:
+            file_logger.config(
+                intended_plugins=intended_plugins,
+                loaded_plugins=loaded_plugins,
+                loaded_skills=loaded_skills,
+                loaded_agents=loaded_agents,
+                loaded_tools=loaded_tools,
+                loaded_mcp=loaded_mcp,
+            )
+
+        # ── Publish to NATS ──
+        await nats_service.publish(
+            f"vex.agent.{agent_id}.config",
+            {
+                "agent_id": agent_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "intended": {
+                    "profile": intended_profile.get("model", "?"),
+                    "plugins": intended_plugins,
+                    "allowed_tools": intended_profile.get("allowed_tools", []),
+                    "disallowed_tools": intended_profile.get("disallowed_tools", []),
+                    "mcp_servers": list(intended_profile.get("mcp_servers", {}).keys()),
+                },
+                "loaded": {
+                    "model": loaded_model,
+                    "plugins": [
+                        (p.get("name", "?") if isinstance(p, dict) else str(p))
+                        for p in loaded_plugins
+                    ],
+                    "skills": [
+                        (s.get("name", s) if isinstance(s, dict) else str(s))
+                        for s in loaded_skills
+                    ],
+                    "agents": [
+                        (a.get("name", a) if isinstance(a, dict) else str(a))
+                        for a in loaded_agents
+                    ],
+                    "tools_count": len(loaded_tools),
+                    "mcp_servers": [
+                        (m.get("name", "?") if isinstance(m, dict) else str(m))
+                        for m in loaded_mcp
+                    ],
+                },
+            },
+        )
+
+    @staticmethod
     def _mark_previous_steps_past(session: SDKAgentSession) -> None:
         """Mark all existing steps as 'past'."""
         for step in session.steps:
@@ -469,7 +643,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
     def _emit_diff_step(
         session: SDKAgentSession, tool_input: dict, timestamp: str
     ) -> dict | None:
-        """Emit a diff step from an Edit tool call's old_string/new_string. Returns the step dict."""
+        """Emit a diff step from an Edit tool call's old_string/new_string."""
         file_path = tool_input.get("file_path", "")
         old_string = tool_input.get("old_string", "")
         new_string = tool_input.get("new_string", "")
@@ -521,58 +695,12 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         for line in remaining:
             yield line
 
-    # ── Plugin resolution ────────────────────────────────────────────
-
-    _MARKETPLACE_PLUGINS = [
-        "design-plugin",
-        "web-design-plugin",
-        "dev-tools-plugin",
-        "documentation-plugin",
-        "infra-plugin",
-        "media-plugin",
-    ]
-
-    @staticmethod
-    def _resolve_plugins() -> list[dict]:
-        """Resolve installed marketplace plugins, picking the latest cached version."""
-        from pathlib import Path
-
-        cache_root = (
-            Path.home() / ".claude" / "plugins" / "cache" / "claude-my-marketplace"
-        )
-        plugins: list[dict] = []
-
-        for name in ClaudeCodeSDKAdapter._MARKETPLACE_PLUGINS:
-            plugin_dir = cache_root / name
-            if not plugin_dir.is_dir():
-                logger.warning("Plugin %s not found in cache at %s", name, plugin_dir)
-                continue
-            # Pick the latest version directory (sorted lexicographically)
-            versions = sorted(
-                (d for d in plugin_dir.iterdir() if d.is_dir()),
-                key=lambda d: d.name,
-            )
-            if not versions:
-                logger.warning("Plugin %s has no version directories", name)
-                continue
-            latest = versions[-1]
-            manifest = latest / ".claude-plugin" / "plugin.json"
-            if not manifest.exists():
-                logger.warning("Plugin %s/%s missing plugin.json", name, latest.name)
-                continue
-            plugins.append({"type": "local", "path": str(latest)})
-            logger.info("Resolved plugin %s → %s", name, latest)
-
-        return plugins
-
     # ── Hook helpers ────────────────────────────────────────────────
 
     @staticmethod
     def _make_hooks(agent_id: str) -> dict:
         """Build SDK hook dict that publishes lifecycle events to NATS."""
 
-        # PreToolUse hooks MUST explicitly allow execution, otherwise the
-        # tool call may be silently blocked by the CLI.
         _ALLOW: HookJSONOutput = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -624,7 +752,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             tool_name = hook_input.get("tool_name", "")
             tool_input = hook_input.get("tool_input", {})
 
-            # Log every tool call for diagnostics
             logger.info("Agent %s PreToolUse: %s", agent_id, tool_name)
 
             payload: dict = {
@@ -633,7 +760,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 "tool_name": tool_name,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
-            # Enrich with subagent context if present
             if hook_input.get("agent_id"):
                 payload["subagent_id"] = hook_input["agent_id"]
                 payload["subagent_type"] = hook_input.get("agent_type", "")
@@ -646,7 +772,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 payload["subagent_prompt"] = tool_input.get("prompt", "")[:500]
                 payload["subagent_agent_type"] = tool_input.get("subagent_type", "")
             elif tool_name.startswith("mcp__"):
-                # MCP tool call — log which server/tool
                 payload["mcp_tool"] = tool_name
                 logger.info("Agent %s MCP tool call: %s", agent_id, tool_name)
 

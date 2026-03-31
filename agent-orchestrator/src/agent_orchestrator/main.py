@@ -15,8 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent_orchestrator.db.database import init_db, close_db
 from agent_orchestrator.services import nats_service
 from agent_orchestrator.services import batch_processor
+from agent_orchestrator.services import marketplace as marketplace_service
 from agent_orchestrator.services.agent_manager import AgentManagerService
-from agent_orchestrator.adapters.claude_code_sdk import ClaudeCodeSDKAdapter
+from agent_orchestrator.adapters.claude_code_sdk import ClaudeCodeSDKAdapter, load_config
 from agent_orchestrator.api import projects, batches, agents, tasks, config, activity, storage
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,13 @@ async def lifespan(app: FastAPI):
         await nats_service.connect()
     except Exception as e:
         logger.warning("NATS connection failed on startup (will retry): %s", e)
+
+    # Load config and sync marketplaces
+    ao_config = load_config()
+    try:
+        marketplace_service.sync_all(ao_config)
+    except Exception as e:
+        logger.warning("Marketplace sync failed on startup (will continue): %s", e)
 
     # Initialize agent manager and batch processor
     agent_manager = AgentManagerService()

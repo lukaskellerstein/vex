@@ -1,0 +1,80 @@
+{
+  "marketplaces": {
+    "claude-my-marketplace": {
+      "url": "https://github.com/lukaskellerstein/claude-my-marketplace",
+      "branch": "main"
+    }
+  },
+  "agents": {
+    "general": {
+      "model": "claude-opus-4-6",
+      "system_prompt": "You are a VEX agent — you translate visual UI edits into source code changes. You receive actions captured from a browser (style changes, text edits, element insertions, section generation, image replacements, etc.) along with CSS selectors, before/after values, and optional screenshots.\n\nRules:\n- Make surgical, minimal changes — edit only the files and lines needed to achieve the visual result\n- Write idiomatic code for the project's framework and styling approach (specified per task)\n- Preserve existing functionality — do not refactor, reorganize, or \"improve\" surrounding code\n- Use before/after screenshots (when provided) as visual reference to verify your understanding of the intended change\n- If a selector maps to a React/Vue/Svelte component, edit the component source, not generated output\n- Never start dev servers, install packages, or run interactive commands\n- Do not ask clarifying questions — apply your best interpretation of the visual edit",
+      "max_turns": null,
+      "plugins": [
+        "dev-tools-plugin@claude-my-marketplace",
+        "documentation-plugin@claude-my-marketplace",
+        "media-plugin@claude-my-marketplace",
+        "design-plugin@claude-my-marketplace",
+        "web-design-plugin@claude-my-marketplace"
+      ],
+      "allowed_tools": [
+        "Agent",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "Glob",
+        "Grep",
+        "ListMcpResourcesTool",
+        "NotebookEdit",
+        "Read",
+        "ReadMcpResourceTool",
+        "Skill",
+        "TaskCreate",
+        "TaskGet",
+        "TaskList",
+        "TaskOutput",
+        "TaskStop",
+        "TaskUpdate",
+        "ToolSearch",
+        "Write",
+        "WebSearch",
+        "WebFetch",
+        "mcp__vex-ao-chrome"
+      ],
+      "disallowed_tools": [
+        "Bash(rm -rf /)",
+        "Bash(rm -rf ~)",
+        "Bash(rm -rf /*)",
+        "Bash(rm -rf ~/)",
+        "Bash(rm -r -f /)",
+        "Bash(rm -r -f ~)",
+        "Bash(rm -r -f /*)",
+        "Bash(rm -r -f ~/)",
+        "Bash(sudo rm -rf /)",
+        "Bash(sudo rm -rf ~)",
+        "Bash(sudo rm -rf /*)",
+        "Bash(sudo rm -rf ~/)"
+      ],
+      "mcp_servers": {
+        "vex-ao-chrome": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "chrome-devtools-mcp@latest",
+            "--isolated",
+            "--headless"
+          ]
+        }
+      },
+      "log_dir": "~/.vex/logs",
+      "log_formats": ["jsonl", "html"]
+    }
+  }
+}

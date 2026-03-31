@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services.agent_manager import AgentManagerService
+from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,7 @@ async def _persist_trace(
            total_duration_ms, total_cost_usd, total_tokens, created_at, completed_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            trace_id, batch_id, agent_id, agent_name, "claude-sonnet-4-5",
+            trace_id, batch_id, agent_id, agent_name, get_agent_profile().get("model", "claude-opus-4-6"),
             "completed", duration_ms, cost_usd, total_tokens, now, completed_at,
         ),
     )
