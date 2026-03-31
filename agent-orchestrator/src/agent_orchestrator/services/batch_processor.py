@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services.agent_manager import AgentManagerService
+from agent_orchestrator.services import nats_service
 from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile
 
 logger = logging.getLogger(__name__)
@@ -67,11 +68,38 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     await db.commit()
     logger.info("Batch %s: processing %d actions", batch_id, len(actions))
 
+    # Pre-generate agent IDs so we can publish cursor mapping before execution
+    agent_ids = [uuid.uuid4().hex for _ in actions]
+
+    # Load batch page_url for cursor overlay
+    batch_cursor = await db.execute("SELECT page_url FROM batches WHERE id = ?", (batch_id,))
+    batch_row = await batch_cursor.fetchone()
+    page_url = batch_row["page_url"] if batch_row else ""
+
+    # Publish cursor init via NATS so Chrome extension can show cursors
+    cursor_agents = []
+    for idx, action in enumerate(actions):
+        cursor_agents.append({
+            "agentId": agent_ids[idx],
+            "agentName": f"agent-{agent_ids[idx][:8]}",
+            "selector": action["selector"],
+            "colorIndex": idx,
+        })
+    cursor_payload = {
+        "type": "cursor_init",
+        "batchId": batch_id,
+        "pageUrl": page_url,
+        "agents": cursor_agents,
+    }
+    cursor_subject = f"vex.batch.{batch_id}.cursors"
+    logger.info("Publishing cursor init on %s: %d agents, pageUrl=%s", cursor_subject, len(cursor_agents), page_url)
+    await nats_service.publish(cursor_subject, cursor_payload)
+
     # Spawn one agent per action in parallel
     tasks = []
     for idx, action in enumerate(actions):
         tasks.append(
-            _process_action(project, batch_id, action, idx)
+            _process_action(project, batch_id, action, idx, agent_ids[idx])
         )
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -108,11 +136,13 @@ async def _process_action(
     batch_id: str,
     action,
     action_idx: int,
+    agent_id: str | None = None,
 ) -> bool:
     """Process a single action: create agent, send task, persist trace, cleanup."""
     db = await get_db()
     now = datetime.now(UTC).isoformat()
-    agent_id = uuid.uuid4().hex
+    if agent_id is None:
+        agent_id = uuid.uuid4().hex
     agent_name = f"agent-{batch_id[:8]}-{action_idx}"
     task_id = uuid.uuid4().hex
 

@@ -322,7 +322,7 @@ export function ProjectDetail() {
           {/* Tab Content */}
           <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
             {activeTab === "batches" && (
-              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onViewBatchAgents={(batchId) => navigate(`/project/${projectId}/batch/${batchId}/agents`)} onDeleteBatch={handleDeleteBatch} />
+              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onDeleteBatch={handleDeleteBatch} />
             )}
             {activeTab === "agents" && (
               <AgentsPanel

@@ -47,13 +47,14 @@
         "WebSearch",
         "WebFetch",
         "mcp__vex-ao-chrome",
-        "mcp__media-mcp",
-        "mcp__ElevenLabs",
-        "mcp__webdesign-playwright",
-        "mcp__mermaid",
-        "mcp__docs-playwright"
+        "mcp__plugin_media-plugin_media-mcp",
+        "mcp__plugin_media-plugin_ElevenLabs",
+        "mcp__plugin_web-design-plugin_webdesign-playwright",
+        "mcp__plugin_documentation-plugin_mermaid",
+        "mcp__plugin_documentation-plugin_docs-playwright"
       ],
       "disallowed_tools": [
+        "mcp__vex-chrome",
         "Bash(rm -rf /)",
         "Bash(rm -rf ~)",
         "Bash(rm -rf /*)",

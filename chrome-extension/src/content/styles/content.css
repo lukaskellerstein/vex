@@ -1434,3 +1434,53 @@
 .cs-style-toggle-on:hover {
   background: #b91c1c;
 }
+
+/* ─── Agent Cursors ─── */
+
+.vex-agent-outline {
+  position: fixed;
+  border: 2.5px solid;
+  border-radius: 2px;
+  pointer-events: none;
+  transition: border-color 0.5s, opacity 0.5s;
+}
+
+.vex-agent-cursor {
+  position: fixed;
+  pointer-events: none;
+  z-index: 2147483646;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  animation: vex-cursor-drift 4s ease-in-out infinite;
+  transition: opacity 2s;
+}
+
+.vex-agent-cursor--done {
+  animation: none;
+}
+
+.vex-agent-cursor--fading {
+  opacity: 0;
+}
+
+.vex-agent-cursor-name {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+@keyframes vex-cursor-drift {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(14px, -10px); }
+  40%  { transform: translate(-8px, 16px); }
+  60%  { transform: translate(18px, 8px); }
+  80%  { transform: translate(-4px, -12px); }
+  100% { transform: translate(0, 0); }
+}

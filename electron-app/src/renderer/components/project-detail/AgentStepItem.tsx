@@ -4,6 +4,7 @@ import {
   CheckCircle,
   MessageSquare,
   Wrench,
+  Plug,
   FileCode,
   GitBranch,
   Sparkles,
@@ -53,6 +54,36 @@ function formatTokens(n: number): string {
 }
 
 const COLLAPSIBLE_THRESHOLD = 300;
+
+/* ─── MCP tool name parser ──────────────────────── */
+
+interface McpToolInfo {
+  isMcp: true;
+  pluginName: string | null;
+  serverName: string;
+  toolName: string;
+}
+
+interface RegularToolInfo {
+  isMcp: false;
+  toolName: string;
+}
+
+type ToolInfo = McpToolInfo | RegularToolInfo;
+
+function parseToolName(raw: string): ToolInfo {
+  // MCP pattern: mcp__<server>__<tool>
+  const mcpMatch = raw.match(/^mcp__(.+?)__(.+)$/);
+  if (!mcpMatch) return { isMcp: false, toolName: raw };
+
+  const [, server, tool] = mcpMatch;
+  // Plugin pattern: plugin_<plugin-name>_<mcp-server-name>
+  const pluginMatch = server.match(/^plugin_(.+?)_(.+)$/);
+  if (pluginMatch) {
+    return { isMcp: true, pluginName: pluginMatch[1], serverName: pluginMatch[2], toolName: tool };
+  }
+  return { isMcp: true, pluginName: null, serverName: server, toolName: tool };
+}
 
 /* ─── Sub-components ─────────────────────────────── */
 
@@ -324,16 +355,186 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
     case "tool_call":
     case "tool_use": {
       // New format: tool_name in metadata. Legacy: content is "ToolName: {json}"
-      let toolName = (meta.tool_name as string) ?? "";
+      let rawToolName = (meta.tool_name as string) ?? "";
       let toolContent = content;
-      if (!toolName && content) {
+      if (!rawToolName && content) {
         const colonIdx = content.indexOf(":");
         if (colonIdx > 0 && colonIdx < 30) {
-          toolName = content.slice(0, colonIdx).trim();
+          rawToolName = content.slice(0, colonIdx).trim();
           toolContent = content.slice(colonIdx + 1).trim();
         }
       }
-      toolName = toolName || "tool";
+      rawToolName = rawToolName || "tool";
+      const toolInfo = parseToolName(rawToolName);
+      const pluginColor = "hsl(28, 85%, 58%)";
+      const mcpColor = "hsl(174, 72%, 46%)";
+      const skillColor = "hsl(330, 70%, 60%)";
+      const agentColor = "var(--status-info)";
+
+      // Skill tool call — use skill styling, with optional plugin badge
+      if (rawToolName === "Skill") {
+        let skillPluginName: string | null = null;
+        let skillName = "";
+        try {
+          const parsed = JSON.parse(toolContent);
+          const raw = parsed.skill ?? "";
+          const colonIdx = raw.indexOf(":");
+          if (colonIdx > 0) {
+            skillPluginName = raw.slice(0, colonIdx);
+            skillName = raw.slice(colonIdx + 1);
+          } else {
+            skillName = raw;
+          }
+        } catch {
+          /* not JSON, keep toolContent as-is */
+        }
+        return (
+          <div style={rowBase}>
+            <Sparkles size={14} style={iconStyle(skillColor)} />
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                {skillPluginName && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "2px 7px",
+                      borderRadius: "var(--radius)",
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      fontFamily: "var(--font-mono)",
+                      background: "color-mix(in srgb, " + pluginColor + " 18%, transparent)",
+                      color: pluginColor,
+                      border: "1px solid color-mix(in srgb, " + pluginColor + " 35%, transparent)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {skillPluginName}
+                  </span>
+                )}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "2px 8px",
+                    borderRadius: "var(--radius)",
+                    fontSize: "11px",
+                    fontWeight: 500,
+                    fontFamily: "var(--font-mono)",
+                    background: "color-mix(in srgb, " + skillColor + " 15%, transparent)",
+                    color: skillColor,
+                    border: "1px solid color-mix(in srgb, " + skillColor + " 30%, transparent)",
+                  }}
+                >
+                  {skillName || "Skill"}
+                </span>
+              </div>
+              {toolContent && <ToolInputPreview toolName="Skill" content={toolContent} />}
+            </div>
+            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+          </div>
+        );
+      }
+
+      // Agent tool call — use subagent styling
+      if (rawToolName === "Agent") {
+        return (
+          <div style={rowBase}>
+            <GitBranch size={14} style={iconStyle(agentColor)} />
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "2px 8px",
+                  borderRadius: "var(--radius)",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  fontFamily: "var(--font-mono)",
+                  background: "color-mix(in srgb, " + agentColor + " 15%, transparent)",
+                  color: agentColor,
+                  border: "1px solid color-mix(in srgb, " + agentColor + " 30%, transparent)",
+                  alignSelf: "flex-start",
+                }}
+              >
+                Agent
+              </span>
+              {toolContent && <ToolInputPreview toolName="Agent" content={toolContent} />}
+            </div>
+            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+          </div>
+        );
+      }
+
+      if (toolInfo.isMcp) {
+        return (
+          <div style={rowBase}>
+            <Plug size={14} style={iconStyle(mcpColor)} />
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                {toolInfo.pluginName && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "2px 7px",
+                      borderRadius: "var(--radius)",
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      fontFamily: "var(--font-mono)",
+                      background: "color-mix(in srgb, " + pluginColor + " 18%, transparent)",
+                      color: pluginColor,
+                      border: "1px solid color-mix(in srgb, " + pluginColor + " 35%, transparent)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {toolInfo.pluginName}
+                  </span>
+                )}
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "2px 7px",
+                    borderRadius: "var(--radius)",
+                    fontSize: "10px",
+                    fontWeight: 500,
+                    fontFamily: "var(--font-mono)",
+                    background: "color-mix(in srgb, " + mcpColor + " 12%, transparent)",
+                    color: mcpColor,
+                    border: "1px solid color-mix(in srgb, " + mcpColor + " 25%, transparent)",
+                  }}
+                >
+                  {toolInfo.serverName}
+                </span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "2px 8px",
+                    borderRadius: "var(--radius)",
+                    fontSize: "11px",
+                    fontWeight: 500,
+                    fontFamily: "var(--font-mono)",
+                    background: "color-mix(in srgb, var(--primary) 15%, transparent)",
+                    color: "var(--primary)",
+                    border: "1px solid color-mix(in srgb, var(--primary) 30%, transparent)",
+                  }}
+                >
+                  {toolInfo.toolName}
+                </span>
+              </div>
+              {toolContent && toolInfo.toolName !== "Edit" && (
+                <ToolInputPreview toolName={toolInfo.toolName} content={toolContent} />
+              )}
+            </div>
+            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+          </div>
+        );
+      }
+
       return (
         <div style={rowBase}>
           <Wrench size={14} style={iconStyle("var(--primary)")} />
@@ -353,9 +554,11 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
                 alignSelf: "flex-start",
               }}
             >
-              {toolName}
+              {toolInfo.toolName}
             </span>
-            {toolContent && toolName !== "Edit" && <ToolInputPreview toolName={toolName} content={toolContent} />}
+            {toolContent && toolInfo.toolName !== "Edit" && (
+              <ToolInputPreview toolName={toolInfo.toolName} content={toolContent} />
+            )}
           </div>
           <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
@@ -468,11 +671,11 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
             ...rowBase,
             padding: "10px 12px",
             borderRadius: "var(--radius)",
-            borderLeft: "3px solid hsl(174, 72%, 56%)",
-            background: "color-mix(in srgb, hsl(174, 72%, 56%) 5%, transparent)",
+            borderLeft: "3px solid hsl(330, 70%, 60%)",
+            background: "color-mix(in srgb, hsl(330, 70%, 60%) 5%, transparent)",
           }}
         >
-          <Sparkles size={14} style={iconStyle("hsl(174, 72%, 56%)")} />
+          <Sparkles size={14} style={iconStyle("hsl(330, 70%, 60%)")} />
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
@@ -482,8 +685,8 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: "11px",
-                  color: "hsl(174, 72%, 56%)",
-                  background: "color-mix(in srgb, hsl(174, 72%, 56%) 12%, transparent)",
+                  color: "hsl(330, 70%, 60%)",
+                  background: "color-mix(in srgb, hsl(330, 70%, 60%) 12%, transparent)",
                   padding: "2px 8px",
                   borderRadius: "var(--radius)",
                 }}
@@ -508,8 +711,8 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
             alignItems: "flex-start",
             gap: "12px",
             padding: "8px 12px",
-            borderLeft: "3px solid hsl(174, 72%, 56%)",
-            background: "color-mix(in srgb, hsl(174, 72%, 56%) 3%, transparent)",
+            borderLeft: "3px solid hsl(330, 70%, 60%)",
+            background: "color-mix(in srgb, hsl(330, 70%, 60%) 3%, transparent)",
             borderRadius: "0 0 var(--radius) var(--radius)",
           }}
         >

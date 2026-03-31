@@ -12,6 +12,7 @@ import { Toolbar } from "./components/Toolbar";
 import { EditMode } from "./components/EditMode";
 import { ResizeMode } from "./components/ResizeMode";
 import { StylePanel } from "./components/StylePanel";
+import { AgentCursors } from "./components/AgentCursors";
 
 const HOST_ID = "__web-selector-root";
 
@@ -291,6 +292,9 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   return (
     <>
+      {/* Agent cursors — always active, independent of editing UI */}
+      <AgentCursors natsClient={natsClient} />
+
       {isActive && (
         <Toolbar
           mode={mode}

@@ -128,7 +128,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 "append": profile.get("system_prompt", ""),
             },
             cwd=project_path,
-            setting_sources=["user", "project"],
+            setting_sources=["project"],
             max_turns=profile.get("max_turns"),
             allowed_tools=profile.get("allowed_tools", []),
             disallowed_tools=profile.get("disallowed_tools", []),
@@ -253,7 +253,10 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     data = getattr(message, "data", {})
                     if subtype == "init":
                         await self._log_agent_init(
-                            agent_id, data, profile, intended_plugins,
+                            agent_id,
+                            data,
+                            profile,
+                            intended_plugins,
                             session.file_logger,
                         )
                     continue
@@ -265,7 +268,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             log_line = f"[thinking] {block.thinking[:200]}"
                             session.log_buffer.append(log_line)
                             if session.file_logger:
-                                session.file_logger.event("thinking", block.thinking[:2000])
+                                session.file_logger.event(
+                                    "thinking", block.thinking[:2000]
+                                )
                             self._mark_previous_steps_past(session)
                             step_data = {
                                 "type": "thinking",
@@ -321,10 +326,16 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             log_line = f"[tool] {block.name}"
                             session.log_buffer.append(log_line)
                             if session.file_logger:
-                                input_preview = json.dumps(block.input)[:2000] if block.input else ""
+                                input_preview = (
+                                    json.dumps(block.input)[:2000]
+                                    if block.input
+                                    else ""
+                                )
                                 session.file_logger.event(
-                                    "tool_call", input_preview,
-                                    tool_name=block.name, tool_input=block.input,
+                                    "tool_call",
+                                    input_preview,
+                                    tool_name=block.name,
+                                    tool_input=block.input,
                                 )
                             self._mark_previous_steps_past(session)
                             input_json = json.dumps(block.input) if block.input else ""
@@ -383,7 +394,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 )
                             session.log_buffer.append(f"[result] {content_text[:200]}")
                             if session.file_logger:
-                                session.file_logger.event("tool_result", content_text[:2000])
+                                session.file_logger.event(
+                                    "tool_result", content_text[:2000]
+                                )
                             self._mark_previous_steps_past(session)
                             step_data = {
                                 "type": "tool_result",
@@ -412,7 +425,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     log_line = f"[progress] {getattr(message, 'progress', '')}"
                     session.log_buffer.append(log_line)
                     if session.file_logger:
-                        session.file_logger.event("progress", getattr(message, "progress", ""))
+                        session.file_logger.event(
+                            "progress", getattr(message, "progress", "")
+                        )
                     now_ts = datetime.now(UTC).isoformat()
                     self._mark_previous_steps_past(session)
                     step_data = {
@@ -553,7 +568,10 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             for p in loaded_plugins:
                 name = p.get("name", "?") if isinstance(p, dict) else str(p)
                 path = p.get("path", "") if isinstance(p, dict) else ""
-                print(f"    {_CYAN}[PLUGIN]{_RESET} {name}" + (f"  {_DIM}{path}{_RESET}" if path else ""))
+                print(
+                    f"    {_CYAN}[PLUGIN]{_RESET} {name}"
+                    + (f"  {_DIM}{path}{_RESET}" if path else "")
+                )
         else:
             print(f"    {_DIM}(none){_RESET}")
 
@@ -581,7 +599,10 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             for m in loaded_mcp:
                 name = m.get("name", "?") if isinstance(m, dict) else str(m)
                 status = m.get("status", "?") if isinstance(m, dict) else ""
-                print(f"    {_BLUE}[MCP]{_RESET}    {name}" + (f"  {_DIM}({status}){_RESET}" if status else ""))
+                print(
+                    f"    {_BLUE}[MCP]{_RESET}    {name}"
+                    + (f"  {_DIM}({status}){_RESET}" if status else "")
+                )
 
         print(f"{_GREEN}{'─' * 60}{_RESET}\n")
 

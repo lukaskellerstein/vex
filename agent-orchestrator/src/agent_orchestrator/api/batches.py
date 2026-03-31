@@ -249,6 +249,53 @@ async def get_batch_trace(batch_id: str):
     return {"traces": traces}
 
 
+@router.get("/cursors")
+async def get_active_cursors(page_url: str):
+    """Return cursor data for all actively processing batches on a given page URL."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT id FROM batches WHERE page_url = ? AND status = 'processing'",
+        (page_url,),
+    )
+    batch_rows = await cursor.fetchall()
+
+    all_agents = []
+    for batch_row in batch_rows:
+        batch_id = batch_row["id"]
+        # Get actions (selectors) for this batch
+        action_cursor = await db.execute(
+            "SELECT sequence_index, selector FROM actions WHERE batch_id = ? ORDER BY sequence_index",
+            (batch_id,),
+        )
+        actions = await action_cursor.fetchall()
+
+        # Get tasks (agent IDs) for this batch
+        task_cursor = await db.execute(
+            "SELECT agent_id FROM tasks WHERE batch_id = ? ORDER BY created_at",
+            (batch_id,),
+        )
+        tasks = await task_cursor.fetchall()
+
+        # Match actions to agents by index
+        for idx, action in enumerate(actions):
+            if idx >= len(tasks):
+                continue
+            agent_id = tasks[idx]["agent_id"]
+
+            # Use same format as Electron UI: agent-{agentId[:8]}
+            agent_name = f"agent-{agent_id[:8]}"
+
+            all_agents.append({
+                "agentId": agent_id,
+                "agentName": agent_name,
+                "selector": action["selector"],
+                "colorIndex": idx,
+                "batchId": batch_id,
+            })
+
+    return {"agents": all_agents}
+
+
 @router.delete(
     "/projects/{project_id}/batches/{batch_id}",
     status_code=status.HTTP_204_NO_CONTENT,

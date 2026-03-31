@@ -52,7 +52,6 @@ interface BatchCardProps {
   projectId: string;
   onViewTrace?: (traceId: string) => void;
   onViewAgent?: (agentId: string) => void;
-  onViewBatchAgents?: (batchId: string) => void;
   onDelete?: (batchId: string) => void;
 }
 
@@ -124,7 +123,7 @@ interface TaskInfo {
   status: string;
 }
 
-export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBatchAgents, onDelete }: BatchCardProps) {
+export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onDelete }: BatchCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [loadedActions, setLoadedActions] = useState<BatchAction[] | null>(null);
   const [actionTasks, setActionTasks] = useState<TaskInfo[]>([]);
@@ -194,6 +193,7 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
         background: "var(--surface)",
         overflow: "hidden",
         transition: "border-color 0.15s",
+        flexShrink: 0,
       }}
     >
       {/* Header */}
@@ -280,19 +280,6 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
 
         {agentCount > 0 && (
           <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewBatchAgents?.(batch.id);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onViewBatchAgents?.(batch.id);
-              }
-            }}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -300,18 +287,8 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
               padding: "2px 6px",
               borderRadius: "9999px",
               flexShrink: 0,
-              cursor: "pointer",
-              transition: "all 0.2s",
               background: hasRunningAgents ? "hsla(142, 69%, 45%, 0.06)" : "var(--surface-elevated)",
               border: `1px solid ${hasRunningAgents ? "hsla(142, 69%, 45%, 0.2)" : "var(--border)"}`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "hsla(142, 69%, 45%, 0.12)";
-              e.currentTarget.style.borderColor = "hsla(142, 69%, 45%, 0.3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = hasRunningAgents ? "hsla(142, 69%, 45%, 0.06)" : "var(--surface-elevated)";
-              e.currentTarget.style.borderColor = hasRunningAgents ? "hsla(142, 69%, 45%, 0.2)" : "var(--border)";
             }}
           >
             {Array.from({ length: agentCount }).map((_, i) => (
@@ -474,7 +451,7 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
   const ActionIcon = ACTION_ICONS[action.type] || MousePointer;
   const badgeColor = TYPE_BADGE_COLORS[action.type] || "#6b7280";
 
-  const instruction = (action.instruction || action.description || "") as string;
+  const instruction = (action.instruction || (action as any).prompt || action.description || "") as string;
   const screenshotBefore = (action as any).screenshot_before as string | null;
   const screenshotAfter = (action as any).screenshot_after as string | null;
   const deltas = (action as any).deltas as any[] | null;
@@ -577,9 +554,12 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
       {expanded && (
         <div style={{ padding: "4px 16px 12px 42px" }}>
           {instruction && (
-            <p style={{ fontSize: "12px", color: "var(--foreground-muted)", lineHeight: 1.5, margin: "0 0 8px" }}>
-              {instruction}
-            </p>
+            <div style={{ marginBottom: "8px" }}>
+              <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--foreground-dim)", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "2px" }}>Prompt</span>
+              <p style={{ fontSize: "12px", color: "var(--foreground-muted)", lineHeight: 1.5, margin: 0 }}>
+                {instruction}
+              </p>
+            </div>
           )}
 
           {(action.before || action.after) && (
@@ -613,24 +593,71 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
           {(screenshotBefore || screenshotAfter) && (
             <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
               {screenshotBefore && (
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>Before</span>
-                  <img src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotBefore)}`} alt="Before"
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid var(--border)" }} />
-                </div>
+                <ScreenshotThumbnail src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotBefore)}`} label="Before" />
               )}
               {screenshotAfter && (
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>After</span>
-                  <img src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotAfter)}`} alt="After"
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid var(--border)" }} />
-                </div>
+                <ScreenshotThumbnail src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotAfter)}`} label="After" />
               )}
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function ScreenshotThumbnail({ src, label }: { src: string; label: string }) {
+  const [fullscreen, setFullscreen] = useState(false);
+
+  return (
+    <>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>{label}</span>
+        <img
+          src={src}
+          alt={label}
+          onClick={(e) => { e.stopPropagation(); setFullscreen(true); }}
+          style={{
+            width: "120px",
+            height: "80px",
+            objectFit: "cover",
+            borderRadius: "4px",
+            border: "1px solid var(--border)",
+            cursor: "pointer",
+            transition: "border-color 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+        />
+      </div>
+      {fullscreen && (
+        <div
+          onClick={() => setFullscreen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0, 0, 0, 0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={src}
+            alt={label}
+            style={{
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              objectFit: "contain",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+            }}
+          />
+        </div>
+      )}
+    </>
   );
 }
 

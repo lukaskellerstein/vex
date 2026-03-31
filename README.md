@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="logo-icon.png" alt="Vex" width="400" />
+  <img src="docs/logo.png" alt="Vex" width="420" />
 </p>
-
-<h1 align="center">Vex</h1>
 
 <p align="center">
   <strong>Visual editing in the browser. AI-powered code changes in your codebase.</strong>
@@ -25,14 +23,24 @@
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
+  <a href="#how-it-works">How It Works</a> &middot;
   <a href="#api-reference">API Reference</a> &middot;
-  <a href="#project-structure">Project Structure</a> &middot;
   <a href="#contributing">Contributing</a>
 </p>
 
 ---
 
-Vex is a visual web development tool that lets you edit live websites in your browser — resize elements, change styles, swap images, generate sections with AI — then sends those changes to an AI coding agent that applies them to your actual source code. It works with any framework: React, Vue, Svelte, Next.js, Django, plain HTML, or anything that renders in a browser.
+> **Edit websites visually. Let AI write the code.**
+
+Vex is a visual web development tool that lets you edit live websites in your browser — resize elements, change styles, swap images, generate sections with AI — then sends those changes to an AI coding agent that applies them to your actual source code. Framework agnostic: works with React, Vue, Svelte, Next.js, Django, plain HTML, or anything that renders in a browser.
+
+## How It Works
+
+1. **Edit visually** — Open any web project in Chrome and use the Vex extension to select, resize, restyle, and rearrange elements
+2. **Capture intent** — Edits are recorded as structured actions (12 types including style changes, element manipulation, AI generation)
+3. **Batch & send** — Queue multiple edits and send them as a single batch to the Agent Orchestrator
+4. **AI applies changes** — An AI coding agent reads your source code and applies the visual changes as idiomatic code for your framework
+5. **Live feedback** — Results and agent logs stream back to the extension in real-time via NATS
 
 ## Features
 
@@ -43,6 +51,19 @@ Vex is a visual web development tool that lets you edit live websites in your br
 - **Framework Agnostic** — records pure visual intent; the AI agent writes idiomatic code for your specific stack
 - **Batch Operations** — queue multiple edits and send them as a single batch to the agent
 - **Real-time Feedback** — NATS-powered pub/sub delivers generation results and agent logs back to the extension instantly
+- **Execution Traces** — full visibility into agent steps, tool calls, token usage, and cost per batch
+
+### Supported Frameworks
+
+Vex auto-detects your project's framework and generates idiomatic code accordingly:
+
+| Category | Frameworks |
+|----------|-----------|
+| **React ecosystem** | React, Next.js, Remix, Gatsby |
+| **Vue ecosystem** | Vue, Nuxt |
+| **Other SPA** | Svelte, SvelteKit, Angular, Astro |
+| **Server-side** | Django, Rails |
+| **Static** | Plain HTML/CSS/JS |
 
 ## Architecture
 
@@ -68,13 +89,7 @@ graph TD
     Agent -- "applies changes" --> Codebase[Project Codebase]
 ```
 
-**How it works:**
-
-1. You visually edit elements in Chrome using the extension
-2. Edits are captured as structured actions (12 types: select, insert, editText, delete, duplicate, move, wrap, resize, styleChange, replaceImage, generateSection, copyStyle)
-3. Actions are batched and sent via REST to the Agent Orchestrator
-4. The Agent Orchestrator routes tasks to AI coding agents that apply changes to your actual source files
-5. Results and logs stream back to the extension in real-time via NATS WebSocket
+The Chrome Extension captures visual edits as structured actions. The Agent Orchestrator receives batches via REST, routes them to AI coding agents (powered by Claude), and streams results back to the browser in real-time via NATS WebSocket.
 
 ## Quick Start
 
