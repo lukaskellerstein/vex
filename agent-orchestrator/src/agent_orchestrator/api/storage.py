@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Response, status
+from fastapi.responses import FileResponse
 
 from agent_orchestrator.db.database import DB_PATH, DATA_DIR
 
@@ -27,6 +28,16 @@ async def storage_stats():
         "screenshots_bytes": screenshots_bytes,
         "total_bytes": db_bytes + screenshots_bytes,
     }
+
+
+@router.get("/storage/screenshot")
+async def serve_screenshot(path: str):
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return Response(status_code=404)
+    if not str(file_path).startswith(str(DATA_DIR)):
+        return Response(status_code=403)
+    return FileResponse(file_path, media_type="image/jpeg")
 
 
 @router.delete("/storage/screenshots", status_code=status.HTTP_200_OK)

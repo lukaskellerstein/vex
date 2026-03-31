@@ -335,8 +335,11 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
     if (!editing) return;
 
     const el = editing as HTMLElement;
+    let finishing = false;
 
     const finish = async () => {
+      if (finishing) return;
+      finishing = true;
       el.contentEditable = "false";
 
       // Strip browser artifacts

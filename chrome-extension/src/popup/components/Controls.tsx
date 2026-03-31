@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Action } from "../../shared/types";
+import { Pencil } from "lucide-react";
+import type { Action, SelectAction } from "../../shared/types";
 import { AGENT_MANAGER_URL } from "../../shared/messages";
 import type { Project } from "./ProjectSelector";
+
+/** Normalize actions for the backend API.
+ *  SelectAction uses `screenshot` but the backend expects `screenshotBefore`.
+ *  Also maps element metadata fields to backend-expected snake_case names. */
+function normalizeActions(actions: Action[]) {
+  return actions.map((action) => {
+    if (action.type === "select") {
+      const { screenshot, ...rest } = action as SelectAction;
+      return { ...rest, screenshotBefore: screenshot, screenshotAfter: null };
+    }
+    return action;
+  });
+}
 
 interface ControlsProps {
   activeTabId: number | null;
@@ -18,6 +32,7 @@ interface ControlsProps {
 }
 
 export function Controls({
+  activeTabId,
   selectorIsActive,
   actions,
   pageUrl,
@@ -34,6 +49,7 @@ export function Controls({
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [editingProject, setEditingProject] = useState(false);
 
   // Fetch projects
   useEffect(() => {
@@ -67,7 +83,7 @@ export function Controls({
       batch: {
         pageUrl,
         pageTitle,
-        actions,
+        actions: normalizeActions(actions),
         timestamp: new Date().toISOString(),
       },
     };
@@ -104,17 +120,22 @@ export function Controls({
 
       setUploadProgress(100);
       setSendState("sent");
-      setTimeout(() => {
-        setSendState("idle");
-        setUploadProgress(0);
-      }, 2000);
+
+      // Clear actions from extension and reload the page to remove visual changes
+      await onClear();
+      if (activeTabId) {
+        chrome.tabs.reload(activeTabId);
+      }
+
+      // Close the popup after a brief delay so the user sees "Sent ✓"
+      setTimeout(() => window.close(), 600);
     } catch {
       setSendState("idle");
       setUploadProgress(0);
       setError("Agent Manager not reachable. Is the server running?");
       setTimeout(() => setError(null), 4000);
     }
-  }, [actions, pageUrl, pageTitle, projectId, onRefreshState]);
+  }, [actions, pageUrl, pageTitle, projectId, activeTabId, onRefreshState, onClear]);
 
   const sendTitle =
     sendState === "sending"
@@ -157,22 +178,42 @@ export function Controls({
         </button>
       </div>
 
-      {/* Send row: project selector + send button */}
+      {/* Send row: project name (or dropdown) + send button */}
       <div className="send-bar">
-        <span className="send-bar-label">Send to</span>
-        <select
-          className="send-bar-select"
-          value={projectId ?? ""}
-          onChange={(e) => onProjectChange(e.target.value)}
-          disabled={projectsLoading}
-        >
-          <option value="" disabled>
-            {projectsLoading ? "Loading..." : projects.length === 0 ? "No projects" : "Select project..."}
-          </option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        {projectId && !editingProject ? (
+          <>
+            <span className="send-bar-project-name">
+              {projects.find((p) => p.id === projectId)?.name ?? "Unknown"}
+            </span>
+            <button
+              className="send-bar-edit-btn"
+              onClick={() => setEditingProject(true)}
+              title="Change project"
+            >
+              <Pencil size={12} />
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="send-bar-label">Send to</span>
+            <select
+              className="send-bar-select"
+              value={projectId ?? ""}
+              onChange={(e) => {
+                onProjectChange(e.target.value);
+                setEditingProject(false);
+              }}
+              disabled={projectsLoading}
+            >
+              <option value="" disabled>
+                {projectsLoading ? "Loading..." : projects.length === 0 ? "No projects" : "Select project..."}
+              </option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </>
+        )}
 
         <button
           className={sendBtnClass}

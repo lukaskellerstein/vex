@@ -24,7 +24,7 @@ class AgentAdapter(ABC):
     capabilities: list[str]
 
     @abstractmethod
-    async def start(self, project_id: str, project_path: str) -> AgentProcess:
+    async def start(self, project_id: str, project_path: str, agent_id: str | None = None) -> AgentProcess:
         """Start an agent process for the given project."""
 
     @abstractmethod

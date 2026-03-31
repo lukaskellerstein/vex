@@ -55,6 +55,10 @@ export interface SelectAction {
   childCount: number;
   instruction: string;
   screenshot: string;
+  url: string;
+  accessibilityPath: string | null;
+  reactComponent: string | null;
+  reactSourceFile: string | null;
 }
 
 export interface InsertAction extends BaseAction {

@@ -46,7 +46,7 @@ class AgentManagerService:
         await self._publish_status(agent_id, "starting")
 
         try:
-            process = await adapter.start(project_id, project_path)
+            process = await adapter.start(project_id, project_path, agent_id=agent_id)
             now = datetime.now(timezone.utc).isoformat()
             await db.execute(
                 "UPDATE agents SET status = ?, pid = ?, last_heartbeat = ? WHERE id = ?",

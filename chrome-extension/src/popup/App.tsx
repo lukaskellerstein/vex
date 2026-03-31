@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EditorView, keymap } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
-import { markdown } from "@codemirror/lang-markdown";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import type { Action } from "../shared/types";
 import type { GetStateResponse } from "../shared/messages";
 import { ConnectionStatus } from "./components/ConnectionStatus";
@@ -49,55 +44,51 @@ export function App() {
   const [selectorIsActive, setSelectorIsActive] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [tabUrl, setTabUrl] = useState<string>("");
+  const [loadedProjects, setLoadedProjects] = useState<Project[]>([]);
   const autoMatchedRef = useRef(false);
 
-  const handleProjectsLoaded = useCallback(
-    (projects: Project[]) => {
-      if (autoMatchedRef.current || !tabUrl || projects.length === 0) return;
-      autoMatchedRef.current = true;
+  // Auto-match project when both tabUrl and projects are available
+  useEffect(() => {
+    if (autoMatchedRef.current || !tabUrl || loadedProjects.length === 0) return;
+    autoMatchedRef.current = true;
 
-      const matches = projects.filter((p) => {
-        if (!p.devServerUrl) return false;
-        try {
-          const projectOrigin = new URL(p.devServerUrl).origin;
-          const tabOrigin = new URL(tabUrl).origin;
-          return tabOrigin === projectOrigin;
-        } catch {
-          return false;
-        }
-      });
+    const matches = loadedProjects.filter((p) => {
+      if (!p.dev_server_url) return false;
+      try {
+        return new URL(p.dev_server_url).origin === new URL(tabUrl).origin;
+      } catch {
+        return false;
+      }
+    });
 
-      // Also match localhost:{port} patterns
-      if (matches.length === 0) {
-        try {
-          const tabParsed = new URL(tabUrl);
-          if (tabParsed.hostname === "localhost" && tabParsed.port) {
-            const portMatches = projects.filter((p) => {
-              if (!p.devServerUrl) return false;
-              try {
-                const pUrl = new URL(p.devServerUrl);
-                return pUrl.hostname === "localhost" && pUrl.port === tabParsed.port;
-              } catch {
-                return false;
-              }
-            });
-            if (portMatches.length === 1) {
-              setProjectId(portMatches[0].id);
-              return;
+    if (matches.length === 1) {
+      setProjectId(matches[0].id);
+      return;
+    }
+
+    // Fallback: match localhost:{port}
+    if (matches.length === 0) {
+      try {
+        const tabParsed = new URL(tabUrl);
+        if (tabParsed.hostname === "localhost" && tabParsed.port) {
+          const portMatches = loadedProjects.filter((p) => {
+            if (!p.dev_server_url) return false;
+            try {
+              return new URL(p.dev_server_url).hostname === "localhost" &&
+                new URL(p.dev_server_url).port === tabParsed.port;
+            } catch {
+              return false;
             }
+          });
+          if (portMatches.length === 1) {
+            setProjectId(portMatches[0].id);
           }
-        } catch {
-          // invalid tab URL
         }
+      } catch {
+        // invalid tab URL
       }
-
-      if (matches.length === 1) {
-        setProjectId(matches[0].id);
-      }
-      // If multiple matches or no match, leave as "Select a project"
-    },
-    [tabUrl],
-  );
+    }
+  }, [tabUrl, loadedProjects]);
 
   const refreshState = useCallback(async () => {
     if (!activeTabId) return;
@@ -147,11 +138,6 @@ export function App() {
     await refreshState();
   }, [activeTabId, refreshState]);
 
-  const handleUpdateInstruction = useCallback(async (index: number, instruction: string) => {
-    await sendToContent(activeTabId, { action: "updateInstruction", index, instruction });
-    await refreshState();
-  }, [activeTabId, refreshState]);
-
   useEffect(() => {
     (async () => {
       const [tab] = await chrome.tabs.query({
@@ -188,7 +174,7 @@ export function App() {
         pageTitle={pageTitle}
         projectId={projectId}
         onProjectChange={setProjectId}
-        onProjectsLoaded={handleProjectsLoaded}
+        onProjectsLoaded={setLoadedProjects}
         onToggle={handleToggle}
         onClear={handleClear}
         onRefreshState={refreshState}
@@ -198,7 +184,6 @@ export function App() {
         actions={actions}
         activeTabId={activeTabId}
         onRemove={handleRemove}
-        onUpdateInstruction={handleUpdateInstruction}
       />
 
       <footer className="footer">
@@ -215,29 +200,70 @@ export function App() {
         </span>
       </footer>
 
+      <ResizeHandle />
     </div>
   );
 }
 
+// --- Resize handle for popup ---
+
+function ResizeHandle() {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.screenX;
+    const startY = e.screenY;
+    const startW = document.body.offsetWidth;
+    const startH = document.body.offsetHeight;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const newW = Math.min(800, Math.max(380, startW - (ev.screenX - startX)));
+      const newH = Math.min(600, Math.max(200, startH + (ev.screenY - startY)));
+      document.body.style.width = newW + "px";
+      document.body.style.height = newH + "px";
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
+
+  return <div className="resize-handle" onMouseDown={handleMouseDown} />;
+}
+
 // --- Action list for popup (matches toolbar style) ---
 
+import {
+  MousePointer, Type as TypeIcon, Palette, Move as MoveIcon, Copy,
+  Trash2, LayoutGrid, Image as ImageIcon, Maximize2, Scissors, PaintBucket,
+} from "lucide-react";
+
+// Aligned with chrome-extension/src/popup/components/ActionList.tsx and electron-app BatchCard.tsx
 const ACTION_COLORS: Record<string, string> = {
-  select: "#3b82f6", insert: "#22c55e", editText: "#a855f7",
-  delete: "#ef4444", duplicate: "#f59e0b", move: "#06b6d4",
-  wrap: "#8b5cf6", resize: "#ec4899", styleChange: "#f97316",
-  replaceImage: "#14b8a6", generateSection: "#6366f1", copyStyle: "#84cc16",
+  select: "#3b82f6", insert: "#22c55e", editText: "#eab308",
+  delete: "#ef4444", duplicate: "#06b6d4", move: "#8b5cf6",
+  wrap: "#64748b", resize: "#a855f7", styleChange: "#f97316",
+  replaceImage: "#ec4899", generateSection: "#14b8a6", copyStyle: "#6366f1",
+};
+
+const ACTION_ICONS: Record<string, React.ElementType> = {
+  select: MousePointer, insert: LayoutGrid, editText: TypeIcon,
+  delete: Trash2, duplicate: Copy, move: MoveIcon,
+  wrap: Scissors, resize: Maximize2, styleChange: Palette,
+  replaceImage: ImageIcon, generateSection: LayoutGrid, copyStyle: PaintBucket,
 };
 
 function PopupActionList({
   actions,
   activeTabId,
   onRemove,
-  onUpdateInstruction,
 }: {
   actions: Action[];
   activeTabId: number | null;
   onRemove: (i: number) => void;
-  onUpdateInstruction: (i: number, instruction: string) => void;
 }) {
   if (actions.length === 0) return null;
 
@@ -254,7 +280,6 @@ function PopupActionList({
           action={action}
           index={i}
           onRemove={onRemove}
-          onUpdateInstruction={onUpdateInstruction}
           onMouseEnter={() => highlightAction(i)}
           onMouseLeave={() => highlightAction(null)}
         />
@@ -267,25 +292,16 @@ function PopupActionItem({
   action,
   index,
   onRemove,
-  onUpdateInstruction,
   onMouseEnter,
   onMouseLeave,
 }: {
   action: Action;
   index: number;
   onRemove: (i: number) => void;
-  onUpdateInstruction: (i: number, instruction: string) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const editorContainerRef = useRef<HTMLDivElement>(null);
-  const editorViewRef = useRef<EditorView | null>(null);
-
-  const selector = action.selector.length > 22
-    ? action.selector.slice(0, 19) + "..."
-    : action.selector;
   const instruction = "instruction" in action ? (action as any).instruction : "";
   const prompt = "prompt" in action ? (action as any).prompt : "";
   const fullPrompt = instruction || prompt;
@@ -294,98 +310,22 @@ function PopupActionItem({
   const screenshotAfter = "screenshotAfter" in action ? (action as any).screenshotAfter : "";
   const color = ACTION_COLORS[action.type] ?? "#888";
   const num = index + 1;
-  const shortInstr = fullPrompt.length > 18 ? fullPrompt.slice(0, 15) + "..." : fullPrompt;
-
-  const startEditing = useCallback(() => {
-    setEditing(true);
-    setExpanded(false);
-  }, []);
-
-  const saveEdit = useCallback(() => {
-    const text = editorViewRef.current?.state.doc.toString() ?? "";
-    onUpdateInstruction(index, text);
-    setEditing(false);
-  }, [index, onUpdateInstruction]);
-
-  const cancelEdit = useCallback(() => {
-    setEditing(false);
-  }, []);
-
-  // Mount CodeMirror when editing starts
-  useEffect(() => {
-    if (!editing || !editorContainerRef.current) return;
-
-    const saveRef = { current: saveEdit };
-    const cancelRef = { current: cancelEdit };
-
-    const view = new EditorView({
-      state: EditorState.create({
-        doc: fullPrompt,
-        extensions: [
-          keymap.of([
-            { key: "Mod-Enter", run: () => { saveRef.current(); return true; } },
-            { key: "Escape", run: () => { cancelRef.current(); return true; } },
-            ...defaultKeymap,
-            ...historyKeymap,
-          ]),
-          history(),
-          markdown(),
-          syntaxHighlighting(defaultHighlightStyle),
-          EditorView.lineWrapping,
-          EditorView.theme({
-            "&": {
-              fontSize: "11px",
-              fontFamily: "monospace",
-              border: "1px solid #3d3d5c",
-              borderRadius: "4px",
-              minHeight: "80px",
-              maxHeight: "160px",
-              overflow: "auto",
-              background: "#1a1a2e",
-            },
-            "&.cm-focused": {
-              outline: "none",
-              borderColor: "#4F46E5",
-              boxShadow: "0 0 0 2px rgba(79,70,229,0.2)",
-            },
-            ".cm-content": {
-              padding: "6px 8px",
-              color: "#cdd6f4",
-              caretColor: "#cdd6f4",
-            },
-            ".cm-cursor": { borderLeftColor: "#cdd6f4" },
-            ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.03)" },
-            ".cm-selectionBackground": { backgroundColor: "rgba(79,70,229,0.3) !important" },
-            ".cm-gutters": { display: "none" },
-          }),
-        ],
-      }),
-      parent: editorContainerRef.current,
-    });
-
-    editorViewRef.current = view;
-    view.focus();
-
-    return () => {
-      view.destroy();
-      editorViewRef.current = null;
-    };
-  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="popup-action-item-wrapper" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div
         className={`popup-action-item ${expanded ? "popup-action-item-expanded" : ""}`}
-        onClick={() => { if (!editing) setExpanded((v) => !v); }}
+        onClick={() => setExpanded((v) => !v)}
       >
         <span className="popup-action-num">{num}</span>
         <span className="popup-action-badge" style={{ backgroundColor: color }}>
+          {(() => { const I = ACTION_ICONS[action.type]; return I ? <I size={10} /> : null; })()}
           {action.type}
         </span>
-        <span className="popup-action-sel" title={action.selector}>{selector}</span>
-        {shortInstr && !editing && (
+        <span className="popup-action-sel" title={action.selector}>{action.selector}</span>
+        {fullPrompt && (
           <span className="popup-action-instr" title={fullPrompt}>
-            {shortInstr}
+            {fullPrompt}
           </span>
         )}
         <span style={{ flex: 1 }} />
@@ -397,7 +337,7 @@ function PopupActionItem({
       </div>
 
       {/* Inline expanded detail */}
-      {expanded && !editing && (
+      {expanded && (
         <div className="popup-action-detail">
           <div className="popup-detail-row">
             <span className="popup-detail-label">Selector</span>
@@ -450,7 +390,16 @@ function PopupActionItem({
             </div>
           )}
 
-          <button className="popup-action-edit-btn" onClick={startEditing}>Edit Prompt</button>
+          {"before" in action && "after" in action && (
+            <div className="popup-detail-row">
+              <span className="popup-detail-label">Text change</span>
+              <div className="popup-detail-value">
+                <span style={{ textDecoration: "line-through", color: "#f38ba8" }}>{(action as any).before}</span>
+                {" → "}
+                <span style={{ color: "#a6e3a1" }}>{(action as any).after}</span>
+              </div>
+            </div>
+          )}
 
           {"changes" in action && (
             <div className="popup-detail-row">
@@ -467,17 +416,6 @@ function PopupActionItem({
         </div>
       )}
 
-      {/* Editing panel with CodeMirror */}
-      {editing && (
-        <div className="popup-action-edit-panel">
-          <div className="popup-action-edit-label">Prompt (Markdown) — Cmd+Enter to save, Esc to cancel</div>
-          <div ref={editorContainerRef} />
-          <div className="popup-action-edit-actions">
-            <button className="popup-action-edit-btn" onClick={cancelEdit}>Cancel</button>
-            <button className="popup-action-edit-btn popup-action-save-btn" onClick={saveEdit}>Save</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

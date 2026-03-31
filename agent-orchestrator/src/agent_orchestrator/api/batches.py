@@ -1,5 +1,6 @@
 """Batch endpoints (T021-T022)."""
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from agent_orchestrator.models.batch import (
     BatchSubmission,
     BatchSummary,
 )
+from agent_orchestrator.services import batch_processor
 from agent_orchestrator.services.screenshot_store import delete_screenshot, save_screenshot
 
 router = APIRouter(tags=["batches"])
@@ -35,8 +37,8 @@ def _row_to_summary(row) -> dict:
 
 def _action_row_to_data(row) -> dict:
     data = json.loads(row["data"])
-    data["screenshot_before"] = None
-    data["screenshot_after"] = None
+    data["screenshot_before"] = row["screenshot_before_path"]
+    data["screenshot_after"] = row["screenshot_after_path"]
     return data
 
 
@@ -88,9 +90,46 @@ async def submit_batch(project_id: str, body: BatchSubmission):
 
     await db.commit()
 
+    # Fire-and-forget: trigger batch processing
+    asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
+
     cursor = await db.execute("SELECT * FROM batches WHERE id = ?", (batch_id,))
     row = await cursor.fetchone()
     return _row_to_summary(row)
+
+
+@router.get("/projects/{project_id}/batches/{batch_id}/tasks")
+async def get_batch_tasks(project_id: str, batch_id: str):
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM batches WHERE id = ? AND project_id = ?",
+        (batch_id, project_id),
+    )
+    if await cursor.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    task_cursor = await db.execute(
+        "SELECT * FROM tasks WHERE batch_id = ? ORDER BY created_at",
+        (batch_id,),
+    )
+    task_rows = await task_cursor.fetchall()
+    return {
+        "tasks": [
+            {
+                "id": t["id"],
+                "batch_id": t["batch_id"],
+                "agent_id": t["agent_id"],
+                "type": t["type"],
+                "status": t["status"],
+                "prompt": t["prompt"],
+                "result": t["result"],
+                "error": t["error"],
+                "created_at": t["created_at"],
+                "completed_at": t["completed_at"],
+            }
+            for t in task_rows
+        ]
+    }
 
 
 @router.get("/projects/{project_id}/batches")
@@ -152,48 +191,62 @@ async def get_batch(project_id: str, batch_id: str):
 
 @router.get("/batches/{batch_id}/trace")
 async def get_batch_trace(batch_id: str):
+    """Return all agent traces for a batch (one per action)."""
     db = await get_db()
     cursor = await db.execute(
-        "SELECT * FROM agent_traces WHERE batch_id = ?", (batch_id,)
+        "SELECT * FROM agent_traces WHERE batch_id = ? ORDER BY created_at",
+        (batch_id,),
     )
-    row = await cursor.fetchone()
-    if row is None:
+    rows = await cursor.fetchall()
+    if not rows:
         raise HTTPException(status_code=404, detail="Trace not found")
 
-    step_cursor = await db.execute(
-        "SELECT * FROM trace_steps WHERE trace_id = ? ORDER BY sequence_index",
-        (row["id"],),
-    )
-    step_rows = await step_cursor.fetchall()
+    traces = []
+    for row in rows:
+        step_cursor = await db.execute(
+            "SELECT * FROM trace_steps WHERE trace_id = ? ORDER BY sequence_index",
+            (row["id"],),
+        )
+        step_rows = await step_cursor.fetchall()
 
-    steps = []
-    for s in step_rows:
-        metadata = json.loads(s["metadata"]) if s["metadata"] else None
-        steps.append({
-            "id": s["id"],
-            "sequence_index": s["sequence_index"],
-            "type": s["type"],
-            "content": s["content"],
-            "metadata": metadata,
-            "duration_ms": s["duration_ms"],
-            "token_count": s["token_count"],
-            "created_at": s["created_at"],
+        # Fetch the prompt from the tasks table
+        task_cursor = await db.execute(
+            "SELECT prompt FROM tasks WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1",
+            (row["agent_id"],),
+        )
+        task_row = await task_cursor.fetchone()
+
+        steps = []
+        for s in step_rows:
+            metadata = json.loads(s["metadata"]) if s["metadata"] else None
+            steps.append({
+                "id": s["id"],
+                "sequence_index": s["sequence_index"],
+                "type": s["type"],
+                "content": s["content"],
+                "metadata": metadata,
+                "duration_ms": s["duration_ms"],
+                "token_count": s["token_count"],
+                "created_at": s["created_at"],
+            })
+
+        traces.append({
+            "id": row["id"],
+            "batch_id": row["batch_id"],
+            "agent_id": row["agent_id"],
+            "agent_name": row["agent_name"],
+            "agent_model": row["agent_model"],
+            "prompt": task_row["prompt"] if task_row else None,
+            "status": row["status"],
+            "total_duration_ms": row["total_duration_ms"],
+            "total_cost_usd": row["total_cost_usd"],
+            "total_tokens": row["total_tokens"],
+            "steps": steps,
+            "created_at": row["created_at"],
+            "completed_at": row["completed_at"],
         })
 
-    return {
-        "id": row["id"],
-        "batch_id": row["batch_id"],
-        "agent_id": row["agent_id"],
-        "agent_name": row["agent_name"],
-        "agent_model": row["agent_model"],
-        "status": row["status"],
-        "total_duration_ms": row["total_duration_ms"],
-        "total_cost_usd": row["total_cost_usd"],
-        "total_tokens": row["total_tokens"],
-        "steps": steps,
-        "created_at": row["created_at"],
-        "completed_at": row["completed_at"],
-    }
+    return {"traces": traces}
 
 
 @router.delete(
@@ -209,7 +262,7 @@ async def delete_batch(project_id: str, batch_id: str):
     if await cursor.fetchone() is None:
         raise HTTPException(status_code=404, detail="Batch not found")
 
-    # Actions cascade-delete via FK, but screenshot files need manual cleanup
+    # Clean up screenshot files before cascading deletes
     action_cursor = await db.execute(
         "SELECT screenshot_before_path, screenshot_after_path FROM actions WHERE batch_id = ?",
         (batch_id,),
@@ -221,6 +274,29 @@ async def delete_batch(project_id: str, batch_id: str):
         if a["screenshot_after_path"]:
             delete_screenshot(a["screenshot_after_path"])
 
+    # Find agents spawned for this batch (via tasks table)
+    agent_cursor = await db.execute(
+        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id = ?", (batch_id,),
+    )
+    agent_ids = [row["agent_id"] for row in await agent_cursor.fetchall()]
+
+    # Delete trace_steps and agent_traces for this batch
+    await db.execute("DELETE FROM trace_steps WHERE trace_id IN (SELECT id FROM agent_traces WHERE batch_id = ?)", (batch_id,))
+    await db.execute("DELETE FROM agent_traces WHERE batch_id = ?", (batch_id,))
+
+    # Delete tasks linked to this batch
+    await db.execute("DELETE FROM tasks WHERE batch_id = ?", (batch_id,))
+
+    # Delete activity events for agents spawned by this batch
+    if agent_ids:
+        placeholders = ",".join("?" * len(agent_ids))
+        await db.execute(f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})", agent_ids)
+
+    # Delete the agents themselves
+    if agent_ids:
+        await db.execute(f"DELETE FROM agents WHERE id IN ({placeholders})", agent_ids)
+
+    # Delete the batch (actions cascade-delete via FK)
     await db.execute("DELETE FROM batches WHERE id = ?", (batch_id,))
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

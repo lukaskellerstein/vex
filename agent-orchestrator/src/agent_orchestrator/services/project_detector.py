@@ -120,6 +120,10 @@ def _detect_styling(root: Path, pkg: dict | None) -> str | None:
     if list(root.glob("**/*.scss"))[:1]:
         return "scss"
 
+    # Plain CSS (check src/ to avoid matching only config/vendor CSS)
+    if list(root.glob("src/**/*.css"))[:1] or list(root.glob("**/*.css"))[:1]:
+        return "css"
+
     return None
 
 

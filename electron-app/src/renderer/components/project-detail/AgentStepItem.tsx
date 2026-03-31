@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   Brain,
+  CheckCircle,
   MessageSquare,
   Wrench,
   FileCode,
@@ -17,12 +18,15 @@ export type StepType =
   | "thinking"
   | "text"
   | "tool_call"
+  | "tool_use"
   | "tool_result"
   | "diff"
   | "subagent_spawn"
   | "subagent_result"
   | "skill_invoke"
   | "skill_result"
+  | "completed"
+  | "progress"
   | "error";
 
 export interface AgentStep {
@@ -139,13 +143,11 @@ function ToolInputPreview({ toolName, content }: { toolName: string; content: st
         background: "var(--surface)",
         padding: "4px 8px",
         borderRadius: "var(--radius)",
-        maxWidth: "360px",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
+        wordBreak: "break-all",
+        whiteSpace: "pre-wrap",
       }}
     >
-      {content.slice(0, 120)}
+      {content}
     </code>
   );
 }
@@ -266,8 +268,19 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
         </div>
       );
 
-    case "tool_call": {
-      const toolName = (meta.tool_name as string) ?? "tool";
+    case "tool_call":
+    case "tool_use": {
+      // New format: tool_name in metadata. Legacy: content is "ToolName: {json}"
+      let toolName = (meta.tool_name as string) ?? "";
+      let toolContent = content;
+      if (!toolName && content) {
+        const colonIdx = content.indexOf(":");
+        if (colonIdx > 0 && colonIdx < 30) {
+          toolName = content.slice(0, colonIdx).trim();
+          toolContent = content.slice(colonIdx + 1).trim();
+        }
+      }
+      toolName = toolName || "tool";
       return (
         <div style={rowBase}>
           <Wrench size={14} style={iconStyle("var(--primary)")} />
@@ -289,7 +302,7 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
             >
               {toolName}
             </span>
-            {content && <ToolInputPreview toolName={toolName} content={content} />}
+            {toolContent && toolName !== "Edit" && <ToolInputPreview toolName={toolName} content={toolContent} />}
           </div>
           <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
@@ -473,6 +486,32 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
               {content}
             </p>
           </div>
+        </div>
+      );
+
+    case "completed":
+      return (
+        <div style={rowBase}>
+          <CheckCircle size={14} style={iconStyle("var(--status-success)")} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: "13px", color: "var(--status-success)", lineHeight: 1.6, margin: 0 }}>
+              {content || "Task completed"}
+            </p>
+          </div>
+          <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+        </div>
+      );
+
+    case "progress":
+      return (
+        <div style={rowBase}>
+          <MessageSquare size={14} style={iconStyle("var(--foreground-dim)")} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: "13px", color: "var(--foreground-dim)", lineHeight: 1.6, margin: 0 }}>
+              {content}
+            </p>
+          </div>
+          <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
       );
 

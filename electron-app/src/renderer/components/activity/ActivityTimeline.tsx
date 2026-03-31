@@ -41,7 +41,7 @@ function groupEvents(events: TimelineEvent[]): GroupedEvents[] {
   const map = new Map<TimeGroup, TimelineEvent[]>();
 
   for (const event of events) {
-    const group = getTimeGroup(event.timestamp);
+    const group = getTimeGroup(event.timestamp || event.created_at || "");
     const existing = map.get(group);
     if (existing) {
       existing.push(event);

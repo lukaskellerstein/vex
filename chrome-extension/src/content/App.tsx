@@ -244,15 +244,25 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       }
       if (message.action === "removeAction") {
         const msg = message as { action: string; index: number };
-        removeSelectionAt(msg.index);
+        const selCount = selectionsRef.current.length;
+        if (msg.index < selCount) {
+          removeSelectionAt(msg.index);
+        } else {
+          removeAction(msg.index - selCount);
+        }
         sendResponse({ removed: true });
         return;
       }
       if (message.action === "updateInstruction") {
         const msg = message as { action: string; index: number; instruction: string };
-        const sel = selectionsRef.current[msg.index];
-        if (sel) {
-          sel.instruction = msg.instruction;
+        const selCount = selectionsRef.current.length;
+        if (msg.index < selCount) {
+          const sel = selectionsRef.current[msg.index];
+          if (sel) {
+            sel.instruction = msg.instruction;
+          }
+        } else {
+          updateActionInstruction(msg.index - selCount, msg.instruction);
         }
         sendResponse({ updated: true });
         return;
@@ -265,6 +275,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       }
       if (message.action === "clearActions") {
         clearSelections();
+        clearActions();
         deactivate();
         sendResponse({ cleared: true });
         return;
@@ -273,7 +284,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, [selectionsRef, toggle, deactivate, clearSelections, removeSelectionAt, mode]);
+  }, [selectionsRef, toggle, deactivate, clearSelections, clearActions, removeSelectionAt, removeAction, updateActionInstruction, mode]);
 
   const handlePopupSubmit = useCallback((instruction: string) => {
     popupResolveRef.current?.(instruction);

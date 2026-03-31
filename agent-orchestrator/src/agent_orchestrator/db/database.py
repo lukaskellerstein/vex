@@ -159,7 +159,7 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS agent_traces (
             id TEXT PRIMARY KEY,
-            batch_id TEXT UNIQUE,
+            batch_id TEXT,
             agent_id TEXT,
             agent_name TEXT,
             agent_model TEXT,
@@ -199,11 +199,43 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
         ("agents", "tasks_completed", "ALTER TABLE agents ADD COLUMN tasks_completed INTEGER DEFAULT 0"),
         ("agents", "tasks_failed", "ALTER TABLE agents ADD COLUMN tasks_failed INTEGER DEFAULT 0"),
         ("agents", "total_cost_usd", "ALTER TABLE agents ADD COLUMN total_cost_usd REAL DEFAULT 0"),
+        ("tasks", "batch_id", "ALTER TABLE tasks ADD COLUMN batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL"),
     ]
     for _table, _col, sql in migrations:
         try:
             await db.execute(sql)
         except Exception:
             pass  # Column already exists
+
+    # Drop UNIQUE constraint on agent_traces.batch_id if present.
+    # Earlier schema had batch_id UNIQUE (1 trace per batch), but the current
+    # design creates 1 trace per action, so multiple traces per batch.
+    try:
+        row = await db.execute_fetchall(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_traces'"
+        )
+        if row and "UNIQUE" in (row[0][0] or ""):
+            await db.executescript("""
+                CREATE TABLE agent_traces_new (
+                    id TEXT PRIMARY KEY,
+                    batch_id TEXT,
+                    agent_id TEXT,
+                    agent_name TEXT,
+                    agent_model TEXT,
+                    status TEXT DEFAULT 'running',
+                    total_duration_ms INTEGER,
+                    total_cost_usd REAL,
+                    total_tokens INTEGER,
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+                );
+                INSERT INTO agent_traces_new SELECT * FROM agent_traces;
+                DROP TABLE agent_traces;
+                ALTER TABLE agent_traces_new RENAME TO agent_traces;
+            """)
+    except Exception:
+        pass  # Table doesn't exist yet or migration already applied
 
     await db.commit()
