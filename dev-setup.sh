@@ -65,6 +65,7 @@ mkdir -p "$LOG_DIR" "$TMP_DIR"
 NATS_CONF="${TMP_DIR}/nats-dev.conf"
 cat > "$NATS_CONF" <<EOF
 listen: 0.0.0.0:${NATS_PORT}
+max_payload: 8388608
 
 websocket {
   listen: "0.0.0.0:${NATS_WS_PORT}"
@@ -162,6 +163,12 @@ done
 # --- 3. Build main process & start Vite dev server ---
 ELECTRON_DIR="${ROOT_DIR}/electron-app"
 VITE_PORT=5199
+
+# Ensure Electron dependencies are installed
+if [[ ! -d "$ELECTRON_DIR/node_modules" ]]; then
+  echo "Installing Electron app dependencies..."
+  (cd "$ELECTRON_DIR" && npm install)
+fi
 
 # Compile TypeScript (main process needs this; renderer output is unused in dev mode)
 echo "Compiling Electron TypeScript..."

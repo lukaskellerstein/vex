@@ -48,6 +48,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("get-batch", projectId, batchId),
   deleteBatch: (projectId: string, batchId: string) =>
     ipcRenderer.invoke("delete-batch", projectId, batchId),
+  stopBatch: (projectId: string, batchId: string) =>
+    ipcRenderer.invoke("stop-batch", projectId, batchId),
+  stopAgent: (agentId: string) =>
+    ipcRenderer.invoke("stop-agent", agentId),
   getAgentTrace: (batchId: string) =>
     ipcRenderer.invoke("get-agent-trace", batchId),
   getActivity: (filters?: { projectId?: string; type?: string; since?: string }) =>
@@ -72,5 +76,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
     ipcRenderer.on("agent-status", handler);
     return () => ipcRenderer.removeListener("agent-status", handler);
+  },
+  onAgentHook: (callback: (data: Record<string, unknown>) => void) => {
+    const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
+    ipcRenderer.on("agent-hook", handler);
+    return () => ipcRenderer.removeListener("agent-hook", handler);
+  },
+  // Window controls
+  windowMinimize: () => ipcRenderer.invoke("window-minimize"),
+  windowMaximize: () => ipcRenderer.invoke("window-maximize"),
+  windowClose: () => ipcRenderer.invoke("window-close"),
+  windowIsMaximized: () => ipcRenderer.invoke("window-is-maximized"),
+  onMaximizedChange: (callback: (maximized: boolean) => void) => {
+    const handler = (_event: unknown, maximized: boolean) => callback(maximized);
+    ipcRenderer.on("window-maximized-changed", handler);
+    return () => ipcRenderer.removeListener("window-maximized-changed", handler);
   },
 });

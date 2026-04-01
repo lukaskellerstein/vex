@@ -18,7 +18,10 @@ import {
   Maximize2,
   Scissors,
   PaintBucket,
+  Square,
+  Ban,
 } from "lucide-react";
+import { OperatorRobot } from "../projects/OperatorRobot";
 
 interface BatchAction {
   id?: string;
@@ -51,8 +54,8 @@ interface BatchCardProps {
   projectId: string;
   onViewTrace?: (traceId: string) => void;
   onViewAgent?: (agentId: string) => void;
-  onViewBatchAgents?: (batchId: string) => void;
   onDelete?: (batchId: string) => void;
+  onStop?: (batchId: string) => void;
 }
 
 function formatTimestamp(iso: string): string {
@@ -63,17 +66,6 @@ function formatTimestamp(iso: string): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHour < 24) return `${diffHour}h ago`;
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function formatDuration(ms: number | null | undefined): string {
-  if (ms == null) return "\u2014";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function formatCost(usd: number | null | undefined): string {
-  if (usd == null) return "\u2014";
-  return `$${usd.toFixed(3)}`;
 }
 
 function formatPagePath(url?: string): string {
@@ -100,6 +92,7 @@ const STATUS_CONFIG: Record<string, { Icon: React.ElementType; color: string }> 
   processing: { Icon: Loader2, color: "var(--status-info)" },
   queued:     { Icon: Clock, color: "var(--status-idle)" },
   pending:    { Icon: Clock, color: "var(--status-idle)" },
+  cancelled:  { Icon: Ban, color: "var(--status-warning)" },
 };
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
@@ -123,7 +116,7 @@ interface TaskInfo {
   status: string;
 }
 
-export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBatchAgents, onDelete }: BatchCardProps) {
+export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onDelete, onStop }: BatchCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [loadedActions, setLoadedActions] = useState<BatchAction[] | null>(null);
   const [actionTasks, setActionTasks] = useState<TaskInfo[]>([]);
@@ -193,14 +186,9 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
         background: "var(--surface)",
         overflow: "hidden",
         transition: "border-color 0.15s",
+        flexShrink: 0,
       }}
     >
-      <style>{`
-        @keyframes agents-badge-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 hsla(263, 82%, 57.5%, 0.3); }
-          50% { box-shadow: 0 0 8px 2px hsla(263, 82%, 57.5%, 0.15); }
-        }
-      `}</style>
       {/* Header */}
       <div
         role="button"
@@ -265,89 +253,52 @@ export function BatchCard({ batch, projectId, onViewTrace, onViewAgent, onViewBa
           </div>
         </div>
 
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "2px 8px",
-            borderRadius: "9999px",
-            fontSize: "11px",
-            fontWeight: 500,
-            fontFamily: "var(--font-mono)",
-            background: "var(--surface-elevated)",
-            color: "var(--foreground-muted)",
-            border: "1px solid var(--border)",
-            flexShrink: 0,
-          }}
-        >
-          {actionCount} actions
-        </span>
-
-        {agentCount > 0 && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewBatchAgents?.(batch.id);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onViewBatchAgents?.(batch.id);
-              }
-            }}
+        {isSpinning && onStop && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onStop(batch.id); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onStop(batch.id); } }}
+            title="Stop batch"
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "4px",
-              padding: "2px 8px",
-              borderRadius: "9999px",
-              fontSize: "11px",
-              fontWeight: 500,
-              fontFamily: "var(--font-mono)",
               flexShrink: 0,
+              background: "hsla(0, 84%, 60%, 0.08)",
+              border: "1px solid hsla(0, 84%, 60%, 0.2)",
+              borderRadius: "9999px",
+              padding: "2px 8px",
+              fontSize: "10px",
+              fontWeight: 500,
+              color: "var(--status-error)",
               cursor: "pointer",
-              transition: "all 0.2s",
-              background: hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.1)" : "var(--surface-elevated)",
-              color: hasRunningAgents ? "var(--primary)" : "var(--foreground-muted)",
-              border: `1px solid ${hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.3)" : "var(--border)"}`,
-              animation: hasRunningAgents ? "agents-badge-pulse 2s ease-in-out infinite" : "none",
+              transition: "background 0.15s",
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "hsla(263, 82%, 57.5%, 0.15)";
-              e.currentTarget.style.color = "var(--primary)";
-              e.currentTarget.style.borderColor = "hsla(263, 82%, 57.5%, 0.4)";
-              e.currentTarget.style.boxShadow = "0 0 8px hsla(263, 82%, 57.5%, 0.2)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.1)" : "var(--surface-elevated)";
-              e.currentTarget.style.color = hasRunningAgents ? "var(--primary)" : "var(--foreground-muted)";
-              e.currentTarget.style.borderColor = hasRunningAgents ? "hsla(263, 82%, 57.5%, 0.3)" : "var(--border)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.15)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.08)")}
           >
-            <Bot size={10} className={hasRunningAgents ? "spin" : ""} />
-            {agentCount} {agentCount === 1 ? "Agent" : "Agents"}
-          </span>
+            <Square size={8} fill="currentColor" />
+            Stop
+          </button>
         )}
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            flexShrink: 0,
-            fontSize: "11px",
-            color: "var(--foreground-dim)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          <span>{formatDuration(batch.duration_ms)}</span>
-          <span style={{ color: "var(--foreground-disabled)" }}>&middot;</span>
-          <span>{formatCost(batch.cost_usd)}</span>
-        </div>
+        {agentCount > 0 && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "2px 6px",
+              borderRadius: "9999px",
+              flexShrink: 0,
+              background: hasRunningAgents ? "hsla(142, 69%, 45%, 0.06)" : "var(--surface-elevated)",
+              border: `1px solid ${hasRunningAgents ? "hsla(142, 69%, 45%, 0.2)" : "var(--border)"}`,
+            }}
+          >
+            {Array.from({ length: agentCount }).map((_, i) => (
+              <OperatorRobot key={i} size={14} idle={!hasRunningAgents} />
+            ))}
+          </span>
+        )}
 
         <span style={{ fontSize: "11px", color: "var(--foreground-disabled)", flexShrink: 0 }}>
           {formatTimestamp(batch.submitted_at || batch.created_at || "")}
@@ -485,7 +436,7 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
   const ActionIcon = ACTION_ICONS[action.type] || MousePointer;
   const badgeColor = TYPE_BADGE_COLORS[action.type] || "#6b7280";
 
-  const instruction = (action.instruction || action.description || "") as string;
+  const instruction = (action.instruction || (action as any).prompt || action.description || "") as string;
   const screenshotBefore = (action as any).screenshot_before as string | null;
   const screenshotAfter = (action as any).screenshot_after as string | null;
   const deltas = (action as any).deltas as any[] | null;
@@ -588,9 +539,12 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
       {expanded && (
         <div style={{ padding: "4px 16px 12px 42px" }}>
           {instruction && (
-            <p style={{ fontSize: "12px", color: "var(--foreground-muted)", lineHeight: 1.5, margin: "0 0 8px" }}>
-              {instruction}
-            </p>
+            <div style={{ marginBottom: "8px" }}>
+              <span style={{ fontSize: "10px", fontWeight: 600, color: "var(--foreground-dim)", textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "2px" }}>Prompt</span>
+              <p style={{ fontSize: "12px", color: "var(--foreground-muted)", lineHeight: 1.5, margin: 0 }}>
+                {instruction}
+              </p>
+            </div>
           )}
 
           {(action.before || action.after) && (
@@ -624,24 +578,71 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
           {(screenshotBefore || screenshotAfter) && (
             <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
               {screenshotBefore && (
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>Before</span>
-                  <img src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotBefore)}`} alt="Before"
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid var(--border)" }} />
-                </div>
+                <ScreenshotThumbnail src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotBefore)}`} label="Before" />
               )}
               {screenshotAfter && (
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>After</span>
-                  <img src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotAfter)}`} alt="After"
-                    style={{ width: "100%", borderRadius: "4px", border: "1px solid var(--border)" }} />
-                </div>
+                <ScreenshotThumbnail src={`${SCREENSHOT_BASE}${encodeURIComponent(screenshotAfter)}`} label="After" />
               )}
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function ScreenshotThumbnail({ src, label }: { src: string; label: string }) {
+  const [fullscreen, setFullscreen] = useState(false);
+
+  return (
+    <>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: "10px", color: "var(--foreground-dim)", display: "block", marginBottom: "4px" }}>{label}</span>
+        <img
+          src={src}
+          alt={label}
+          onClick={(e) => { e.stopPropagation(); setFullscreen(true); }}
+          style={{
+            width: "120px",
+            height: "80px",
+            objectFit: "cover",
+            borderRadius: "4px",
+            border: "1px solid var(--border)",
+            cursor: "pointer",
+            transition: "border-color 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+        />
+      </div>
+      {fullscreen && (
+        <div
+          onClick={() => setFullscreen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0, 0, 0, 0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={src}
+            alt={label}
+            style={{
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              objectFit: "contain",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+            }}
+          />
+        </div>
+      )}
+    </>
   );
 }
 

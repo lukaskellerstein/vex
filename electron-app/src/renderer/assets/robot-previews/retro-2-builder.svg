@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    /* Right arm: hammering sequence — lift, hold, strike, recoil, repeat with pauses */
+    .hammer-arm { animation: hammer-seq 5s ease-in-out infinite; transform-origin: 102px 78px; }
+    @keyframes hammer-seq {
+      0%, 8%   { transform: rotate(0deg); }
+      12%      { transform: rotate(-35deg); }   /* lift */
+      16%      { transform: rotate(-35deg); }   /* hold */
+      18%      { transform: rotate(5deg); }      /* strike down */
+      20%      { transform: rotate(-2deg); }     /* recoil */
+      24%      { transform: rotate(0deg); }      /* rest */
+      28%      { transform: rotate(-35deg); }    /* lift again */
+      30%      { transform: rotate(-35deg); }
+      32%      { transform: rotate(5deg); }      /* strike */
+      34%      { transform: rotate(-2deg); }
+      38%      { transform: rotate(0deg); }
+      42%      { transform: rotate(-35deg); }    /* third strike */
+      44%      { transform: rotate(-35deg); }
+      46%      { transform: rotate(5deg); }
+      48%      { transform: rotate(-2deg); }
+      52%, 60% { transform: rotate(0deg); }      /* long pause — inspect work */
+      64%      { transform: rotate(-35deg); }
+      66%      { transform: rotate(-35deg); }
+      68%      { transform: rotate(5deg); }
+      70%      { transform: rotate(-2deg); }
+      74%      { transform: rotate(0deg); }
+      78%      { transform: rotate(-35deg); }
+      80%      { transform: rotate(-35deg); }
+      82%      { transform: rotate(5deg); }
+      84%      { transform: rotate(-2deg); }
+      88%, 100% { transform: rotate(0deg); }     /* rest before loop */
+    }
+
+    /* Left arm: holds object, slight grip tighten on each strike */
+    .hold-arm { animation: hold-seq 5s ease-in-out infinite; transform-origin: 18px 78px; }
+    @keyframes hold-seq {
+      0%       { transform: rotate(-10deg); }
+      18%      { transform: rotate(-14deg); } /* brace on strike */
+      20%      { transform: rotate(-10deg); }
+      32%      { transform: rotate(-14deg); }
+      34%      { transform: rotate(-10deg); }
+      46%      { transform: rotate(-14deg); }
+      48%      { transform: rotate(-10deg); }
+      52%, 60% { transform: rotate(-5deg); }  /* relax during inspect */
+      64%      { transform: rotate(-10deg); }
+      68%      { transform: rotate(-14deg); }
+      70%      { transform: rotate(-10deg); }
+      82%      { transform: rotate(-14deg); }
+      84%      { transform: rotate(-10deg); }
+      100%     { transform: rotate(-10deg); }
+    }
+
+    /* Head: looks at work, then up to check, then back down */
+    .head { animation: head-look 5s ease-in-out infinite; }
+    @keyframes head-look {
+      0%, 50%  { transform: translateY(0) rotate(0deg); }
+      52%      { transform: translateY(-2px) rotate(-3deg); } /* look up */
+      58%      { transform: translateY(-2px) rotate(3deg); }  /* look other side */
+      62%      { transform: translateY(0) rotate(0deg); }     /* back to work */
+      100%     { transform: translateY(0) rotate(0deg); }
+    }
+
+    /* Sparks on strike */
+    .spark1, .spark2, .spark3 { opacity: 0; }
+    .spark1 { animation: spark 5s ease-out infinite; }
+    .spark2 { animation: spark 5s ease-out infinite 0.16s; }
+    .spark3 { animation: spark 5s ease-out infinite 0.32s; }
+    @keyframes spark {
+      0%, 17%  { opacity: 0; transform: translate(0,0) scale(1); }
+      18%      { opacity: 1; transform: translate(0,0) scale(1); }
+      22%      { opacity: 0; transform: translate(-6px,-8px) scale(0.3); }
+      31%, 32% { opacity: 0; transform: translate(0,0) scale(1); }
+      33%      { opacity: 1; transform: translate(0,0) scale(1); }
+      37%      { opacity: 0; transform: translate(4px,-10px) scale(0.3); }
+      45%, 46% { opacity: 0; }
+      47%      { opacity: 1; transform: translate(0,0) scale(1); }
+      51%      { opacity: 0; transform: translate(-3px,-9px) scale(0.3); }
+      52%, 100% { opacity: 0; }
+    }
+
+    /* Visor: steady glow, brightens on strike */
+    .visor-bar { animation: visor-build 5s ease-in-out infinite; }
+    @keyframes visor-build {
+      0%       { opacity: 0.6; fill: #4ade80; }
+      18%      { opacity: 1; fill: #86efac; }  /* bright on strike */
+      22%      { opacity: 0.6; fill: #4ade80; }
+      32%      { opacity: 1; fill: #86efac; }
+      36%      { opacity: 0.6; fill: #4ade80; }
+      46%      { opacity: 1; fill: #86efac; }
+      50%      { opacity: 0.6; fill: #4ade80; }
+      52%      { opacity: 0.4; fill: #fbbf24; } /* amber during inspect */
+      60%      { opacity: 0.4; fill: #fbbf24; }
+      64%      { opacity: 0.6; fill: #4ade80; }
+      68%      { opacity: 1; fill: #86efac; }
+      72%      { opacity: 0.6; fill: #4ade80; }
+      82%      { opacity: 1; fill: #86efac; }
+      86%      { opacity: 0.6; fill: #4ade80; }
+      100%     { opacity: 0.6; fill: #4ade80; }
+    }
+
+    .antenna-led { animation: ant-b 1s ease-in-out infinite; }
+    @keyframes ant-b { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+    .gear { animation: spin 4s linear infinite; transform-origin: 60px 104px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+
+  <!-- Antenna -->
+  <polyline points="60,26 56,18 64,10 60,2" fill="none" stroke="#6d8a6d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect class="antenna-led" x="57" y="0" width="6" height="6" fill="#4ade80"/>
+
+  <!-- Head -->
+  <g class="head">
+    <rect x="32" y="26" width="56" height="38" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+    <rect x="38" y="32" width="44" height="14" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+    <rect class="visor-bar" x="40" y="34" width="40" height="10" rx="1" fill="#4ade80" opacity="0.6"/>
+    <line x1="44" y1="52" x2="76" y2="52" stroke="#3a5a3a" stroke-width="1.5"/>
+    <line x1="44" y1="55" x2="76" y2="55" stroke="#3a5a3a" stroke-width="1.5"/>
+    <line x1="44" y1="58" x2="76" y2="58" stroke="#3a5a3a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Neck -->
+  <rect x="52" y="64" width="16" height="8" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <circle cx="56" cy="68" r="1.5" fill="#4a6a4a"/>
+  <circle cx="64" cy="68" r="1.5" fill="#4a6a4a"/>
+
+  <!-- Body -->
+  <rect x="28" y="72" width="64" height="42" rx="3" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Chest: progress bar -->
+  <rect x="36" y="80" width="48" height="8" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <rect x="38" y="82" width="30" height="4" rx="1" fill="#4ade80" opacity="0.6">
+    <animate attributeName="width" values="10;30;44;44;10" dur="5s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Gear -->
+  <g class="gear">
+    <circle cx="60" cy="104" r="5" fill="none" stroke="#4a6a4a" stroke-width="1.5"/>
+    <line x1="60" y1="99" x2="60" y2="109" stroke="#4a6a4a" stroke-width="1.5"/>
+    <line x1="55" y1="104" x2="65" y2="104" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Left Arm (holding) -->
+  <g class="hold-arm">
+    <rect x="10" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="14" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="11" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Right Arm (hammering) -->
+  <g class="hammer-arm">
+    <rect x="94" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="98" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="95" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <!-- Hammer head -->
+    <rect x="100" y="108" width="12" height="6" rx="1" fill="#5a6a5a" stroke="#4a6a4a" stroke-width="1"/>
+  </g>
+
+  <!-- Sparks at strike point -->
+  <circle class="spark1" cx="108" cy="112" r="2" fill="#fbbf24"/>
+  <circle class="spark2" cx="112" cy="108" r="1.5" fill="#fb923c"/>
+  <circle class="spark3" cx="105" cy="108" r="1.5" fill="#fbbf24"/>
+
+  <!-- Legs -->
+  <rect x="36" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="68" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="32" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="64" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+</svg>

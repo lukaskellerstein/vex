@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Play, Square, Loader2, Layers, FileText, Bot, Check, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, Layers, FileText, Bot, Check, AlertCircle } from "lucide-react";
 import { FrameworkBadge } from "../components/projects/FrameworkBadge";
-import { StatusIndicator } from "../components/projects/StatusIndicator";
 import { ProjectInfoPanel } from "../components/project-detail/ProjectInfoPanel";
 import { BatchList } from "../components/project-detail/BatchList";
 import { DevServerLogs } from "../components/project-detail/DevServerLogs";
@@ -43,8 +42,6 @@ interface AgentsSummary {
 
 type TabId = "batches" | "agents" | "logs";
 
-/** Track which projects already had their browser opened (survives component remounts). */
-const browserOpenedForProject = new Set<string>();
 
 export function ProjectDetail() {
   const { id: projectId = "" } = useParams<{ id: string }>();
@@ -136,13 +133,6 @@ export function ProjectDetail() {
     return () => clearInterval(interval);
   }, [activeTab, projectId]);
 
-  // Open browser once when URL becomes available (per project, survives remounts)
-  useEffect(() => {
-    if (project?.status === "running" && project.dev_server_url && !browserOpenedForProject.has(projectId)) {
-      browserOpenedForProject.add(projectId);
-      window.electronAPI.openExternal(project.dev_server_url);
-    }
-  }, [project?.status, project?.dev_server_url, projectId]);
 
   async function handleServerToggle() {
     if (!project) return;
@@ -150,9 +140,7 @@ export function ProjectDetail() {
 
     if (status === "running" || status === "starting") {
       await window.electronAPI.stopDevServer(projectId);
-      browserOpenedForProject.delete(projectId);
     } else {
-      browserOpenedForProject.delete(projectId);
       const result = await window.electronAPI.startDevServer(projectId);
       if (result?.status === "error") {
         console.error("Failed to start dev server:", result.detail);
@@ -168,6 +156,14 @@ export function ProjectDetail() {
   async function handleDeleteBatch(batchId: string) {
     try {
       await window.electronAPI.deleteBatch(projectId!, batchId);
+    } catch {
+      // Silently handle — batch list will refresh on next poll
+    }
+  }
+
+  async function handleStopBatch(batchId: string) {
+    try {
+      await window.electronAPI.stopBatch(projectId!, batchId);
     } catch {
       // Silently handle — batch list will refresh on next poll
     }
@@ -260,10 +256,6 @@ export function ProjectDetail() {
           <FrameworkBadge framework={project.framework ?? null} />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <StatusIndicator status={status} showLabel />
-          <ServerHeaderButton status={status} onToggle={handleServerToggle} />
-        </div>
       </header>
 
       {/* Body: two columns */}
@@ -327,7 +319,7 @@ export function ProjectDetail() {
           {/* Tab Content */}
           <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
             {activeTab === "batches" && (
-              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onViewBatchAgents={(batchId) => navigate(`/project/${projectId}/batch/${batchId}/agents`)} onDeleteBatch={handleDeleteBatch} />
+              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onDeleteBatch={handleDeleteBatch} onStopBatch={handleStopBatch} />
             )}
             {activeTab === "agents" && (
               <AgentsPanel
@@ -346,77 +338,6 @@ export function ProjectDetail() {
         </div>
       </div>
     </div>
-  );
-}
-
-function ServerHeaderButton({ status, onToggle }: { status: string; onToggle: () => void }) {
-  const btnBase: React.CSSProperties = {
-    height: "30px",
-    padding: "0 14px",
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    borderRadius: "var(--radius)",
-    fontSize: "13px",
-    fontWeight: 600,
-    transition: "all 0.15s",
-    cursor: "pointer",
-    border: "none",
-  };
-
-  if (status === "stopped" || status === "idle" || status === "error") {
-    return (
-      <button
-        onClick={onToggle}
-        style={{
-          ...btnBase,
-          background: "hsla(142, 69%, 45%, 0.1)",
-          border: "1px solid hsla(142, 69%, 45%, 0.3)",
-          color: "var(--status-success)",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 12px hsla(142, 69%, 45%, 0.25)")}
-        onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
-      >
-        <Play size={14} />
-        Start Server
-      </button>
-    );
-  }
-
-  if (status === "starting") {
-    return (
-      <button
-        disabled
-        style={{
-          ...btnBase,
-          background: "hsla(38, 92%, 50%, 0.1)",
-          border: "1px solid hsla(38, 92%, 50%, 0.3)",
-          color: "var(--status-warning)",
-          opacity: 0.8,
-          cursor: "not-allowed",
-        }}
-      >
-        <Loader2 size={14} className="spin" />
-        Starting...
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={onToggle}
-      style={{
-        ...btnBase,
-        background: "hsla(0, 84%, 60%, 0.1)",
-        border: "1px solid hsla(0, 84%, 60%, 0.3)",
-        color: "var(--status-error)",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 12px hsla(0, 84%, 60%, 0.25)")}
-      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
-    >
-      <Square size={14} />
-      Stop Server
-    </button>
   );
 }
 

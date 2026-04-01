@@ -18,6 +18,7 @@ import {
 } from "../utils/dom-ops";
 import { captureScreenshot } from "../hooks/useScreenshot";
 import { useUndo } from "../hooks/useUndo";
+import { clampToViewport } from "../utils/positioning";
 
 const HOST_ID = "__web-selector-root";
 
@@ -169,7 +170,6 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
               },
               ".cm-content": {
                 padding: "8px 10px",
-                minHeight: "70px",
                 color: "#cdd6f4",
                 caretColor: "#cdd6f4",
               },
@@ -1026,12 +1026,18 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const ref = popup.reference;
       const rect = ref.getBoundingClientRect();
       const vp = popup.visualPosition;
-      const popupTop = vp === "above" ? rect.top - 10
+      const rawTop = vp === "above" ? rect.top - 10
         : vp === "below" ? rect.bottom + 10
         : rect.top;
-      const popupLeft = vp === "left" ? rect.left - insertPopupSize.width - 10
+      const rawLeft = vp === "left" ? rect.left - insertPopupSize.width - 10
         : vp === "right" ? rect.right + 10
         : rect.left;
+      // Account for padding (12px * 2) + border (1px * 2) so buttons aren't clipped
+      const outerW = insertPopupSize.width + 26;
+      const outerH = insertPopupSize.height + 26;
+      const clamped = clampToViewport(rawTop, rawLeft, outerW, outerH);
+      const popupTop = clamped.top;
+      const popupLeft = clamped.left;
 
       const tabStyle = (active: boolean): React.CSSProperties => ({
         flex: 1,
@@ -1157,8 +1163,9 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
     if (popup.kind === "wrap") {
       const rect = popup.target.getBoundingClientRect();
+      const wrapPos = clampToViewport(rect.top - 10, rect.left, 240, 160);
       return (
-        <div style={{ ...popupStyle, left: rect.left, top: rect.top - 10, minWidth: 240 }} className="cs-edit-popup">
+        <div style={{ ...popupStyle, left: wrapPos.left, top: wrapPos.top, minWidth: 240 }} className="cs-edit-popup">
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Wrap element</div>
           <select
             value={wrapTag}
@@ -1189,10 +1196,11 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
     if (popup.kind === "section") {
       const rect = popup.reference.getBoundingClientRect();
-      const top = popup.position === "before" ? rect.top - 10 : rect.bottom + 10;
+      const rawSectionTop = popup.position === "before" ? rect.top - 10 : rect.bottom + 10;
+      const sectionPos = clampToViewport(rawSectionTop, rect.left, 320, 200);
       const isGenerating = genStatus.state === "loading";
       return (
-        <div style={{ ...popupStyle, left: rect.left, top, minWidth: 320 }} className="cs-edit-popup">
+        <div style={{ ...popupStyle, left: sectionPos.left, top: sectionPos.top, minWidth: 320 }} className="cs-edit-popup">
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Generate Section</div>
           {isGenerating ? (
             <div style={{ padding: "12px 0", textAlign: "center", color: "#a6adc8" }}>Generating...</div>
@@ -1230,8 +1238,9 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
     if (popup.kind === "imageReplace") {
       const rect = popup.target.getBoundingClientRect();
+      const imgReplacePos = clampToViewport(rect.top - 10, rect.left, 200, 180);
       return (
-        <div style={{ ...popupStyle, left: rect.left, top: rect.top - 10, minWidth: 200 }} className="cs-edit-popup">
+        <div style={{ ...popupStyle, left: imgReplacePos.left, top: imgReplacePos.top, minWidth: 200 }} className="cs-edit-popup">
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Replace Image</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <button onClick={() => handleImageUpload(popup.target)} style={btnOptionStyle}>Upload File</button>
@@ -1245,8 +1254,9 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
     if (popup.kind === "imageUrl") {
       const rect = popup.target.getBoundingClientRect();
+      const imgUrlPos = clampToViewport(rect.top - 10, rect.left, 280, 120);
       return (
-        <div style={{ ...popupStyle, left: rect.left, top: rect.top - 10, minWidth: 280 }} className="cs-edit-popup">
+        <div style={{ ...popupStyle, left: imgUrlPos.left, top: imgUrlPos.top, minWidth: 280 }} className="cs-edit-popup">
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Image URL</div>
           <input
             type="text"
@@ -1270,9 +1280,10 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
     if (popup.kind === "imageGenerate") {
       const rect = popup.target.getBoundingClientRect();
+      const imgGenPos = clampToViewport(rect.top - 10, rect.left, 280, 140);
       const isGenerating = genStatus.state === "loading";
       return (
-        <div style={{ ...popupStyle, left: rect.left, top: rect.top - 10, minWidth: 280 }} className="cs-edit-popup">
+        <div style={{ ...popupStyle, left: imgGenPos.left, top: imgGenPos.top, minWidth: 280 }} className="cs-edit-popup">
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Generate Image</div>
           {isGenerating ? (
             <div style={{ padding: "12px 0", textAlign: "center", color: "#a6adc8" }}>Generating...</div>
@@ -1308,7 +1319,35 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       {/* Hover highlight — pointer-events: none so elementFromPoint always sees page elements.
            Buttons use pointer-events: auto + expanded ::before hit areas (CSS) + onMouseEnter lock
            so they stay reachable without blocking child-element selection. */}
-      {hoverRect && hovered && !popup && !editing && (
+      {hoverRect && hovered && !popup && !editing && (() => {
+        // Clamp insert buttons / label / delete so they stay visible at viewport edges
+        const BTN = 22;  // button diameter
+        const HALF = BTN / 2; // 11px
+        const vpW = window.innerWidth;
+        const vpH = window.innerHeight;
+        // How far outside the highlight each button sits (CSS default: -12px)
+        const OFF = 12;
+
+        // Left button: default left: -12px → viewport x = hoverRect.x - 12
+        // If that's < 0, push it inward
+        const leftBtnLeft = Math.max(-OFF, -hoverRect.x + 2);
+        // Right button: default right: -12px → viewport x = hoverRect.x + hoverRect.width + 12 - 22
+        // If right edge goes past viewport, pull inward
+        const rightBtnOverflow = (hoverRect.x + hoverRect.width + OFF) - vpW;
+        const rightBtnRight = rightBtnOverflow > 0 ? -OFF + rightBtnOverflow + 2 : -OFF;
+        // Top button: default top: -12px
+        const topBtnTop = Math.max(-OFF, -hoverRect.y + 2);
+        // Bottom button: default bottom: -12px
+        const bottomBtnOverflow = (hoverRect.y + hoverRect.height + OFF) - vpH;
+        const bottomBtnBottom = bottomBtnOverflow > 0 ? -OFF + bottomBtnOverflow + 2 : -OFF;
+        // Label: default top: -20px — if element near top, flip inside
+        const labelFlip = hoverRect.y < 22;
+        // Delete button: default top: -10px, right: -10px
+        const delTop = Math.max(-10, -hoverRect.y + 2);
+        const delRightOverflow = (hoverRect.x + hoverRect.width + 10) - vpW;
+        const delRight = delRightOverflow > 0 ? -10 + delRightOverflow + 2 : -10;
+
+        return (
         <div
           className="cs-edit-highlight"
           style={{
@@ -1325,7 +1364,10 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
           }}
         >
           {/* Label */}
-          <span className="cs-edit-label">
+          <span
+            className="cs-edit-label"
+            style={labelFlip ? { top: "auto", bottom: -20, borderRadius: "0 0 3px 3px" } : undefined}
+          >
             {hovered.tagName.toLowerCase()}
             {hovered.id ? `#${hovered.id}` : ""}
             {hovered.classList.length > 0 ? `.${hovered.classList[0]}` : ""}
@@ -1334,7 +1376,7 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
           {/* Delete button */}
           <button
             className="cs-edit-delete-btn"
-            style={{ pointerEvents: "auto" }}
+            style={{ pointerEvents: "auto", top: delTop, right: delRight }}
             onMouseEnter={() => { overHighlightRef.current = true; }}
             onMouseLeave={() => { overHighlightRef.current = false; }}
             onClick={(e) => { e.stopPropagation(); handleDelete(hovered); }}
@@ -1346,7 +1388,7 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
           {/* "+" insertion handles — all 4 directions on every element */}
           <button
             className="cs-edit-insert-btn cs-edit-insert-top"
-            style={{ pointerEvents: "auto" }}
+            style={{ pointerEvents: "auto", top: topBtnTop }}
             onMouseEnter={() => { overHighlightRef.current = true; }}
             onMouseLeave={() => { overHighlightRef.current = false; }}
             onClick={(e) => {
@@ -1363,7 +1405,7 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
           </button>
           <button
             className="cs-edit-insert-btn cs-edit-insert-bottom"
-            style={{ pointerEvents: "auto" }}
+            style={{ pointerEvents: "auto", bottom: bottomBtnBottom }}
             onMouseEnter={() => { overHighlightRef.current = true; }}
             onMouseLeave={() => { overHighlightRef.current = false; }}
             onClick={(e) => {
@@ -1380,7 +1422,7 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
           </button>
           <button
             className="cs-edit-insert-btn cs-edit-insert-left"
-            style={{ pointerEvents: "auto" }}
+            style={{ pointerEvents: "auto", left: leftBtnLeft }}
             onMouseEnter={() => { overHighlightRef.current = true; }}
             onMouseLeave={() => { overHighlightRef.current = false; }}
             onClick={(e) => {
@@ -1397,7 +1439,7 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
           </button>
           <button
             className="cs-edit-insert-btn cs-edit-insert-right"
-            style={{ pointerEvents: "auto" }}
+            style={{ pointerEvents: "auto", right: rightBtnRight }}
             onMouseEnter={() => { overHighlightRef.current = true; }}
             onMouseLeave={() => { overHighlightRef.current = false; }}
             onClick={(e) => {
@@ -1431,7 +1473,8 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Popups */}
       {renderPopup()}

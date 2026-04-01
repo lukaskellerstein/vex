@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,10 +14,18 @@ import {
   ChevronDown,
   ChevronRight,
   X,
+  Square,
+  Ban,
+  Wrench,
+  Plug,
+  Sparkles,
+  GitFork,
+  AlertTriangle,
 } from "lucide-react";
 import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
 import { AgentWorkingAnimation } from "../components/project-detail/AgentWorkingAnimation";
+import { hookEventToStep } from "../utils/hook-steps";
 
 /* ─── Types ──────────────────────────────────────── */
 
@@ -27,10 +35,12 @@ interface TraceData {
   agent_id: string;
   agent_name: string;
   agent_model: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "stopped" | "cancelled";
   total_duration_ms: number | null;
   total_cost_usd: number | null;
   total_tokens: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
   prompt: string | null;
   steps: AgentStep[];
   created_at: string;
@@ -42,7 +52,14 @@ interface TraceData {
 function formatDuration(ms: number | null): string {
   if (ms == null) return "--";
   if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (min < 60) return `${min}m ${sec}s`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return `${hr}h ${remMin}m ${sec}s`;
 }
 
 function formatCost(usd: number | null): string {
@@ -84,16 +101,37 @@ const STATUS_CONFIG: Record<
     fg: "var(--primary)",
     border: "color-mix(in srgb, var(--primary) 20%, transparent)",
   },
+  stopped: {
+    icon: Ban,
+    iconColor: "var(--status-warning)",
+    label: "Stopped",
+    bg: "color-mix(in srgb, var(--status-warning) 10%, transparent)",
+    fg: "var(--status-warning)",
+    border: "color-mix(in srgb, var(--status-warning) 20%, transparent)",
+  },
+  cancelled: {
+    icon: Ban,
+    iconColor: "var(--status-warning)",
+    label: "Cancelled",
+    bg: "color-mix(in srgb, var(--status-warning) 10%, transparent)",
+    fg: "var(--status-warning)",
+    border: "color-mix(in srgb, var(--status-warning) 20%, transparent)",
+  },
 };
 
 /** Convert a live step from NATS/steps API into the AgentStep shape used by the UI. */
 function liveStepToAgentStep(step: Record<string, unknown>, index: number): AgentStep {
+  const knownKeys = new Set(["type", "content", "timestamp", "status", "index", "duration_ms", "token_count"]);
+  const meta: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(step)) {
+    if (!knownKeys.has(k) && v != null) meta[k] = v;
+  }
   return {
     id: `live-${index}`,
     sequence_index: index,
     type: (step.type as AgentStep["type"]) ?? "text",
     content: (step.content as string) ?? null,
-    metadata: step.tool_name ? { tool_name: step.tool_name } : null,
+    metadata: Object.keys(meta).length > 0 ? meta : null,
     duration_ms: (step.duration_ms as number) ?? null,
     token_count: (step.token_count as number) ?? null,
     created_at: (step.timestamp as string) ?? new Date().toISOString(),
@@ -107,7 +145,7 @@ export function AgentTrace() {
   const navigate = useNavigate();
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
-  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | null>(null);
+  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
@@ -171,13 +209,23 @@ export function AgentTrace() {
 
     const removeStatusListener = window.electronAPI.onAgentStatus((data) => {
       if (data.agentId !== aid) return;
-      const status = data.status as "completed" | "failed";
-      setAgentStatus(status);
+      const status = data.status as "completed" | "failed" | "stopped" | "cancelled";
+      if (status === "completed" || status === "failed" || status === "stopped" || status === "cancelled") {
+        setAgentStatus(status);
+      }
+    });
+
+    const removeHookListener = window.electronAPI.onAgentHook((data) => {
+      if (data.agentId !== aid) return;
+      const hookStep = hookEventToStep(data);
+      if (!hookStep) return;
+      setLiveSteps((prev) => [...prev, hookStep]);
     });
 
     cleanupRef.current = () => {
       removeStepListener();
       removeStatusListener();
+      removeHookListener();
       window.electronAPI.unsubscribeAgentSteps(aid);
     };
   }, [fetchPersistedTrace]);
@@ -234,6 +282,104 @@ export function AgentTrace() {
       }
     };
   }, [traceId, agentId, fetchPersistedTrace, subscribeToAgent]);
+
+  // Determine what to display (must be before early returns to keep hook order stable)
+  const displayStatus = trace?.status ?? agentStatus ?? "running";
+  const displaySteps = trace?.steps ?? liveSteps;
+  const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId.slice(0, 8)}` : "Agent");
+  const agentModel = trace?.agent_model ?? "claude-sonnet-4-5";
+
+  const statusCfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.running;
+  const StatusIcon = statusCfg.icon;
+  const isRunning = displayStatus === "running";
+
+  // Live elapsed duration timer (ticks every second while running)
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isRunning || displaySteps.length === 0) {
+      setElapsedMs(null);
+      return;
+    }
+    const startTime = new Date(displaySteps[0].created_at).getTime();
+    const tick = () => setElapsedMs(Date.now() - startTime);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isRunning, displaySteps.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute real stats from steps
+  const stats = useMemo(() => {
+    const tools = new Set<string>();
+    const mcpServers = new Set<string>();
+    const subagents = new Set<string>();
+    const skills = new Set<string>();
+    let totalTokens = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let errorCount = 0;
+    let liveCostUsd = 0;
+
+    for (const step of displaySteps) {
+      if (step.token_count) totalTokens += step.token_count;
+      if (step.type === "tool_error" || step.type === "error") errorCount++;
+
+      // Accumulate per-step cost from metadata
+      if (step.metadata && typeof step.metadata.cost_usd === "number") {
+        liveCostUsd = step.metadata.cost_usd;
+      }
+
+      // Extract input/output tokens from completed step metadata
+      if (step.type === "completed" && step.metadata) {
+        const meta = step.metadata;
+        if (typeof meta.input_tokens === "number") inputTokens = meta.input_tokens;
+        if (typeof meta.output_tokens === "number") outputTokens = meta.output_tokens;
+      }
+
+      if (step.type === "tool_call" || step.type === "tool_use") {
+        const toolName = step.metadata?.tool_name as string | undefined;
+        if (!toolName) continue;
+
+        if (toolName.startsWith("mcp__")) {
+          // e.g. "mcp__vex-chrome__click" → server = "vex-chrome"
+          const parts = toolName.split("__");
+          if (parts.length >= 2) mcpServers.add(parts[1]);
+        } else if (toolName === "Skill") {
+          try {
+            const parsed = JSON.parse(step.content ?? "");
+            if (parsed?.skill) skills.add(parsed.skill);
+          } catch { /* content might not be JSON */ }
+        } else if (toolName === "Agent") {
+          try {
+            const parsed = JSON.parse(step.content ?? "");
+            const name = parsed?.description || parsed?.subagent_type || "agent";
+            subagents.add(name);
+          } catch { /* content might not be JSON */ }
+        }
+        tools.add(toolName);
+      } else if (step.type === "subagent_spawn") {
+        const name = (step.metadata?.subagent_name as string) || (step.metadata?.subagent_id as string);
+        if (name) subagents.add(name);
+      } else if (step.type === "skill_invoke") {
+        const name = step.metadata?.skill_name as string;
+        if (name) skills.add(name);
+      }
+    }
+
+    // Prefer trace-level token counts, fall back to step-level extraction
+    const finalInput = trace?.input_tokens ?? (inputTokens > 0 ? inputTokens : null);
+    const finalOutput = trace?.output_tokens ?? (outputTokens > 0 ? outputTokens : null);
+
+    return {
+      inputTokens: finalInput,
+      outputTokens: finalOutput,
+      liveCostUsd: liveCostUsd > 0 ? liveCostUsd : null,
+      toolCount: tools.size,
+      mcpCount: mcpServers.size,
+      subagentCount: subagents.size,
+      skillCount: skills.size,
+      errorCount,
+    };
+  }, [displaySteps, trace?.input_tokens, trace?.output_tokens]);
 
   // Loading state
   if (loading) {
@@ -299,15 +445,15 @@ export function AgentTrace() {
     );
   }
 
-  // Determine what to display
-  const displayStatus = trace?.status ?? agentStatus ?? "running";
-  const displaySteps = trace?.steps ?? liveSteps;
-  const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId.slice(0, 8)}` : "Agent");
-  const agentModel = trace?.agent_model ?? "claude-sonnet-4-5";
-
-  const statusCfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.running;
-  const StatusIcon = statusCfg.icon;
-  const isRunning = displayStatus === "running";
+  async function handleStopAgent() {
+    if (!agentId) return;
+    try {
+      await window.electronAPI.stopAgent(agentId);
+      setAgentStatus("stopped");
+    } catch {
+      // Status will update via NATS
+    }
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -387,30 +533,59 @@ export function AgentTrace() {
             </div>
           </div>
 
-          {/* Status badge */}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "4px 10px",
-              borderRadius: "999px",
-              fontSize: "11px",
-              fontWeight: 500,
-              background: statusCfg.bg,
-              color: statusCfg.fg,
-              border: `1px solid ${statusCfg.border}`,
-            }}
-          >
-            <StatusIcon
-              size={11}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {isRunning && (
+              <button
+                onClick={handleStopAgent}
+                title="Stop agent"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  flexShrink: 0,
+                  background: "hsla(0, 84%, 60%, 0.08)",
+                  border: "1px solid hsla(0, 84%, 60%, 0.2)",
+                  borderRadius: "9999px",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  color: "var(--status-error)",
+                  cursor: "pointer",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.15)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "hsla(0, 84%, 60%, 0.08)")}
+              >
+                <Square size={8} fill="currentColor" />
+                Stop
+              </button>
+            )}
+
+            {/* Status badge */}
+            <span
               style={{
-                color: statusCfg.iconColor,
-                ...(isRunning ? { animation: "spin 1s linear infinite" } : {}),
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                borderRadius: "999px",
+                fontSize: "11px",
+                fontWeight: 500,
+                background: statusCfg.bg,
+                color: statusCfg.fg,
+                border: `1px solid ${statusCfg.border}`,
               }}
-            />
-            {statusCfg.label}
-          </span>
+            >
+              <StatusIcon
+                size={11}
+                style={{
+                  color: statusCfg.iconColor,
+                  ...(isRunning ? { animation: "spin 1s linear infinite" } : {}),
+                }}
+              />
+              {statusCfg.label}
+            </span>
+          </div>
         </div>
 
         {/* Metrics row */}
@@ -422,15 +597,28 @@ export function AgentTrace() {
             padding: "0 20px 12px",
             fontSize: "12px",
             fontFamily: "var(--font-mono)",
+            flexWrap: "wrap",
           }}
         >
-          <MetricItem icon={<Clock size={12} />} label="duration" value={formatDuration(trace?.total_duration_ms ?? null)} />
+          <MetricItem icon={<Clock size={12} />} label="duration" value={formatDuration(trace?.total_duration_ms ?? elapsedMs)} />
           <Separator />
-          <MetricItem icon={<DollarSign size={12} />} label="cost" value={formatCost(trace?.total_cost_usd ?? null)} />
+          <MetricItem icon={<DollarSign size={12} />} label="cost" value={formatCost(trace?.total_cost_usd ?? stats.liveCostUsd)} />
           <Separator />
-          <MetricItem icon={<Hash size={12} />} label="tokens" value={formatTokens(trace?.total_tokens ?? null)} />
+          <MetricItem icon={<Hash size={12} />} label="in" value={formatTokens(stats.inputTokens)} />
+          <Separator />
+          <MetricItem icon={<Hash size={12} />} label="out" value={formatTokens(stats.outputTokens)} />
           <Separator />
           <MetricItem icon={<Layers size={12} />} label="steps" value={String(displaySteps.length)} />
+          <Separator />
+          <MetricItem icon={<Wrench size={12} />} label="tools" value={String(stats.toolCount)} />
+          <Separator />
+          <MetricItem icon={<Plug size={12} />} label="mcp" value={String(stats.mcpCount)} />
+          <Separator />
+          <MetricItem icon={<GitFork size={12} />} label="subagents" value={String(stats.subagentCount)} />
+          <Separator />
+          <MetricItem icon={<Sparkles size={12} />} label="skills" value={String(stats.skillCount)} />
+          <Separator />
+          <MetricItem icon={<AlertTriangle size={12} />} label="errors" value={String(stats.errorCount)} highlight={stats.errorCount > 0 ? "error" : undefined} />
         </div>
       </header>
 
@@ -501,15 +689,18 @@ function MetricItem({
   icon,
   label,
   value,
+  highlight,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  highlight?: "error";
 }) {
+  const color = highlight === "error" ? "var(--status-error)" : undefined;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--foreground-muted)" }}>
-      <span style={{ color: "var(--foreground-dim)", display: "flex" }}>{icon}</span>
-      <span style={{ color: "var(--foreground-dim)" }}>{label}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: "6px", color: color ?? "var(--foreground-muted)" }}>
+      <span style={{ color: color ?? "var(--foreground-dim)", display: "flex" }}>{icon}</span>
+      <span style={{ color: color ?? "var(--foreground-dim)" }}>{label}</span>
       <span>{value}</span>
     </div>
   );

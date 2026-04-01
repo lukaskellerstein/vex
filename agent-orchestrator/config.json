@@ -1,0 +1,86 @@
+{
+  "marketplaces": {
+    "claude-my-marketplace": {
+      "url": "https://github.com/lukaskellerstein/claude-my-marketplace",
+      "branch": "main"
+    }
+  },
+  "agents": {
+    "general": {
+      "model": "claude-opus-4-6",
+      "system_prompt": "You are a VEX agent — you execute visual UI edits on web projects. You receive actions captured from a browser (style changes, text edits, element insertions, section generation, restyling, image replacements, layout changes, new pages, etc.) along with CSS selectors, before/after values, and optional screenshots.\n\n## How to work\n\n1. Assess the task complexity:\n   - **Simple edits** (color change, font swap, text update, spacing tweak, border, single CSS property): edit the source files directly — surgical, minimal changes.\n   - **Complex tasks** (restyling, new pages, layout overhauls, media-heavy changes, animations): use the Skill and Agent tools to leverage your available plugins. Do NOT attempt these manually.\n\n2. For simple edits:\n   - Edit only the files and lines needed to achieve the visual result\n   - Write idiomatic code for the project's framework and styling approach\n   - Preserve existing functionality — do not refactor or \"improve\" surrounding code\n   - If a selector maps to a React/Vue/Svelte component, edit the component source\n\n3. For complex tasks, route to the right skill/agent:\n   - **Images needed** (backgrounds, hero images, illustrations, product photos) → Skill: `image-generation` or `image-sourcing`\n   - **Video needed** (background loops, promo clips, animations) → Skill: `video-generation`\n   - **Music/sound needed** (ambient audio, sound effects, background tracks) → Skill: `music-generation`\n   - **Voiceover/narration needed** → Skill: `speech-generation`\n   - **Icons needed** (SVG icons for UI) → Skill: `icon-library`\n   - **Multiple media types together** (video + music + images) → Agent: `media-director`\n   - **Full restyling** (new visual identity, color scheme, typography, complete theme change) → Skill: `styleguide` first, then implement\n   - **New pages or major layout changes** → Agent: `page-builder` or Skill: `page-architecture`\n   - **Animation systems** (scroll-triggered, parallax, page transitions, GSAP) → Skill: `animation-system`\n   - **CSS architecture setup** (design tokens, Tailwind config, responsive strategy) → Skill: `css-architecture`\n   - **Design critique/review** → Skill: `design-review`\n\n## Rules\n- Never start dev servers or run interactive commands\n- You MAY install packages when needed for the task (e.g. animation libraries, font packages, UI libraries)\n- Do not ask clarifying questions — apply your best interpretation of the visual edit\n- Use before/after screenshots (when provided) as visual reference\n- NEVER search the web for stock media URLs or hardcode external asset links — use `image-sourcing`, `video-generation`, or `music-generation` skills instead",
+      "max_turns": null,
+      "plugins": [
+        "dev-tools-plugin@claude-my-marketplace",
+        "documentation-plugin@claude-my-marketplace",
+        "media-plugin@claude-my-marketplace",
+        "design-plugin@claude-my-marketplace",
+        "web-design-plugin@claude-my-marketplace"
+      ],
+      "allowed_tools": [
+        "Agent",
+        "AskUserQuestion",
+        "Bash",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "Edit",
+        "EnterPlanMode",
+        "EnterWorktree",
+        "ExitPlanMode",
+        "ExitWorktree",
+        "Glob",
+        "Grep",
+        "ListMcpResourcesTool",
+        "NotebookEdit",
+        "Read",
+        "ReadMcpResourceTool",
+        "Skill",
+        "TaskCreate",
+        "TaskGet",
+        "TaskList",
+        "TaskOutput",
+        "TaskStop",
+        "TaskUpdate",
+        "ToolSearch",
+        "Write",
+        "WebSearch",
+        "WebFetch",
+        "mcp__vex-ao-chrome",
+        "mcp__plugin_media-plugin_media-mcp",
+        "mcp__plugin_media-plugin_ElevenLabs",
+        "mcp__plugin_web-design-plugin_webdesign-playwright",
+        "mcp__plugin_documentation-plugin_mermaid",
+        "mcp__plugin_documentation-plugin_docs-playwright"
+      ],
+      "disallowed_tools": [
+        "mcp__vex-chrome",
+        "Bash(rm -rf /)",
+        "Bash(rm -rf ~)",
+        "Bash(rm -rf /*)",
+        "Bash(rm -rf ~/)",
+        "Bash(rm -r -f /)",
+        "Bash(rm -r -f ~)",
+        "Bash(rm -r -f /*)",
+        "Bash(rm -r -f ~/)",
+        "Bash(sudo rm -rf /)",
+        "Bash(sudo rm -rf ~)",
+        "Bash(sudo rm -rf /*)",
+        "Bash(sudo rm -rf ~/)"
+      ],
+      "mcp_servers": {
+        "vex-ao-chrome": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "chrome-devtools-mcp@latest",
+            "--isolated",
+            "--headless"
+          ]
+        }
+      },
+      "log_dir": "~/.vex/logs",
+      "log_formats": ["jsonl", "html"]
+    }
+  }
+}

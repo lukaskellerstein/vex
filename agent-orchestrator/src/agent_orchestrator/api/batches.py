@@ -90,8 +90,9 @@ async def submit_batch(project_id: str, body: BatchSubmission):
 
     await db.commit()
 
-    # Fire-and-forget: trigger batch processing
-    asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
+    # Fire-and-forget: trigger batch processing (store ref for cancellation)
+    task = asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
+    batch_processor.register_batch_task(batch_id, task)
 
     cursor = await db.execute("SELECT * FROM batches WHERE id = ?", (batch_id,))
     row = await cursor.fetchone()
@@ -241,12 +242,118 @@ async def get_batch_trace(batch_id: str):
             "total_duration_ms": row["total_duration_ms"],
             "total_cost_usd": row["total_cost_usd"],
             "total_tokens": row["total_tokens"],
+            "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
+            "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
             "steps": steps,
             "created_at": row["created_at"],
             "completed_at": row["completed_at"],
         })
 
     return {"traces": traces}
+
+
+@router.get("/cursors")
+async def get_active_cursors(page_url: str):
+    """Return cursor data for all actively processing batches on a given page URL."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT id FROM batches WHERE page_url = ? AND status = 'processing'",
+        (page_url,),
+    )
+    batch_rows = await cursor.fetchall()
+
+    all_agents = []
+    for batch_row in batch_rows:
+        batch_id = batch_row["id"]
+        # Get actions (selectors) for this batch
+        action_cursor = await db.execute(
+            "SELECT sequence_index, selector FROM actions WHERE batch_id = ? ORDER BY sequence_index",
+            (batch_id,),
+        )
+        actions = await action_cursor.fetchall()
+
+        # Get tasks (agent IDs) for this batch, joined with agent status
+        task_cursor = await db.execute(
+            """SELECT t.agent_id, a.status AS agent_status
+               FROM tasks t
+               LEFT JOIN agents a ON a.id = t.agent_id
+               WHERE t.batch_id = ?
+               ORDER BY t.created_at""",
+            (batch_id,),
+        )
+        tasks = await task_cursor.fetchall()
+
+        # Match actions to agents by index, skip agents that already finished
+        for idx, action in enumerate(actions):
+            if idx >= len(tasks):
+                continue
+            agent_id = tasks[idx]["agent_id"]
+            agent_status = tasks[idx]["agent_status"] or ""
+
+            # Don't return agents that are already stopped/failed/error
+            if agent_status in ("stopped", "failed", "error"):
+                continue
+
+            # Use same format as Electron UI: agent-{agentId[:8]}
+            agent_name = f"agent-{agent_id[:8]}"
+
+            all_agents.append({
+                "agentId": agent_id,
+                "agentName": agent_name,
+                "selector": action["selector"],
+                "colorIndex": idx,
+                "batchId": batch_id,
+            })
+
+    return {"agents": all_agents}
+
+
+@router.post("/projects/{project_id}/batches/{batch_id}/stop")
+async def stop_batch(project_id: str, batch_id: str):
+    """Stop a running batch and all its agents."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT id, status FROM batches WHERE id = ? AND project_id = ?",
+        (batch_id, project_id),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    if row["status"] not in ("pending", "processing"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Batch is already {row['status']}",
+        )
+
+    stopped = await batch_processor.stop_batch(batch_id)
+
+    if not stopped:
+        # No active task found (orphaned from AO restart) — force-cancel in DB
+        now = datetime.now(UTC).isoformat()
+        await db.execute(
+            "UPDATE batches SET status = 'cancelled', completed_at = ? WHERE id = ?",
+            (now, batch_id),
+        )
+        # Also stop any orphaned agents/tasks for this batch
+        await db.execute(
+            """UPDATE agents SET status = 'stopped'
+               WHERE id IN (SELECT agent_id FROM tasks WHERE batch_id = ?)
+               AND status NOT IN ('completed', 'failed', 'stopped', 'error')""",
+            (batch_id,),
+        )
+        await db.execute(
+            """UPDATE tasks SET status = 'failed', error = 'Cancelled by user', completed_at = ?
+               WHERE batch_id = ? AND status NOT IN ('completed', 'failed')""",
+            (now, batch_id),
+        )
+        await db.commit()
+
+    return {
+        "batch_id": batch_id,
+        "status": "cancelled",
+        "stopped": stopped,
+    }
 
 
 @router.delete(

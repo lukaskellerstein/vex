@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    /* Arms: multi-keystroke typing sequence — left and right alternate in a realistic pattern */
+    .arm-l { animation: type-seq-l 4s steps(1) infinite; transform-origin: 18px 78px; }
+    .arm-r { animation: type-seq-r 4s steps(1) infinite; transform-origin: 102px 78px; }
+
+    @keyframes type-seq-l {
+      0%   { transform: translateY(0); }
+      5%   { transform: translateY(6px); }
+      10%  { transform: translateY(0); }
+      20%  { transform: translateY(6px); }
+      25%  { transform: translateY(0); }
+      30%  { transform: translateY(0); }
+      40%  { transform: translateY(6px); }
+      45%  { transform: translateY(0); }
+      55%  { transform: translateY(6px); }
+      60%  { transform: translateY(0); }
+      65%  { transform: translateY(6px); }
+      70%  { transform: translateY(0); }
+      75%  { transform: translateY(0); } /* pause — thinking */
+      90%  { transform: translateY(0); }
+      92%  { transform: translateY(6px); }
+      97%  { transform: translateY(0); }
+      100% { transform: translateY(0); }
+    }
+    @keyframes type-seq-r {
+      0%   { transform: translateY(0); }
+      5%   { transform: translateY(0); }
+      12%  { transform: translateY(6px); }
+      17%  { transform: translateY(0); }
+      22%  { transform: translateY(0); }
+      27%  { transform: translateY(6px); }
+      32%  { transform: translateY(0); }
+      37%  { transform: translateY(6px); }
+      42%  { transform: translateY(0); }
+      50%  { transform: translateY(6px); }
+      55%  { transform: translateY(0); }
+      62%  { transform: translateY(6px); }
+      67%  { transform: translateY(0); }
+      75%  { transform: translateY(0); } /* pause — thinking */
+      85%  { transform: translateY(0); }
+      88%  { transform: translateY(6px); }
+      93%  { transform: translateY(0); }
+      95%  { transform: translateY(6px); }
+      100% { transform: translateY(0); }
+    }
+
+    /* Visor: scan left, pause, scan right, pause, center — like reading code */
+    .visor-bar { animation: visor-read 4s ease-in-out infinite; }
+    @keyframes visor-read {
+      0%, 5%   { transform: translateX(-8px); }
+      15%      { transform: translateX(8px); }
+      20%, 30% { transform: translateX(8px); }
+      40%      { transform: translateX(-8px); }
+      50%, 55% { transform: translateX(-8px); }
+      65%      { transform: translateX(4px); }
+      75%, 82% { transform: translateX(4px); } /* stare at one spot — thinking */
+      90%      { transform: translateX(-4px); }
+      100%     { transform: translateX(-8px); }
+    }
+
+    /* Screen: multiple lines of code scroll through */
+    .screen-text { animation: code-scroll 4s steps(8) infinite; }
+    @keyframes code-scroll {
+      0%    { transform: translateX(0); }
+      12.5% { transform: translateX(-12px); }
+      25%   { transform: translateX(-24px); }
+      37.5% { transform: translateX(-36px); }
+      50%   { transform: translateX(-48px); }
+      62.5% { transform: translateX(-48px); } /* pause */
+      75%   { transform: translateX(-60px); }
+      87.5% { transform: translateX(-72px); }
+      100%  { transform: translateX(0); }
+    }
+
+    /* Antenna: flickers fast during typing, dims during pause */
+    .antenna-led { animation: antenna-work 4s ease-in-out infinite; }
+    @keyframes antenna-work {
+      0%, 3%   { fill: #4ade80; opacity: 1; }
+      5%       { fill: #4ade80; opacity: 0.3; }
+      7%       { fill: #4ade80; opacity: 1; }
+      10%      { fill: #4ade80; opacity: 0.4; }
+      12%      { fill: #4ade80; opacity: 1; }
+      15%      { fill: #4ade80; opacity: 0.3; }
+      17%      { fill: #4ade80; opacity: 0.9; }
+      40%      { fill: #4ade80; opacity: 1; }
+      50%      { fill: #4ade80; opacity: 0.3; }
+      55%      { fill: #4ade80; opacity: 1; }
+      70%      { fill: #4ade80; opacity: 0.8; }
+      75%      { fill: #fbbf24; opacity: 0.5; } /* thinking — amber */
+      82%      { fill: #fbbf24; opacity: 0.3; }
+      88%      { fill: #4ade80; opacity: 0.8; }
+      100%     { fill: #4ade80; opacity: 1; }
+    }
+
+    .gear { animation: spin 3s linear infinite; transform-origin: 60px 104px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+
+  <!-- Antenna -->
+  <polyline points="60,26 56,18 64,10 60,2" fill="none" stroke="#6d8a6d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect class="antenna-led" x="57" y="0" width="6" height="6" fill="#4ade80" opacity="0.8"/>
+
+  <!-- Head -->
+  <rect x="32" y="26" width="56" height="38" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Visor -->
+  <rect x="38" y="32" width="44" height="14" rx="1" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <g clip-path="url(#vc1)">
+    <rect class="visor-bar" x="44" y="34" width="16" height="10" rx="1" fill="#4ade80" opacity="0.8"/>
+  </g>
+  <defs><clipPath id="vc1"><rect x="39" y="33" width="42" height="12"/></clipPath></defs>
+
+  <!-- Speaker grille -->
+  <line x1="44" y1="52" x2="76" y2="52" stroke="#3a5a3a" stroke-width="1.5"/>
+  <line x1="44" y1="55" x2="76" y2="55" stroke="#3a5a3a" stroke-width="1.5"/>
+  <line x1="44" y1="58" x2="76" y2="58" stroke="#3a5a3a" stroke-width="1.5"/>
+
+  <!-- Neck -->
+  <rect x="52" y="64" width="16" height="8" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <circle cx="56" cy="68" r="1.5" fill="#4a6a4a"/>
+  <circle cx="64" cy="68" r="1.5" fill="#4a6a4a"/>
+
+  <!-- Body -->
+  <rect x="28" y="72" width="64" height="42" rx="3" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Screen -->
+  <rect x="36" y="78" width="48" height="16" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <g class="screen-text" clip-path="url(#sc1)">
+    <text x="38" y="89" fill="#4ade80" font-family="monospace" font-size="7" opacity="0.9">fn build() for x in 0..n { emit(x) } ok;</text>
+  </g>
+  <defs><clipPath id="sc1"><rect x="37" y="79" width="46" height="14"/></clipPath></defs>
+
+  <!-- Gear -->
+  <g class="gear">
+    <circle cx="60" cy="104" r="5" fill="none" stroke="#4a6a4a" stroke-width="1.5"/>
+    <line x1="60" y1="99" x2="60" y2="109" stroke="#4a6a4a" stroke-width="1.5"/>
+    <line x1="55" y1="104" x2="65" y2="104" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Left Arm -->
+  <g class="arm-l">
+    <rect x="10" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="14" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="11" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Right Arm -->
+  <g class="arm-r">
+    <rect x="94" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="98" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="95" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Legs -->
+  <rect x="36" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="68" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="32" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="64" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+</svg>

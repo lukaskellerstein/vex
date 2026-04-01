@@ -28,6 +28,8 @@ declare global {
       getBatches: (projectId: string) => Promise<any[]>;
       getBatch: (projectId: string, batchId: string) => Promise<any>;
       deleteBatch: (projectId: string, batchId: string) => Promise<void>;
+      stopBatch: (projectId: string, batchId: string) => Promise<any>;
+      stopAgent: (agentId: string) => Promise<any>;
       getAgentTrace: (batchId: string) => Promise<any>;
       getActivity: (filters?: { projectId?: string; type?: string; since?: string }) => Promise<any[]>;
       getActivityStats: (since?: string) => Promise<any>;
@@ -39,6 +41,13 @@ declare global {
       unsubscribeAgentSteps: (agentId: string) => Promise<{ ok: boolean }>;
       onAgentStep: (callback: (data: Record<string, unknown>) => void) => () => void;
       onAgentStatus: (callback: (data: Record<string, unknown>) => void) => () => void;
+      onAgentHook: (callback: (data: Record<string, unknown>) => void) => () => void;
+      // Window controls
+      windowMinimize: () => Promise<void>;
+      windowMaximize: () => Promise<void>;
+      windowClose: () => Promise<void>;
+      windowIsMaximized: () => Promise<boolean>;
+      onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
     };
   }
 }

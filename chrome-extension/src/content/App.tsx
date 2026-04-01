@@ -12,15 +12,10 @@ import { Toolbar } from "./components/Toolbar";
 import { EditMode } from "./components/EditMode";
 import { ResizeMode } from "./components/ResizeMode";
 import { StylePanel } from "./components/StylePanel";
+import { AgentCursors } from "./components/AgentCursors";
 
 const HOST_ID = "__web-selector-root";
 
-const MODE_KEY_MAP: Record<string, InteractionMode> = {
-  "1": "select",
-  "2": "edit",
-  "3": "resize",
-  "4": "style",
-};
 
 interface PopupState {
   element: Element;
@@ -58,7 +53,16 @@ export function App({ hostElement, shadowRoot }: AppProps) {
   } = useActions();
 
   const { hover, isOwnElement } = useHoverHighlight(state, HOST_ID);
-  const natsClient = useNatsClient();
+
+  // NATS connects only when needed: user activates the extension OR
+  // AgentCursors discovers active agents via AO polling.
+  const [natsEnabled, setNatsEnabled] = useState(false);
+  useEffect(() => {
+    if (state !== "inactive") setNatsEnabled(true);
+  }, [state]);
+
+  const enableNats = useCallback(() => setNatsEnabled(true), []);
+  const natsClient = useNatsClient(natsEnabled);
 
   const popupRef = useRef<PopupState | null>(null);
   const popupResolveRef = useRef<((instruction: string) => void) | null>(null);
@@ -67,26 +71,6 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   const [highlightedActionIndex, setHighlightedActionIndex] = useState<number | null>(null);
 
-  // Keyboard shortcuts for mode switching
-  useEffect(() => {
-    if (stateRef.current === "inactive") return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (stateRef.current === "inactive") return;
-      if (stateRef.current === "selected") return; // don't switch while popup open
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
-
-      const keyMode = MODE_KEY_MAP[e.key];
-      if (keyMode) {
-        e.preventDefault();
-        setMode((prev) => prev === keyMode ? "idle" : keyMode);
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [state, setMode]);
 
   // Send handler
   const handleSend = useCallback(() => {
@@ -317,6 +301,9 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   return (
     <>
+      {/* Agent cursors — always polls AO; triggers NATS connection when agents found */}
+      <AgentCursors natsClient={natsClient} onAgentsDetected={enableNats} />
+
       {isActive && (
         <Toolbar
           mode={mode}

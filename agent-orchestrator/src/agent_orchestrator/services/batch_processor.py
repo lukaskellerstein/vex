@@ -8,16 +8,89 @@ from datetime import UTC, datetime
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services.agent_manager import AgentManagerService
+from agent_orchestrator.services import nats_service
+from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile
 
 logger = logging.getLogger(__name__)
 
 _agent_manager: AgentManagerService | None = None
+_running_batches: dict[str, dict] = {}  # batch_id → {"task": asyncio.Task, "agent_ids": list[str]}
 
 
 def init(agent_manager: AgentManagerService) -> None:
     """Initialize batch processor with agent manager reference."""
     global _agent_manager
     _agent_manager = agent_manager
+
+
+def register_batch_task(batch_id: str, task: asyncio.Task) -> None:
+    """Store a reference to the batch processing task for cancellation."""
+    entry = _running_batches.setdefault(batch_id, {})
+    entry["task"] = task
+    entry.setdefault("agent_ids", [])
+
+
+async def stop_batch(batch_id: str) -> bool:
+    """Stop a running batch by interrupting its agents and cancelling the task.
+
+    Returns True if the batch was found and stopped.
+    """
+    entry = _running_batches.get(batch_id)
+    if entry is None:
+        return False
+
+    # Phase 1: Interrupt all active SDK sessions for this batch's agents
+    if _agent_manager:
+        adapter = _agent_manager._adapters.get("claude-code-sdk")
+        if adapter:
+            for agent_id in entry.get("agent_ids", []):
+                try:
+                    await adapter.abort(agent_id)
+                except Exception:
+                    logger.exception("Error aborting agent %s in batch %s", agent_id, batch_id)
+
+    # Phase 2: Cancel the asyncio task as backstop
+    task = entry.get("task")
+    if task and not task.done():
+        task.cancel()
+
+    # Update DB status
+    db = await get_db()
+    await db.execute(
+        "UPDATE batches SET status = 'cancelled', completed_at = ? WHERE id = ? AND status IN ('pending', 'processing')",
+        (datetime.now(UTC).isoformat(), batch_id),
+    )
+    await db.commit()
+
+    # Publish batch status event
+    await nats_service.publish(
+        f"vex.batch.{batch_id}.status",
+        {"batch_id": batch_id, "status": "cancelled", "timestamp": datetime.now(UTC).isoformat()},
+    )
+
+    logger.info("Batch %s: stop requested", batch_id)
+    return True
+
+
+async def abort_agent(agent_id: str) -> bool:
+    """Abort a single running agent by interrupting its SDK session.
+
+    Returns True if the agent was found and interrupted.
+    """
+    if _agent_manager is None:
+        return False
+    adapter = _agent_manager._adapters.get("claude-code-sdk")
+    if adapter is None:
+        return False
+    session = adapter._sessions.get(agent_id)
+    if session is None or session.status != "running":
+        return False
+    try:
+        await adapter.abort(agent_id)
+        return True
+    except Exception:
+        logger.exception("Error aborting agent %s", agent_id)
+        return False
 
 
 async def process_batch(project_id: str, batch_id: str) -> None:
@@ -66,40 +139,127 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     await db.commit()
     logger.info("Batch %s: processing %d actions", batch_id, len(actions))
 
+    # Pre-generate agent IDs so we can publish cursor mapping before execution
+    agent_ids = [uuid.uuid4().hex for _ in actions]
+
+    # Load batch page_url for cursor overlay
+    batch_cursor = await db.execute("SELECT page_url FROM batches WHERE id = ?", (batch_id,))
+    batch_row = await batch_cursor.fetchone()
+    page_url = batch_row["page_url"] if batch_row else ""
+
+    # Publish cursor init via NATS so Chrome extension can show cursors
+    cursor_agents = []
+    for idx, action in enumerate(actions):
+        cursor_agents.append({
+            "agentId": agent_ids[idx],
+            "agentName": f"agent-{agent_ids[idx][:8]}",
+            "selector": action["selector"],
+            "colorIndex": idx,
+        })
+    cursor_payload = {
+        "type": "cursor_init",
+        "batchId": batch_id,
+        "pageUrl": page_url,
+        "agents": cursor_agents,
+    }
+    cursor_subject = f"vex.batch.{batch_id}.cursors"
+    logger.info("Publishing cursor init on %s: %d agents, pageUrl=%s", cursor_subject, len(cursor_agents), page_url)
+    await nats_service.publish(cursor_subject, cursor_payload)
+
+    # Track agent IDs for cancellation support
+    entry = _running_batches.setdefault(batch_id, {})
+    entry["agent_ids"] = list(agent_ids)
+
     # Spawn one agent per action in parallel
     tasks = []
     for idx, action in enumerate(actions):
         tasks.append(
-            _process_action(project, batch_id, action, idx)
+            _process_action(project, batch_id, action, idx, agent_ids[idx])
         )
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Determine batch outcome
-    any_failed = any(isinstance(r, Exception) or r is False for r in results)
-    now = datetime.now(UTC).isoformat()
+        # Determine batch outcome
+        any_cancelled = any(isinstance(r, asyncio.CancelledError) for r in results)
+        any_failed = any(
+            (isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError))
+            or r is False
+            for r in results
+        )
 
-    db = await get_db()
-    batch_status = "failed" if any_failed else "completed"
-    await db.execute(
-        "UPDATE batches SET status = ?, completed_at = ? WHERE id = ?",
-        (batch_status, now, batch_id),
-    )
+        if any_cancelled:
+            batch_status = "cancelled"
+        elif any_failed:
+            batch_status = "failed"
+        else:
+            batch_status = "completed"
 
-    # Log activity event: batch completed/failed
-    event_id = uuid.uuid4().hex
-    succeeded = sum(1 for r in results if r is True)
-    failed_count = len(results) - succeeded
-    summary = f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
-    if failed_count > 0:
-        summary += f", {failed_count} failed"
-    await db.execute(
-        """INSERT INTO activity_events (id, type, project_id, project_name, summary, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (event_id, f"batch_{batch_status}", project_id, project["name"], summary, now),
-    )
-    await db.commit()
-    logger.info("Batch %s: %s", batch_id, batch_status)
+        now = datetime.now(UTC).isoformat()
+        db = await get_db()
+
+        # Compute batch duration from submitted_at → now
+        batch_cursor = await db.execute(
+            "SELECT submitted_at FROM batches WHERE id = ?", (batch_id,),
+        )
+        batch_row = await batch_cursor.fetchone()
+        batch_duration_ms = None
+        if batch_row and batch_row["submitted_at"]:
+            submitted = datetime.fromisoformat(batch_row["submitted_at"])
+            completed = datetime.fromisoformat(now)
+            batch_duration_ms = int((completed - submitted).total_seconds() * 1000)
+
+        # Sum cost from agent traces for this batch
+        cost_cursor = await db.execute(
+            "SELECT COALESCE(SUM(total_cost_usd), 0) AS total_cost FROM agent_traces WHERE batch_id = ?",
+            (batch_id,),
+        )
+        cost_row = await cost_cursor.fetchone()
+        batch_cost_usd = cost_row["total_cost"] if cost_row and cost_row["total_cost"] else None
+
+        await db.execute(
+            "UPDATE batches SET status = ?, completed_at = ?, duration_ms = ?, cost_usd = ? WHERE id = ? AND status NOT IN ('cancelled')",
+            (batch_status, now, batch_duration_ms, batch_cost_usd, batch_id),
+        )
+
+        # Log activity event: batch outcome
+        event_id = uuid.uuid4().hex
+        succeeded = sum(1 for r in results if r is True)
+        failed_count = len(results) - succeeded
+        summary = f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
+        if failed_count > 0:
+            summary += f", {failed_count} failed/cancelled"
+        await db.execute(
+            """INSERT INTO activity_events (id, type, project_id, project_name, summary, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (event_id, f"batch_{batch_status}", project_id, project["name"], summary, now),
+        )
+        await db.commit()
+
+        # Publish batch status event for real-time UI updates
+        await nats_service.publish(
+            f"vex.batch.{batch_id}.status",
+            {"batch_id": batch_id, "status": batch_status, "timestamp": now},
+        )
+        logger.info("Batch %s: %s", batch_id, batch_status)
+
+    except asyncio.CancelledError:
+        # Batch task itself was cancelled (backstop from stop_batch)
+        now = datetime.now(UTC).isoformat()
+        db = await get_db()
+        await db.execute(
+            "UPDATE batches SET status = 'cancelled', completed_at = ? WHERE id = ? AND status NOT IN ('cancelled')",
+            (now, batch_id),
+        )
+        await db.commit()
+        await nats_service.publish(
+            f"vex.batch.{batch_id}.status",
+            {"batch_id": batch_id, "status": "cancelled", "timestamp": now},
+        )
+        logger.info("Batch %s: cancelled via task cancellation", batch_id)
+
+    finally:
+        _running_batches.pop(batch_id, None)
 
 
 async def _process_action(
@@ -107,11 +267,13 @@ async def _process_action(
     batch_id: str,
     action,
     action_idx: int,
+    agent_id: str | None = None,
 ) -> bool:
     """Process a single action: create agent, send task, persist trace, cleanup."""
     db = await get_db()
     now = datetime.now(UTC).isoformat()
-    agent_id = uuid.uuid4().hex
+    if agent_id is None:
+        agent_id = uuid.uuid4().hex
     agent_name = f"agent-{batch_id[:8]}-{action_idx}"
     task_id = uuid.uuid4().hex
 
@@ -167,9 +329,9 @@ async def _process_action(
         session = adapter._sessions.get(agent_id)
         cost_usd = None
         duration_ms = None
+        was_cancelled = session and session.status == "cancelled"
 
         if session:
-            # Extract cost from last step if available
             for step in reversed(session.steps):
                 if step.get("type") == "completed":
                     cost_usd = step.get("cost_usd")
@@ -180,36 +342,60 @@ async def _process_action(
         completed_at = datetime.now(UTC).isoformat()
         await _persist_trace(db, batch_id, agent_id, agent_name, session, cost_usd, duration_ms, completed_at)
 
-        # Update task as completed
+        if was_cancelled:
+            await db.execute(
+                "UPDATE tasks SET status = 'cancelled', result = 'Cancelled by user', completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            await db.execute(
+                "UPDATE agents SET status = 'stopped' WHERE id = ?",
+                (agent_id,),
+            )
+            await db.commit()
+            logger.info("Action %d in batch %s cancelled for agent %s", action_idx, batch_id, agent_id)
+            return False
+        else:
+            await db.execute(
+                "UPDATE tasks SET status = 'completed', result = 'Action processed successfully', completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            await db.execute(
+                "UPDATE agents SET tasks_completed = tasks_completed + 1, total_cost_usd = total_cost_usd + ? WHERE id = ?",
+                (cost_usd or 0, agent_id),
+            )
+            await db.commit()
+
+            await db.execute(
+                """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (uuid.uuid4().hex, "task_completed", project["id"], project["name"], agent_id, agent_name,
+                 f"Agent {agent_name} completed action: {action['type']} on {action['selector']}",
+                 datetime.now(UTC).isoformat()),
+            )
+            await db.commit()
+
+            logger.info("Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id)
+            return True
+
+    except asyncio.CancelledError:
+        # Task was cancelled via asyncio (backstop from stop_batch)
+        logger.info("Action %d in batch %s cancelled (asyncio) for agent %s", action_idx, batch_id, agent_id)
+        db = await get_db()
+        completed_at = datetime.now(UTC).isoformat()
         await db.execute(
-            "UPDATE tasks SET status = 'completed', result = 'Action processed successfully', completed_at = ? WHERE id = ?",
+            "UPDATE tasks SET status = 'cancelled', result = 'Cancelled by user', completed_at = ? WHERE id = ?",
             (completed_at, task_id),
         )
-
-        # Update agent stats
         await db.execute(
-            "UPDATE agents SET tasks_completed = tasks_completed + 1, total_cost_usd = total_cost_usd + ? WHERE id = ?",
-            (cost_usd or 0, agent_id),
+            "UPDATE agents SET status = 'stopped' WHERE id = ?",
+            (agent_id,),
         )
         await db.commit()
-
-        # Log per-agent activity event: task completed
-        await db.execute(
-            """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uuid.uuid4().hex, "task_completed", project["id"], project["name"], agent_id, agent_name,
-             f"Agent {agent_name} completed action: {action['type']} on {action['selector']}",
-             datetime.now(UTC).isoformat()),
-        )
-        await db.commit()
-
-        logger.info("Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id)
-        return True
+        raise  # Re-raise so gather captures it
 
     except Exception as e:
         logger.exception("Action %d in batch %s failed: %s", action_idx, batch_id, e)
 
-        # Mark task as failed
         db = await get_db()
         error_msg = str(e)
         completed_at = datetime.now(UTC).isoformat()
@@ -223,7 +409,6 @@ async def _process_action(
             (agent_id,),
         )
 
-        # Log per-agent activity event: task failed
         await db.execute(
             """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -258,16 +443,24 @@ async def _persist_trace(
     steps = session.steps if session else []
 
     total_tokens = 0
+    input_tokens = 0
+    output_tokens = 0
     for step in steps:
         total_tokens += step.get("token_count", 0)
+        # Extract input/output tokens from the completed step
+        if step.get("type") == "completed":
+            input_tokens = step.get("input_tokens", 0) or 0
+            output_tokens = step.get("output_tokens", 0) or 0
 
     await db.execute(
         """INSERT INTO agent_traces (id, batch_id, agent_id, agent_name, agent_model, status,
-           total_duration_ms, total_cost_usd, total_tokens, created_at, completed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           total_duration_ms, total_cost_usd, total_tokens, input_tokens, output_tokens,
+           created_at, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            trace_id, batch_id, agent_id, agent_name, "claude-sonnet-4-5",
-            "completed", duration_ms, cost_usd, total_tokens, now, completed_at,
+            trace_id, batch_id, agent_id, agent_name, get_agent_profile().get("model", "claude-opus-4-6"),
+            "completed", duration_ms, cost_usd, total_tokens, input_tokens, output_tokens,
+            now, completed_at,
         ),
     )
 
@@ -283,7 +476,7 @@ async def _persist_trace(
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 step_id, trace_id, idx, step.get("type", "unknown"),
-                step.get("content", "")[:2000], metadata,
+                step.get("content", "")[:10000], metadata,
                 step.get("duration_ms"), step.get("token_count"), step.get("timestamp", now),
             ),
         )
@@ -322,10 +515,24 @@ def _build_prompt(
     screenshot_before: str | None = None,
     screenshot_after: str | None = None,
 ) -> str:
-    """Build prompt for a single action."""
+    """Build prompt for a single action.
+
+    Two modes:
+    - **Prompt-driven** (insert/replaceImage/generateSection with a generation prompt):
+      The user's creative prompt is the primary task. The selector/position is context
+      for WHERE to apply the result in the code.
+    - **Delta-driven** (styleChange, resize, editText, move, delete, etc.):
+      The structural DOM change is the primary task. Apply it precisely.
+    """
     action_type = action["type"]
     selector = action["selector"]
     instruction = action_data.get("instruction", "")
+    generation_prompt = action_data.get("prompt", "")
+
+    # Detect prompt-driven actions
+    is_prompt_driven = bool(generation_prompt) and action_type in (
+        "insert", "replaceImage", "generateSection",
+    )
 
     parts = [
         f"Project: {project['path']}",
@@ -333,24 +540,64 @@ def _build_prompt(
         f"Styling: {project['styling_approach'] or 'unknown'}",
     ]
 
-    # Include URL when available
     url = action_data.get("url")
     if url:
         parts.append(f"URL: {url}")
 
-    parts.extend([
-        "",
-        "## Task",
-        "Apply the following visual edit:",
-        "",
-        f"**Action**: [{action_type}] `{selector}`",
-    ])
+    parts.append("")
 
-    if instruction:
-        parts.append(f"**Instruction**: {instruction}")
+    if is_prompt_driven:
+        # ── Prompt-driven: user's creative intent is the task ──
+        parts.extend([
+            "## Task",
+            f"{generation_prompt}",
+            "",
+            "## Where to apply",
+            f"**Action**: [{action_type}] at `{selector}`",
+        ])
+        if action_type == "insert":
+            pos = action_data.get("position", "after")
+            visual_pos = action_data.get("visual_position", "")
+            ref = action_data.get("reference_selector", "")
+            content = action_data.get("content", {})
+            parts.append(f"**Position**: {pos}" + (f" relative to `{ref}`" if ref else ""))
+            if visual_pos in ("left", "right"):
+                parts.append(
+                    f"**Visual placement**: {visual_pos} of the reference element. "
+                    "The new element must appear side-by-side with the reference. "
+                    "If the parent is not already a horizontal layout (flexbox row or CSS grid), "
+                    "wrap the reference and new element in a flex row container."
+                )
+            if content:
+                tag = content.get("tag", "div")
+                parts.append(f"**Element to create**: `<{tag}>`")
+        elif action_type == "replaceImage":
+            if action_data.get("original_src"):
+                parts.append(f"**Replace image at**: `{action_data['original_src']}`")
+            if action_data.get("dimensions"):
+                d = action_data["dimensions"]
+                parts.append(f"**Dimensions**: {d.get('width', '?')}x{d.get('height', '?')}px")
+        elif action_type == "generateSection":
+            pos = action_data.get("position", "after")
+            ref = action_data.get("reference_selector", "")
+            parts.append(f"**Position**: {pos}" + (f" relative to `{ref}`" if ref else ""))
+            if action_data.get("style_hint"):
+                parts.append(f"**Style hint**: {action_data['style_hint']}")
 
-    # --- Action-specific details ---
-    _append_action_details(parts, action_type, action_data)
+        if instruction:
+            parts.append(f"**Additional instruction**: {instruction}")
+
+    else:
+        # ── Delta-driven: structural change is the task ──
+        parts.extend([
+            "## Task",
+            "Apply the following visual edit:",
+            "",
+            f"**Action**: [{action_type}] `{selector}`",
+        ])
+        if instruction:
+            parts.append(f"**Instruction**: {instruction}")
+        _append_action_details(parts, action_type, action_data)
 
     # --- Element context (select actions carry rich metadata) ---
     _append_element_context(parts, action_data)
@@ -401,6 +648,11 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
         ref = data.get("reference_selector", "")
         content = data.get("content", {})
         parts.append(f"**Position**: {pos}" + (f" (visually {visual_pos})" if visual_pos else ""))
+        if visual_pos in ("left", "right"):
+            parts.append(
+                "**Layout**: Place the new element side-by-side with the reference. "
+                "Use a flex row wrapper if the parent is not already horizontal."
+            )
         if ref:
             parts.append(f"**Reference element**: `{ref}`")
         if content:

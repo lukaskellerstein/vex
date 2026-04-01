@@ -1,0 +1,215 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140">
+  <style>
+    /* Both arms work together: reach out, weld, pull back, inspect, repeat at different spots */
+    .arm-l { animation: weld-l 7s ease-in-out infinite; transform-origin: 18px 78px; }
+    .arm-r { animation: weld-r 7s ease-in-out infinite; transform-origin: 102px 78px; }
+
+    @keyframes weld-l {
+      0%, 4%   { transform: rotate(0deg); }
+      8%       { transform: rotate(-25deg); }   /* reach out left */
+      22%      { transform: rotate(-25deg); }   /* hold while welding */
+      26%      { transform: rotate(0deg); }     /* retract */
+      30%, 34% { transform: rotate(0deg); }     /* rest */
+      38%      { transform: rotate(-15deg); }   /* reach center-left */
+      52%      { transform: rotate(-15deg); }   /* hold */
+      56%      { transform: rotate(0deg); }     /* retract */
+      60%, 70% { transform: rotate(0deg); }     /* long rest — inspect */
+      74%      { transform: rotate(-30deg); }   /* reach far out */
+      84%      { transform: rotate(-30deg); }   /* weld far point */
+      88%      { transform: rotate(0deg); }
+      100%     { transform: rotate(0deg); }
+    }
+    @keyframes weld-r {
+      0%, 4%   { transform: rotate(0deg); }
+      8%       { transform: rotate(20deg); }    /* assist hold */
+      22%      { transform: rotate(20deg); }
+      26%      { transform: rotate(0deg); }
+      30%, 34% { transform: rotate(0deg); }
+      38%      { transform: rotate(12deg); }
+      52%      { transform: rotate(12deg); }
+      56%      { transform: rotate(0deg); }
+      60%, 70% { transform: rotate(5deg); }     /* slight gesture during inspect */
+      74%      { transform: rotate(25deg); }
+      84%      { transform: rotate(25deg); }
+      88%      { transform: rotate(0deg); }
+      100%     { transform: rotate(0deg); }
+    }
+
+    /* Welding arc: appears during welding phases */
+    .weld-glow { animation: arc 7s ease-in-out infinite; }
+    @keyframes arc {
+      0%, 7%   { opacity: 0; }
+      8%, 22%  { opacity: 1; }    /* first weld */
+      23%, 37% { opacity: 0; }
+      38%, 52% { opacity: 1; }    /* second weld */
+      53%, 73% { opacity: 0; }
+      74%, 84% { opacity: 1; }    /* third weld */
+      85%, 100%{ opacity: 0; }
+    }
+
+    /* Sparks spray during welding */
+    .spray1 { animation: spray-a 7s ease-out infinite; }
+    .spray2 { animation: spray-b 7s ease-out infinite 0.1s; }
+    .spray3 { animation: spray-c 7s ease-out infinite 0.2s; }
+    .spray4 { animation: spray-d 7s ease-out infinite 0.05s; }
+    @keyframes spray-a {
+      0%, 7%   { opacity: 0; cx: 10; cy: 108; }
+      8%       { opacity: 1; cx: 10; cy: 108; }
+      12%      { opacity: 1; cx: 4; cy: 98; }
+      14%      { opacity: 0; cx: 0; cy: 92; }
+      15%, 37% { opacity: 0; cx: 10; cy: 108; }
+      38%      { opacity: 1; cx: 18; cy: 104; }
+      42%      { opacity: 1; cx: 12; cy: 94; }
+      44%      { opacity: 0; cx: 8; cy: 88; }
+      45%, 73% { opacity: 0; }
+      74%      { opacity: 1; cx: 6; cy: 110; }
+      78%      { opacity: 1; cx: 0; cy: 100; }
+      80%      { opacity: 0; }
+      81%, 100%{ opacity: 0; }
+    }
+    @keyframes spray-b {
+      0%, 7%   { opacity: 0; cx: 14; cy: 110; }
+      9%       { opacity: 1; cx: 14; cy: 110; }
+      13%      { opacity: 1; cx: 20; cy: 96; }
+      15%      { opacity: 0; }
+      16%, 38% { opacity: 0; }
+      39%      { opacity: 1; cx: 22; cy: 106; }
+      43%      { opacity: 1; cx: 28; cy: 92; }
+      45%      { opacity: 0; }
+      46%, 74% { opacity: 0; }
+      75%      { opacity: 1; cx: 10; cy: 112; }
+      79%      { opacity: 1; cx: 16; cy: 98; }
+      81%      { opacity: 0; }
+      82%, 100%{ opacity: 0; }
+    }
+    @keyframes spray-c {
+      0%, 8%   { opacity: 0; cx: 8; cy: 106; }
+      10%      { opacity: 1; cx: 8; cy: 106; }
+      14%      { opacity: 1; cx: -2; cy: 100; }
+      16%      { opacity: 0; }
+      17%, 39% { opacity: 0; }
+      40%      { opacity: 1; cx: 16; cy: 102; }
+      44%      { opacity: 1; cx: 6; cy: 96; }
+      46%      { opacity: 0; }
+      47%, 75% { opacity: 0; }
+      76%      { opacity: 1; cx: 4; cy: 108; }
+      80%      { opacity: 1; cx: -4; cy: 102; }
+      82%      { opacity: 0; }
+      83%, 100%{ opacity: 0; }
+    }
+    @keyframes spray-d {
+      0%, 9%   { opacity: 0; cx: 16; cy: 112; }
+      10%      { opacity: 1; cx: 16; cy: 112; }
+      15%      { opacity: 0; cx: 24; cy: 100; }
+      16%, 40% { opacity: 0; }
+      41%      { opacity: 1; cx: 24; cy: 108; }
+      46%      { opacity: 0; cx: 30; cy: 96; }
+      47%, 76% { opacity: 0; }
+      77%      { opacity: 1; cx: 12; cy: 114; }
+      82%      { opacity: 0; cx: 20; cy: 102; }
+      83%, 100%{ opacity: 0; }
+    }
+
+    /* Visor: protective welding shield — dims during welding */
+    .visor-bar { animation: shield 7s ease-in-out infinite; }
+    @keyframes shield {
+      0%, 7%   { fill: #4ade80; opacity: 0.8; }
+      8%       { fill: #166534; opacity: 0.4; }    /* dim for welding */
+      22%      { fill: #166534; opacity: 0.4; }
+      26%      { fill: #4ade80; opacity: 0.8; }    /* restore */
+      37%      { fill: #4ade80; opacity: 0.8; }
+      38%      { fill: #166534; opacity: 0.4; }
+      52%      { fill: #166534; opacity: 0.4; }
+      56%      { fill: #4ade80; opacity: 0.8; }
+      60%      { fill: #fbbf24; opacity: 0.5; }    /* amber — inspecting */
+      70%      { fill: #fbbf24; opacity: 0.5; }
+      73%      { fill: #4ade80; opacity: 0.8; }
+      74%      { fill: #166534; opacity: 0.4; }
+      84%      { fill: #166534; opacity: 0.4; }
+      88%      { fill: #4ade80; opacity: 0.8; }
+      100%     { fill: #4ade80; opacity: 0.8; }
+    }
+
+    /* Body heat indicator */
+    .heat { animation: heat-cycle 7s ease-in-out infinite; }
+    @keyframes heat-cycle {
+      0%       { fill: #1e2e1e; }
+      22%      { fill: #2e3a1e; }   /* warm from welding */
+      30%      { fill: #1e2e1e; }   /* cool down */
+      52%      { fill: #2e3a1e; }
+      60%      { fill: #1e2e1e; }
+      84%      { fill: #2e3a1e; }
+      92%      { fill: #1e2e1e; }
+      100%     { fill: #1e2e1e; }
+    }
+
+    .antenna-led { animation: ant 0.8s ease-in-out infinite; }
+    @keyframes ant { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+  </style>
+
+  <!-- Antenna -->
+  <polyline points="60,26 56,18 64,10 60,2" fill="none" stroke="#6d8a6d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect class="antenna-led" x="57" y="0" width="6" height="6" fill="#4ade80"/>
+
+  <!-- Head -->
+  <rect x="32" y="26" width="56" height="38" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Visor — wide protective -->
+  <rect x="36" y="32" width="48" height="16" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <rect class="visor-bar" x="38" y="34" width="44" height="12" rx="1" fill="#4ade80" opacity="0.8"/>
+  <!-- Mouth -->
+  <rect x="46" y="54" width="28" height="4" rx="1" fill="#0a1a0a"/>
+  <line x1="50" y1="54" x2="50" y2="58" stroke="#3a5a3a" stroke-width="1"/>
+  <line x1="56" y1="54" x2="56" y2="58" stroke="#3a5a3a" stroke-width="1"/>
+  <line x1="62" y1="54" x2="62" y2="58" stroke="#3a5a3a" stroke-width="1"/>
+  <line x1="68" y1="54" x2="68" y2="58" stroke="#3a5a3a" stroke-width="1"/>
+
+  <!-- Neck -->
+  <rect x="52" y="64" width="16" height="8" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+
+  <!-- Body -->
+  <rect class="heat" x="28" y="72" width="64" height="42" rx="3" stroke="#4a6a4a" stroke-width="2"/>
+  <!-- Chest: temperature gauge -->
+  <rect x="42" y="80" width="36" height="6" rx="2" fill="#0a1a0a" stroke="#3a5a3a" stroke-width="1"/>
+  <rect x="44" y="82" width="12" height="2" rx="1" fill="#4ade80">
+    <animate attributeName="width" values="12;28;12;30;12;32;12" dur="7s" repeatCount="indefinite"/>
+    <animate attributeName="fill" values="#4ade80;#fbbf24;#4ade80;#fbbf24;#4ade80;#fb923c;#4ade80" dur="7s" repeatCount="indefinite"/>
+  </rect>
+  <!-- Utility belt -->
+  <rect x="32" y="96" width="56" height="6" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="38" y="97" width="6" height="4" rx="1" fill="#3a5a3a"/>
+  <rect x="48" y="97" width="6" height="4" rx="1" fill="#3a5a3a"/>
+  <rect x="58" y="97" width="6" height="4" rx="1" fill="#3a5a3a"/>
+  <circle cx="72" cy="99" r="2.5" fill="#3a5a3a" stroke="#4a6a4a" stroke-width="0.5"/>
+  <circle cx="80" cy="99" r="2.5" fill="#3a5a3a" stroke="#4a6a4a" stroke-width="0.5"/>
+
+  <!-- Left Arm -->
+  <g class="arm-l">
+    <rect x="10" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="14" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="11" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <!-- Welding torch tip -->
+    <rect x="13" y="109" width="4" height="6" rx="1" fill="#5a6a5a"/>
+    <!-- Weld arc glow -->
+    <circle class="weld-glow" cx="15" cy="116" r="4" fill="#60a5fa" opacity="0"/>
+    <circle class="weld-glow" cx="15" cy="116" r="8" fill="#60a5fa" opacity="0" style="animation-delay: 0.05s"/>
+  </g>
+
+  <!-- Right Arm -->
+  <g class="arm-r">
+    <rect x="94" y="74" width="16" height="10" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+    <rect x="98" y="84" width="8" height="20" rx="1" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+    <rect x="95" y="102" width="14" height="8" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Sparks -->
+  <circle class="spray1" cx="10" cy="108" r="1.5" fill="#fbbf24"/>
+  <circle class="spray2" cx="14" cy="110" r="1" fill="#fb923c"/>
+  <circle class="spray3" cx="8" cy="106" r="1.5" fill="#fbbf24"/>
+  <circle class="spray4" cx="16" cy="112" r="1" fill="#fde68a"/>
+
+  <!-- Legs -->
+  <rect x="36" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="68" y="114" width="16" height="16" rx="2" fill="#1e2e1e" stroke="#4a6a4a" stroke-width="1.5"/>
+  <rect x="32" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+  <rect x="64" y="130" width="24" height="6" rx="3" fill="#2a3a2a" stroke="#4a6a4a" stroke-width="1"/>
+</svg>

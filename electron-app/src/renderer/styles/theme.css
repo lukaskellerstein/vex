@@ -157,6 +157,11 @@ input:focus, select:focus, textarea:focus {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 0px #4ade80); }
+  50%      { opacity: 0.6; transform: scale(0.9); filter: drop-shadow(0 0 6px #4ade80); }
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }

@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { FolderOpen, Play, Square, Trash2, Clock } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Play, Square, Trash2, Clock } from "lucide-react";
 import { FrameworkBadge } from "./FrameworkBadge";
 import { StatusIndicator } from "./StatusIndicator";
+import { OperatorRobot } from "./OperatorRobot";
 
 interface ProjectCardProps {
   project: {
@@ -11,6 +12,8 @@ interface ProjectCardProps {
     framework?: string;
     status?: string;
     lastActivityAt?: string;
+    agentCount?: number;
+    agentRunningSeconds?: number;
   };
   onClick: (id: string) => void;
   onToggleServer?: (id: string) => void;
@@ -32,14 +35,30 @@ function formatLastActivity(isoString?: string): string {
   return `${diffDays}d ago`;
 }
 
-function truncatePath(p: string, maxLen = 45): string {
-  if (p.length <= maxLen) return p;
-  return "..." + p.slice(p.length - maxLen + 3);
+function formatTimer(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}m ${s.toString().padStart(2, "0")}s`;
 }
 
 export function ProjectCard({ project, onClick, onToggleServer, onDelete }: ProjectCardProps) {
   const [hovered, setHovered] = useState(false);
   const isRunning = project.status === "running";
+  const agentCount = project.agentCount ?? 0;
+  const hasAgents = agentCount > 0;
+
+  // Live ticking timer for running agents
+  const [elapsed, setElapsed] = useState(project.agentRunningSeconds ?? 0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (hasAgents && isRunning) {
+      setElapsed(project.agentRunningSeconds ?? 0);
+      intervalRef.current = setInterval(() => setElapsed((prev) => prev + 1), 1000);
+      return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    }
+    setElapsed(project.agentRunningSeconds ?? 0);
+  }, [hasAgents, isRunning, project.agentRunningSeconds]);
 
   return (
     <div
@@ -86,22 +105,33 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
         <FrameworkBadge framework={project.framework || null} />
       </div>
 
-      {/* Path */}
-      <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "10px" }}>
-        <FolderOpen size={12} strokeWidth={1.5} style={{ color: "var(--foreground-dim)", flexShrink: 0 }} />
-        <span
-          style={{
-            fontSize: "11px",
-            color: "var(--foreground-dim)",
-            fontFamily: "var(--font-mono)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={project.path}
-        >
-          {truncatePath(project.path)}
-        </span>
+      {/* Agent status */}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px", minHeight: "24px" }}>
+        {hasAgents && isRunning ? (
+          <>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              {Array.from({ length: agentCount }).map((_, i) => (
+                <OperatorRobot key={i} size={18} />
+              ))}
+            </div>
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--foreground-muted)",
+                fontFamily: "var(--font-mono)",
+                marginLeft: "auto",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {formatTimer(elapsed)}
+            </span>
+          </>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <OperatorRobot size={16} idle />
+            <span style={{ fontSize: "11px", color: "var(--foreground-disabled)" }}>No agents running</span>
+          </div>
+        )}
       </div>
 
       {/* Footer: last activity + quick actions */}

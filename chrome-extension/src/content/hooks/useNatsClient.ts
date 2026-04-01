@@ -24,7 +24,7 @@ const jc = JSONCodec();
  *
  * Reconnects with exponential backoff: 1s, 2s, 4s, 8s ... max 30s.
  */
-export function useNatsClient(): NatsClient {
+export function useNatsClient(enabled: boolean): NatsClient {
   const [connected, setConnected] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(false);
   const ncRef = useRef<NatsConnection | null>(null);
@@ -114,10 +114,12 @@ export function useNatsClient(): NatsClient {
     }, delay);
   }, [doConnect]);
 
-  // Auto-connect on mount, disconnect on unmount
+  // Connect when enabled, disconnect when disabled or on unmount
   useEffect(() => {
     mountedRef.current = true;
-    doConnect();
+    if (enabled) {
+      doConnect();
+    }
     return () => {
       mountedRef.current = false;
       clearReconnectTimer();
@@ -128,7 +130,7 @@ export function useNatsClient(): NatsClient {
       }
       setConnected(false);
     };
-  }, [doConnect, clearReconnectTimer]);
+  }, [enabled, doConnect, clearReconnectTimer]);
 
   const publish = useCallback((subject: string, data: object) => {
     const nc = ncRef.current;

@@ -4,9 +4,9 @@ import { AppShell } from "./components/layout/AppShell";
 import { Projects } from "./pages/Projects";
 import { ProjectDetail } from "./pages/ProjectDetail";
 import { AgentTrace } from "./pages/AgentTrace";
-import { AgentsLiveGrid } from "./pages/AgentsLiveGrid";
 import { Activity } from "./pages/Activity";
 import { Settings } from "./pages/Settings";
+import { AgentTraceDemo } from "./pages/AgentTraceDemo";
 
 export function App() {
   return (
@@ -17,9 +17,9 @@ export function App() {
           <Route path="/project/:id" element={<ProjectDetail />} />
           <Route path="/project/:id/trace/:traceId" element={<AgentTrace />} />
           <Route path="/project/:id/agent/:agentId" element={<AgentTrace />} />
-          <Route path="/project/:id/batch/:batchId/agents" element={<AgentsLiveGrid />} />
           <Route path="/activity" element={<Activity />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/demo/agent-trace" element={<AgentTraceDemo />} />
         </Route>
       </Routes>
     </MemoryRouter>

@@ -31,6 +31,9 @@ export function useActions() {
           if (action.type === "select") {
             return { ...action, instruction };
           }
+          if ("prompt" in action) {
+            return { ...action, prompt: instruction };
+          }
           return action;
         });
         actionsRef.current = next;
