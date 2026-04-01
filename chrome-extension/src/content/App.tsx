@@ -53,7 +53,16 @@ export function App({ hostElement, shadowRoot }: AppProps) {
   } = useActions();
 
   const { hover, isOwnElement } = useHoverHighlight(state, HOST_ID);
-  const natsClient = useNatsClient();
+
+  // NATS connects only when needed: user activates the extension OR
+  // AgentCursors discovers active agents via AO polling.
+  const [natsEnabled, setNatsEnabled] = useState(false);
+  useEffect(() => {
+    if (state !== "inactive") setNatsEnabled(true);
+  }, [state]);
+
+  const enableNats = useCallback(() => setNatsEnabled(true), []);
+  const natsClient = useNatsClient(natsEnabled);
 
   const popupRef = useRef<PopupState | null>(null);
   const popupResolveRef = useRef<((instruction: string) => void) | null>(null);
@@ -292,8 +301,8 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   return (
     <>
-      {/* Agent cursors — always active, independent of editing UI */}
-      <AgentCursors natsClient={natsClient} />
+      {/* Agent cursors — always polls AO; triggers NATS connection when agents found */}
+      <AgentCursors natsClient={natsClient} onAgentsDetected={enableNats} />
 
       {isActive && (
         <Toolbar

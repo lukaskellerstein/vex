@@ -43,6 +43,8 @@ class ActionData(BaseModel):
     position: str | None = None  # after|before|firstChild|lastChild
     reference_selector: str | None = None
     content: dict | None = None  # { tag, text, attributes }
+    visual_position: str | None = None  # above|below|left|right
+    was_wrapped: bool | None = None  # true if frontend wrapped in flex container
 
     # editText
     before: str | None = None

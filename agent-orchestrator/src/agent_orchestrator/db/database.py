@@ -167,6 +167,8 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
             total_duration_ms INTEGER,
             total_cost_usd REAL,
             total_tokens INTEGER,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
             created_at TEXT NOT NULL,
             completed_at TEXT,
             FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
@@ -200,6 +202,8 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
         ("agents", "tasks_failed", "ALTER TABLE agents ADD COLUMN tasks_failed INTEGER DEFAULT 0"),
         ("agents", "total_cost_usd", "ALTER TABLE agents ADD COLUMN total_cost_usd REAL DEFAULT 0"),
         ("tasks", "batch_id", "ALTER TABLE tasks ADD COLUMN batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL"),
+        ("agent_traces", "input_tokens", "ALTER TABLE agent_traces ADD COLUMN input_tokens INTEGER"),
+        ("agent_traces", "output_tokens", "ALTER TABLE agent_traces ADD COLUMN output_tokens INTEGER"),
     ]
     for _table, _col, sql in migrations:
         try:

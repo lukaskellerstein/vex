@@ -65,6 +65,7 @@ mkdir -p "$LOG_DIR" "$TMP_DIR"
 NATS_CONF="${TMP_DIR}/nats-dev.conf"
 cat > "$NATS_CONF" <<EOF
 listen: 0.0.0.0:${NATS_PORT}
+max_payload: 8388608
 
 websocket {
   listen: "0.0.0.0:${NATS_WS_PORT}"

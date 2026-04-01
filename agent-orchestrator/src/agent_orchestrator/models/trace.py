@@ -26,6 +26,8 @@ class AgentTrace(BaseModel):
     total_duration_ms: int | None = None
     total_cost_usd: float | None = None
     total_tokens: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     steps: list[TraceStep] = []
     created_at: datetime
     completed_at: datetime | None = None

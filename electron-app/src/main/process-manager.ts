@@ -76,6 +76,7 @@ export class ProcessManager extends EventEmitter {
     fs.mkdirSync(TMP_DIR, { recursive: true });
     const config = [
       "listen: 0.0.0.0:4222",
+      "max_payload: 8388608",
       "",
       "websocket {",
       '  listen: "0.0.0.0:4223"',

@@ -36,7 +36,38 @@ async def list_projects():
     db = await get_db()
     cursor = await db.execute("SELECT * FROM projects ORDER BY created_at DESC")
     rows = await cursor.fetchall()
-    return [_row_to_project(r) for r in rows]
+
+    # Enrich with running agent counts per project
+    agent_cursor = await db.execute(
+        "SELECT project_id, COUNT(*) as cnt, MIN(created_at) as earliest "
+        "FROM agents WHERE status = 'running' AND project_id IS NOT NULL "
+        "GROUP BY project_id"
+    )
+    agent_rows = await agent_cursor.fetchall()
+    agent_map: dict[str, dict] = {}
+    now = datetime.now(UTC)
+    for ar in agent_rows:
+        try:
+            earliest = datetime.fromisoformat(ar["earliest"])
+            if earliest.tzinfo is None:
+                earliest = earliest.replace(tzinfo=UTC)
+            elapsed = int((now - earliest).total_seconds())
+        except (ValueError, TypeError):
+            elapsed = 0
+        agent_map[ar["project_id"]] = {
+            "agentCount": ar["cnt"],
+            "agentRunningSeconds": max(elapsed, 0),
+        }
+
+    projects = []
+    for r in rows:
+        p = _row_to_project(r)
+        info = agent_map.get(r["id"], {})
+        p["agentCount"] = info.get("agentCount", 0)
+        p["agentRunningSeconds"] = info.get("agentRunningSeconds", 0)
+        projects.append(p)
+
+    return projects
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)

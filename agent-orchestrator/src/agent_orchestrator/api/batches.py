@@ -242,6 +242,8 @@ async def get_batch_trace(batch_id: str):
             "total_duration_ms": row["total_duration_ms"],
             "total_cost_usd": row["total_cost_usd"],
             "total_tokens": row["total_tokens"],
+            "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
+            "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
             "steps": steps,
             "created_at": row["created_at"],
             "completed_at": row["completed_at"],
@@ -270,18 +272,27 @@ async def get_active_cursors(page_url: str):
         )
         actions = await action_cursor.fetchall()
 
-        # Get tasks (agent IDs) for this batch
+        # Get tasks (agent IDs) for this batch, joined with agent status
         task_cursor = await db.execute(
-            "SELECT agent_id FROM tasks WHERE batch_id = ? ORDER BY created_at",
+            """SELECT t.agent_id, a.status AS agent_status
+               FROM tasks t
+               LEFT JOIN agents a ON a.id = t.agent_id
+               WHERE t.batch_id = ?
+               ORDER BY t.created_at""",
             (batch_id,),
         )
         tasks = await task_cursor.fetchall()
 
-        # Match actions to agents by index
+        # Match actions to agents by index, skip agents that already finished
         for idx, action in enumerate(actions):
             if idx >= len(tasks):
                 continue
             agent_id = tasks[idx]["agent_id"]
+            agent_status = tasks[idx]["agent_status"] or ""
+
+            # Don't return agents that are already stopped/failed/error
+            if agent_status in ("stopped", "failed", "error"):
+                continue
 
             # Use same format as Electron UI: agent-{agentId[:8]}
             agent_name = f"agent-{agent_id[:8]}"
@@ -316,6 +327,28 @@ async def stop_batch(project_id: str, batch_id: str):
         )
 
     stopped = await batch_processor.stop_batch(batch_id)
+
+    if not stopped:
+        # No active task found (orphaned from AO restart) — force-cancel in DB
+        now = datetime.now(UTC).isoformat()
+        await db.execute(
+            "UPDATE batches SET status = 'cancelled', completed_at = ? WHERE id = ?",
+            (now, batch_id),
+        )
+        # Also stop any orphaned agents/tasks for this batch
+        await db.execute(
+            """UPDATE agents SET status = 'stopped'
+               WHERE id IN (SELECT agent_id FROM tasks WHERE batch_id = ?)
+               AND status NOT IN ('completed', 'failed', 'stopped', 'error')""",
+            (batch_id,),
+        )
+        await db.execute(
+            """UPDATE tasks SET status = 'failed', error = 'Cancelled by user', completed_at = ?
+               WHERE batch_id = ? AND status NOT IN ('completed', 'failed')""",
+            (now, batch_id),
+        )
+        await db.commit()
+
     return {
         "batch_id": batch_id,
         "status": "cancelled",

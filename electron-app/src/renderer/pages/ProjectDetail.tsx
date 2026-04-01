@@ -42,8 +42,6 @@ interface AgentsSummary {
 
 type TabId = "batches" | "agents" | "logs";
 
-/** Track which projects already had their browser opened (survives component remounts). */
-const browserOpenedForProject = new Set<string>();
 
 export function ProjectDetail() {
   const { id: projectId = "" } = useParams<{ id: string }>();
@@ -135,13 +133,6 @@ export function ProjectDetail() {
     return () => clearInterval(interval);
   }, [activeTab, projectId]);
 
-  // Open browser once when URL becomes available (per project, survives remounts)
-  useEffect(() => {
-    if (project?.status === "running" && project.dev_server_url && !browserOpenedForProject.has(projectId)) {
-      browserOpenedForProject.add(projectId);
-      window.electronAPI.openExternal(project.dev_server_url);
-    }
-  }, [project?.status, project?.dev_server_url, projectId]);
 
   async function handleServerToggle() {
     if (!project) return;
@@ -149,9 +140,7 @@ export function ProjectDetail() {
 
     if (status === "running" || status === "starting") {
       await window.electronAPI.stopDevServer(projectId);
-      browserOpenedForProject.delete(projectId);
     } else {
-      browserOpenedForProject.delete(projectId);
       const result = await window.electronAPI.startDevServer(projectId);
       if (result?.status === "error") {
         console.error("Failed to start dev server:", result.detail);

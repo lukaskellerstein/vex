@@ -32,13 +32,26 @@ async def disconnect() -> None:
         logger.info("Disconnected from NATS")
 
 
+_MAX_PUBLISH_BYTES = 8 * 1024 * 1024  # 8 MB — matches NATS server max_payload
+
+
 async def publish(subject: str, data: dict) -> None:
     """Publish a JSON message to a NATS subject."""
     if _nc is None or not _nc.is_connected:
         logger.warning("NATS not connected, cannot publish to %s", subject)
         return
     payload = json.dumps(data).encode()
-    await _nc.publish(subject, payload)
+    if len(payload) > _MAX_PUBLISH_BYTES:
+        logger.warning(
+            "NATS message too large (%d bytes) for %s — skipping",
+            len(payload),
+            subject,
+        )
+        return
+    try:
+        await _nc.publish(subject, payload)
+    except Exception:
+        logger.exception("Failed to publish to %s (%d bytes)", subject, len(payload))
 
 
 async def subscribe(

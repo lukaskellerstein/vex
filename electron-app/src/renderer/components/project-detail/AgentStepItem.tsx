@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Terminal,
+  Bot,
 } from "lucide-react";
 
 /* ─── Types ──────────────────────────────────────── */
@@ -21,7 +23,10 @@ export type StepType =
   | "tool_call"
   | "tool_use"
   | "tool_result"
+  | "tool_error"
   | "diff"
+  | "write_file"
+  | "bash_command"
   | "subagent_spawn"
   | "subagent_result"
   | "skill_invoke"
@@ -163,7 +168,7 @@ function CollapsibleText({
   );
 }
 
-function ToolInputPreview({ toolName, content }: { toolName: string; content: string }) {
+function ToolInputPreview({ content }: { content: string }) {
   return (
     <code
       style={{
@@ -183,9 +188,206 @@ function ToolInputPreview({ toolName, content }: { toolName: string; content: st
   );
 }
 
-function DiffBlock({ content }: { content: string }) {
-  const lines = content.split("\n");
-  const filePath = lines[0]?.replace(/^---\s*/, "").replace(/^\+\+\+\s*/, "") || "file";
+/* ─── Tool Result (collapsed by default) ────────── */
+
+function ToolResultStep({ step, content }: { step: AgentStep; content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const resultColor = "hsl(220, 50%, 55%)";
+  const preview = content.length > 120 ? content.slice(0, 120) + "..." : content;
+
+  return (
+    <div
+      style={{
+        marginLeft: "8px",
+        borderLeft: "1px solid var(--border)",
+        paddingLeft: "20px",
+      }}
+    >
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          padding: "6px 4px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          width: "100%",
+          textAlign: "left",
+        }}
+      >
+        {expanded ? (
+          <ChevronUp size={12} style={{ color: resultColor, flexShrink: 0 }} />
+        ) : (
+          <ChevronDown size={12} style={{ color: resultColor, flexShrink: 0 }} />
+        )}
+        <span
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            color: resultColor,
+            flexShrink: 0,
+          }}
+        >
+          Result
+        </span>
+        {!expanded && (
+          <span
+            style={{
+              fontSize: "11px",
+              fontFamily: "var(--font-mono)",
+              color: "var(--foreground-dim)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {preview}
+          </span>
+        )}
+        <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+      </button>
+      {expanded && (
+        <div
+          style={{
+            padding: "4px 4px 8px 22px",
+          }}
+        >
+          <pre
+            style={{
+              fontSize: "11px",
+              fontFamily: "var(--font-mono)",
+              color: "var(--foreground-muted)",
+              lineHeight: 1.6,
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
+              margin: 0,
+              background: "var(--surface)",
+              padding: "8px 12px",
+              borderRadius: "var(--radius)",
+              maxHeight: "400px",
+              overflowY: "auto",
+            }}
+          >
+            {content}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolErrorStep({ step, content }: { step: AgentStep; content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const errorColor = "var(--status-error)";
+  const preview = content.length > 120 ? content.slice(0, 120) + "..." : content;
+
+  return (
+    <div
+      style={{
+        marginLeft: "8px",
+        borderLeft: "2px solid " + errorColor,
+        paddingLeft: "20px",
+      }}
+    >
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          padding: "6px 4px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          width: "100%",
+          textAlign: "left",
+        }}
+      >
+        <AlertTriangle size={12} style={{ color: errorColor, flexShrink: 0 }} />
+        {expanded ? (
+          <ChevronUp size={12} style={{ color: errorColor, flexShrink: 0 }} />
+        ) : (
+          <ChevronDown size={12} style={{ color: errorColor, flexShrink: 0 }} />
+        )}
+        <span
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            color: errorColor,
+            flexShrink: 0,
+          }}
+        >
+          Error
+        </span>
+        {!expanded && (
+          <span
+            style={{
+              fontSize: "11px",
+              fontFamily: "var(--font-mono)",
+              color: errorColor,
+              opacity: 0.75,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {preview}
+          </span>
+        )}
+        <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+      </button>
+      {expanded && (
+        <div style={{ padding: "4px 4px 8px 22px" }}>
+          <pre
+            style={{
+              fontSize: "11px",
+              fontFamily: "var(--font-mono)",
+              color: errorColor,
+              lineHeight: 1.6,
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap",
+              margin: 0,
+              background: "color-mix(in srgb, var(--status-error) 8%, transparent)",
+              padding: "8px 12px",
+              borderRadius: "var(--radius)",
+              maxHeight: "400px",
+              overflowY: "auto",
+            }}
+          >
+            {content}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Generic tool card ─────────────────────────── */
+
+function ToolCard({
+  header,
+  children,
+  resultContent,
+  durationMs,
+  tokenCount,
+}: {
+  header: React.ReactNode;
+  children?: React.ReactNode;
+  resultContent: string | null;
+  durationMs?: number | null;
+  tokenCount?: number | null;
+}) {
+  const [resultExpanded, setResultExpanded] = useState(false);
 
   return (
     <div
@@ -193,41 +395,175 @@ function DiffBlock({ content }: { content: string }) {
         borderRadius: "var(--radius)",
         overflow: "hidden",
         border: "1px solid var(--border)",
-        fontSize: "11px",
-        fontFamily: "var(--font-mono)",
+        fontSize: "12px",
       }}
     >
+      {/* Header — badges + meta */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: "8px",
-          padding: "6px 12px",
+          padding: "7px 12px",
           background: "var(--surface)",
-          borderBottom: "1px solid var(--border)",
+          borderBottom: children || resultContent ? "1px solid var(--border)" : undefined,
         }}
       >
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+          {header}
+        </div>
+        <StepMeta durationMs={durationMs ?? null} tokenCount={tokenCount ?? null} />
+      </div>
+
+      {/* Input — always expanded */}
+      {children && (
+        <div
+          style={{
+            borderBottom: resultContent ? "1px solid var(--border)" : undefined,
+          }}
+        >
+          {children}
+        </div>
+      )}
+
+      {/* Result — collapsed by default */}
+      {resultContent && (
+        <div>
+          <button
+            onClick={() => setResultExpanded((v) => !v)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              width: "100%",
+              padding: "6px 12px",
+              fontSize: "11px",
+              fontWeight: 500,
+              color: "var(--foreground-dim)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            {resultExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            Result
+            {!resultExpanded && (
+              <span
+                style={{
+                  color: "var(--foreground-dim)",
+                  opacity: 0.6,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: 1,
+                  minWidth: 0,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                }}
+              >
+                {resultContent.slice(0, 120)}
+              </span>
+            )}
+          </button>
+          {resultExpanded && (
+            <div style={{ padding: "4px 12px 10px" }}>
+              <pre
+                style={{
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--foreground-muted)",
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  margin: 0,
+                  background: "var(--surface)",
+                  padding: "8px 12px",
+                  borderRadius: "var(--radius)",
+                  maxHeight: "400px",
+                  overflowY: "auto",
+                }}
+              >
+                {resultContent}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Tool card input renderers ─────────────────── */
+
+function BashInput({ command, description }: { command: string; description: string }) {
+  const termGreen = "hsl(120, 60%, 60%)";
+  return (
+    <div style={{ padding: "10px 14px", background: "hsl(0, 0%, 7%)" }}>
+      {description && (
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+          <Terminal size={11} style={{ color: termGreen }} />
+          <span style={{ fontSize: "11px", color: "var(--foreground-dim)" }}>{description}</span>
+        </div>
+      )}
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6 }}>
+        <span style={{ color: termGreen, userSelect: "none" }}>$ </span>
+        <span style={{ color: "hsl(0, 0%, 85%)" }}>{command}</span>
+      </div>
+    </div>
+  );
+}
+
+function WriteInput({ filePath, fileContent }: { filePath: string; fileContent: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const allLines = fileContent.split("\n");
+  const previewLines = 20;
+  const isTruncatable = allLines.length > previewLines;
+  const visibleLines = expanded ? allLines : allLines.slice(0, previewLines);
+
+  return (
+    <div style={{ fontSize: "11px", fontFamily: "var(--font-mono)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+        <FileCode size={11} style={{ color: "var(--primary)" }} />
+        <span style={{ color: "var(--foreground-muted)" }}>{filePath}</span>
+        <span style={{ marginLeft: "auto", fontSize: "10px", color: "var(--foreground-dim)" }}>{allLines.length} lines</span>
+      </div>
+      <div style={{ background: "var(--background)", maxHeight: expanded ? "500px" : undefined, overflowY: expanded ? "auto" : undefined }}>
+        {visibleLines.map((line, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "1px 12px", color: "var(--foreground-muted)", wordBreak: "break-all" }}>
+            <span style={{ color: "var(--foreground-dim)", userSelect: "none", minWidth: "24px", textAlign: "right" }}>{i + 1}</span>
+            <span>{line}</span>
+          </div>
+        ))}
+      </div>
+      {isTruncatable && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", width: "100%", padding: "6px", fontSize: "11px", color: "var(--foreground-dim)", background: "var(--surface)", border: "none", borderTop: "1px solid var(--border)", cursor: "pointer" }}
+        >
+          {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          {expanded ? "Show less" : `Show all ${allLines.length} lines`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EditInput({ filePath, oldString, newString }: { filePath: string; oldString: string; newString: string }) {
+  const lines: { text: string; type: "remove" | "add" | "neutral" }[] = [];
+  for (const line of oldString.split("\n")) lines.push({ text: line, type: "remove" });
+  for (const line of newString.split("\n")) lines.push({ text: line, type: "add" });
+
+  return (
+    <div style={{ fontSize: "11px", fontFamily: "var(--font-mono)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
         <FileCode size={11} style={{ color: "var(--foreground-dim)" }} />
         <span style={{ color: "var(--foreground-muted)" }}>{filePath}</span>
       </div>
-      <div style={{ background: "var(--background)" }}>
+      <div style={{ background: "var(--background)", maxHeight: "400px", overflowY: "auto" }}>
         {lines.map((line, i) => {
-          const isRemoved = line.startsWith("-");
-          const isAdded = line.startsWith("+");
-          let bg = "transparent";
-          let color = "var(--foreground-muted)";
-          let borderLeft = "2px solid transparent";
-
-          if (isRemoved) {
-            bg = "color-mix(in srgb, var(--status-error) 10%, transparent)";
-            color = "var(--status-error)";
-            borderLeft = "2px solid var(--status-error)";
-          } else if (isAdded) {
-            bg = "color-mix(in srgb, var(--status-success) 10%, transparent)";
-            color = "var(--status-success)";
-            borderLeft = "2px solid var(--status-success)";
-          }
-
+          const isRemoved = line.type === "remove";
+          const isAdded = line.type === "add";
           return (
             <div
               key={i}
@@ -236,20 +572,310 @@ function DiffBlock({ content }: { content: string }) {
                 alignItems: "flex-start",
                 gap: "8px",
                 padding: "1px 12px",
-                background: bg,
-                borderLeft,
-                color,
+                background: isRemoved
+                  ? "color-mix(in srgb, var(--status-error) 10%, transparent)"
+                  : isAdded
+                    ? "color-mix(in srgb, var(--status-success) 10%, transparent)"
+                    : "transparent",
+                borderLeft: isRemoved
+                  ? "2px solid var(--status-error)"
+                  : isAdded
+                    ? "2px solid var(--status-success)"
+                    : "2px solid transparent",
+                color: isRemoved ? "var(--status-error)" : isAdded ? "var(--status-success)" : "var(--foreground-muted)",
                 wordBreak: "break-all",
               }}
             >
-              <span style={{ color: "var(--foreground-dim)", userSelect: "none", minWidth: "24px", textAlign: "right" }}>
-                {i + 1}
-              </span>
-              <span>{line}</span>
+              <span style={{ userSelect: "none", minWidth: "12px" }}>{isRemoved ? "-" : isAdded ? "+" : " "}</span>
+              <span>{line.text}</span>
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ReadInput({ filePath }: { filePath: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px" }}>
+      <FileCode size={12} style={{ color: "var(--foreground-dim)" }} />
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--foreground-muted)", wordBreak: "break-all" }}>{filePath}</span>
+    </div>
+  );
+}
+
+/* ─── Badge helper ──────────────────────────────── */
+
+function ToolBadge({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "2px 8px",
+        borderRadius: "var(--radius)",
+        fontSize: "11px",
+        fontWeight: 500,
+        fontFamily: "var(--font-mono)",
+        background: `color-mix(in srgb, ${color} 15%, transparent)`,
+        color,
+        border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ToolBadgeSmall({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "2px 7px",
+        borderRadius: "var(--radius)",
+        fontSize: "10px",
+        fontWeight: 600,
+        fontFamily: "var(--font-mono)",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+        background: `color-mix(in srgb, ${color} 18%, transparent)`,
+        color,
+        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+/* ─── Agent task card ───────────────────────────── */
+
+function AgentBlock({
+  description,
+  prompt,
+  agentType,
+  resultContent,
+}: {
+  description: string;
+  prompt: string;
+  agentType: string;
+  resultContent: string | null;
+}) {
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const [resultExpanded, setResultExpanded] = useState(false);
+  const agentColor = "hsl(210, 80%, 60%)";
+
+  return (
+    <div
+      style={{
+        borderRadius: "var(--radius)",
+        overflow: "hidden",
+        border: `1px solid color-mix(in srgb, ${agentColor} 35%, transparent)`,
+        fontSize: "12px",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px 14px",
+          background: `color-mix(in srgb, ${agentColor} 10%, transparent)`,
+          borderBottom: `1px solid color-mix(in srgb, ${agentColor} 20%, transparent)`,
+        }}
+      >
+        <Bot size={18} style={{ color: agentColor, flexShrink: 0 }} />
+        <span
+          style={{
+            fontSize: "10px",
+            fontWeight: 700,
+            fontFamily: "var(--font-mono)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            padding: "2px 8px",
+            borderRadius: "var(--radius)",
+            background: `color-mix(in srgb, ${agentColor} 20%, transparent)`,
+            color: agentColor,
+            border: `1px solid color-mix(in srgb, ${agentColor} 40%, transparent)`,
+            flexShrink: 0,
+          }}
+        >
+          Agent
+        </span>
+        {agentType && (
+          <span
+            style={{
+              fontSize: "10px",
+              fontWeight: 500,
+              fontFamily: "var(--font-mono)",
+              padding: "2px 7px",
+              borderRadius: "var(--radius)",
+              background: `color-mix(in srgb, ${agentColor} 12%, transparent)`,
+              color: `color-mix(in srgb, ${agentColor} 80%, white)`,
+              border: `1px solid color-mix(in srgb, ${agentColor} 25%, transparent)`,
+              flexShrink: 0,
+            }}
+          >
+            {agentType}
+          </span>
+        )}
+        <span
+          style={{
+            fontSize: "13px",
+            fontWeight: 600,
+            color: "var(--foreground)",
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {description || "Subagent"}
+        </span>
+      </div>
+
+      {/* Prompt — collapsed by default */}
+      {prompt && (
+        <div
+          style={{
+            borderBottom: resultContent
+              ? `1px solid color-mix(in srgb, ${agentColor} 15%, transparent)`
+              : undefined,
+          }}
+        >
+          <button
+            onClick={() => setPromptExpanded((v) => !v)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              width: "100%",
+              padding: "7px 14px",
+              fontSize: "11px",
+              fontWeight: 500,
+              color: "var(--foreground-dim)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            {promptExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            Prompt
+            {!promptExpanded && (
+              <span
+                style={{
+                  color: "var(--foreground-dim)",
+                  opacity: 0.6,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: 1,
+                  minWidth: 0,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                }}
+              >
+                {prompt.slice(0, 100)}
+              </span>
+            )}
+          </button>
+          {promptExpanded && (
+            <div
+              style={{
+                padding: "8px 14px 12px",
+                maxHeight: "400px",
+                overflowY: "auto",
+              }}
+            >
+              <pre
+                style={{
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--foreground-muted)",
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  margin: 0,
+                }}
+              >
+                {prompt}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Result — collapsed by default */}
+      {resultContent && (
+        <div>
+          <button
+            onClick={() => setResultExpanded((v) => !v)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              width: "100%",
+              padding: "7px 14px",
+              fontSize: "11px",
+              fontWeight: 500,
+              color: "var(--foreground-dim)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            {resultExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            Result
+            {!resultExpanded && (
+              <span
+                style={{
+                  color: "var(--foreground-dim)",
+                  opacity: 0.6,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  flex: 1,
+                  minWidth: 0,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                }}
+              >
+                {resultContent.slice(0, 100)}
+              </span>
+            )}
+          </button>
+          {resultExpanded && (
+            <div
+              style={{
+                padding: "8px 14px 12px",
+                maxHeight: "400px",
+                overflowY: "auto",
+              }}
+            >
+              <pre
+                style={{
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--foreground-muted)",
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  margin: 0,
+                }}
+              >
+                {resultContent}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -269,7 +895,7 @@ const iconStyle = (color: string): React.CSSProperties => ({
   flexShrink: 0,
 });
 
-export function AgentStepItem({ step }: { step: AgentStep }) {
+export function AgentStepItem({ step, resultSteps }: { step: AgentStep; resultSteps?: AgentStep[] }) {
   const content = step.content ?? "";
   const meta = step.metadata ?? {};
 
@@ -354,7 +980,15 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
 
     case "tool_call":
     case "tool_use": {
-      // New format: tool_name in metadata. Legacy: content is "ToolName: {json}"
+      // Extract result content from grouped resultSteps
+      const resultContent = resultSteps
+        ?.filter((rs) => rs.type !== "tool_error")
+        .map((rs) => rs.content ?? "")
+        .filter(Boolean)
+        .join("\n\n") || null;
+      const errors = resultSteps?.filter((rs) => rs.type === "tool_error") ?? [];
+
+      // Parse tool name
       let rawToolName = (meta.tool_name as string) ?? "";
       let toolContent = content;
       if (!rawToolName && content) {
@@ -369,239 +1003,201 @@ export function AgentStepItem({ step }: { step: AgentStep }) {
       const pluginColor = "hsl(28, 85%, 58%)";
       const mcpColor = "hsl(174, 72%, 46%)";
       const skillColor = "hsl(330, 70%, 60%)";
-      const agentColor = "var(--status-info)";
 
-      // Skill tool call — use skill styling, with optional plugin badge
+      // Parse JSON input once (used by rich renderers)
+      let parsed: Record<string, unknown> = {};
+      try { parsed = JSON.parse(toolContent); } catch { /* not JSON */ }
+
+      // Agent tool call — its own card design
+      if (rawToolName === "Agent") {
+        return (
+          <div style={{ padding: "10px 4px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <AgentBlock
+              description={(parsed.description as string) ?? ""}
+              prompt={(parsed.prompt as string) ?? ""}
+              agentType={(parsed.subagent_type as string) ?? ""}
+              resultContent={resultContent}
+            />
+            {errors.map((rs) => (
+              <ToolErrorStep key={rs.id} step={rs} content={rs.content ?? ""} />
+            ))}
+          </div>
+        );
+      }
+
+      // Build header badges based on tool type
+      let headerContent: React.ReactNode;
+      const effectiveToolName = toolInfo.isMcp ? toolInfo.toolName : rawToolName;
+
       if (rawToolName === "Skill") {
         let skillPluginName: string | null = null;
         let skillName = "";
-        try {
-          const parsed = JSON.parse(toolContent);
-          const raw = parsed.skill ?? "";
-          const colonIdx = raw.indexOf(":");
-          if (colonIdx > 0) {
-            skillPluginName = raw.slice(0, colonIdx);
-            skillName = raw.slice(colonIdx + 1);
-          } else {
-            skillName = raw;
-          }
-        } catch {
-          /* not JSON, keep toolContent as-is */
+        const rawSkill = (parsed.skill as string) ?? "";
+        const colonIdx = rawSkill.indexOf(":");
+        if (colonIdx > 0) {
+          skillPluginName = rawSkill.slice(0, colonIdx);
+          skillName = rawSkill.slice(colonIdx + 1);
+        } else {
+          skillName = rawSkill;
         }
-        return (
-          <div style={rowBase}>
-            <Sparkles size={14} style={iconStyle(skillColor)} />
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                {skillPluginName && (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 7px",
-                      borderRadius: "var(--radius)",
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      fontFamily: "var(--font-mono)",
-                      background: "color-mix(in srgb, " + pluginColor + " 18%, transparent)",
-                      color: pluginColor,
-                      border: "1px solid color-mix(in srgb, " + pluginColor + " 35%, transparent)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                    }}
-                  >
-                    {skillPluginName}
-                  </span>
-                )}
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "2px 8px",
-                    borderRadius: "var(--radius)",
-                    fontSize: "11px",
-                    fontWeight: 500,
-                    fontFamily: "var(--font-mono)",
-                    background: "color-mix(in srgb, " + skillColor + " 15%, transparent)",
-                    color: skillColor,
-                    border: "1px solid color-mix(in srgb, " + skillColor + " 30%, transparent)",
-                  }}
-                >
-                  {skillName || "Skill"}
-                </span>
-              </div>
-              {toolContent && <ToolInputPreview toolName="Skill" content={toolContent} />}
-            </div>
-            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
-          </div>
+        headerContent = (
+          <>
+            <Sparkles size={13} style={{ color: skillColor, flexShrink: 0 }} />
+            {skillPluginName && <ToolBadgeSmall label={skillPluginName} color={pluginColor} />}
+            <ToolBadge label={skillName || "Skill"} color={skillColor} />
+          </>
+        );
+      } else if (toolInfo.isMcp) {
+        headerContent = (
+          <>
+            <Plug size={13} style={{ color: mcpColor, flexShrink: 0 }} />
+            {toolInfo.pluginName && <ToolBadgeSmall label={toolInfo.pluginName} color={pluginColor} />}
+            <ToolBadge label={toolInfo.serverName} color={mcpColor} />
+            <ToolBadge label={toolInfo.toolName} color="var(--primary)" />
+          </>
+        );
+      } else {
+        const iconMap: Record<string, React.ReactNode> = {
+          Bash: <Terminal size={13} style={{ color: "hsl(120, 60%, 60%)", flexShrink: 0 }} />,
+          Write: <FileCode size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />,
+          Edit: <FileCode size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />,
+          Read: <FileCode size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />,
+        };
+        headerContent = (
+          <>
+            {iconMap[rawToolName] ?? <Wrench size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />}
+            <ToolBadge label={rawToolName} color="var(--primary)" />
+          </>
         );
       }
 
-      // Agent tool call — use subagent styling
-      if (rawToolName === "Agent") {
-        return (
-          <div style={rowBase}>
-            <GitBranch size={14} style={iconStyle(agentColor)} />
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "2px 8px",
-                  borderRadius: "var(--radius)",
-                  fontSize: "11px",
-                  fontWeight: 500,
-                  fontFamily: "var(--font-mono)",
-                  background: "color-mix(in srgb, " + agentColor + " 15%, transparent)",
-                  color: agentColor,
-                  border: "1px solid color-mix(in srgb, " + agentColor + " 30%, transparent)",
-                  alignSelf: "flex-start",
-                }}
-              >
-                Agent
-              </span>
-              {toolContent && <ToolInputPreview toolName="Agent" content={toolContent} />}
-            </div>
-            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
-          </div>
-        );
+      // Detail step absorbed from the timeline (bash_command, write_file, diff)
+      const detail = meta._detail as { type: string; content: string | null; metadata: Record<string, unknown> | null } | undefined;
+
+      // Build rich input content based on tool name
+      let inputContent: React.ReactNode = null;
+
+      if (effectiveToolName === "Bash") {
+        const cmd = (parsed.command as string) || (detail?.type === "bash_command" ? detail.content ?? "" : "");
+        const desc = (parsed.description as string) || ((detail?.metadata?.description as string) ?? "");
+        if (cmd) inputContent = <BashInput command={cmd} description={desc} />;
+      } else if (effectiveToolName === "Write") {
+        const fp = (parsed.file_path as string) || ((detail?.metadata?.file_path as string) ?? "");
+        const fc = (parsed.content as string) || (detail?.type === "write_file" ? detail.content ?? "" : "");
+        if (fp && fc) inputContent = <WriteInput filePath={fp} fileContent={fc} />;
+      } else if (effectiveToolName === "Edit") {
+        const fp = (parsed.file_path as string) ?? "";
+        const os = (parsed.old_string as string) ?? "";
+        const ns = (parsed.new_string as string) ?? "";
+        if (fp && (os || ns)) inputContent = <EditInput filePath={fp} oldString={os} newString={ns} />;
+      } else if (effectiveToolName === "Read") {
+        const fp = (parsed.file_path as string) ?? "";
+        if (fp) inputContent = <ReadInput filePath={fp} />;
+      } else if (effectiveToolName === "Glob") {
+        const pattern = (parsed.pattern as string) ?? "";
+        if (pattern) inputContent = <ReadInput filePath={pattern} />;
+      } else if (effectiveToolName === "Grep") {
+        const pattern = (parsed.pattern as string) ?? "";
+        if (pattern) inputContent = <ReadInput filePath={pattern} />;
       }
 
-      if (toolInfo.isMcp) {
-        return (
-          <div style={rowBase}>
-            <Plug size={14} style={iconStyle(mcpColor)} />
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                {toolInfo.pluginName && (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "2px 7px",
-                      borderRadius: "var(--radius)",
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      fontFamily: "var(--font-mono)",
-                      background: "color-mix(in srgb, " + pluginColor + " 18%, transparent)",
-                      color: pluginColor,
-                      border: "1px solid color-mix(in srgb, " + pluginColor + " 35%, transparent)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                    }}
-                  >
-                    {toolInfo.pluginName}
-                  </span>
-                )}
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "2px 7px",
-                    borderRadius: "var(--radius)",
-                    fontSize: "10px",
-                    fontWeight: 500,
-                    fontFamily: "var(--font-mono)",
-                    background: "color-mix(in srgb, " + mcpColor + " 12%, transparent)",
-                    color: mcpColor,
-                    border: "1px solid color-mix(in srgb, " + mcpColor + " 25%, transparent)",
-                  }}
-                >
-                  {toolInfo.serverName}
-                </span>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "2px 8px",
-                    borderRadius: "var(--radius)",
-                    fontSize: "11px",
-                    fontWeight: 500,
-                    fontFamily: "var(--font-mono)",
-                    background: "color-mix(in srgb, var(--primary) 15%, transparent)",
-                    color: "var(--primary)",
-                    border: "1px solid color-mix(in srgb, var(--primary) 30%, transparent)",
-                  }}
-                >
-                  {toolInfo.toolName}
-                </span>
-              </div>
-              {toolContent && toolInfo.toolName !== "Edit" && (
-                <ToolInputPreview toolName={toolInfo.toolName} content={toolContent} />
-              )}
-            </div>
-            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
-          </div>
-        );
+      // Fallback: show raw JSON for tools without a rich renderer
+      if (!inputContent && toolContent) {
+        inputContent = <div style={{ padding: "6px 12px" }}><ToolInputPreview content={toolContent} /></div>;
       }
 
       return (
-        <div style={rowBase}>
-          <Wrench size={14} style={iconStyle("var(--primary)")} />
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "2px 8px",
-                borderRadius: "var(--radius)",
-                fontSize: "11px",
-                fontWeight: 500,
-                fontFamily: "var(--font-mono)",
-                background: "color-mix(in srgb, var(--primary) 15%, transparent)",
-                color: "var(--primary)",
-                border: "1px solid color-mix(in srgb, var(--primary) 30%, transparent)",
-                alignSelf: "flex-start",
-              }}
-            >
-              {toolInfo.toolName}
-            </span>
-            {toolContent && toolInfo.toolName !== "Edit" && (
-              <ToolInputPreview toolName={toolInfo.toolName} content={toolContent} />
-            )}
-          </div>
-          <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
+        <div style={{ padding: "10px 4px", display: "flex", flexDirection: "column", gap: "4px" }}>
+          <ToolCard
+            header={headerContent}
+            resultContent={resultContent}
+            durationMs={step.duration_ms}
+            tokenCount={step.token_count}
+          >
+            {inputContent}
+          </ToolCard>
+          {errors.map((rs) => (
+            <ToolErrorStep key={rs.id} step={rs} content={rs.content ?? ""} />
+          ))}
         </div>
       );
     }
 
     case "tool_result":
+      return <ToolResultStep step={step} content={content} />;
+
+    case "tool_error": {
+      const errorToolName = (meta.tool_name as string) ?? null;
+      const errorToolInfo = errorToolName ? parseToolName(errorToolName) : null;
       return (
         <div
           style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "12px",
-            padding: "8px 4px 8px 28px",
             marginLeft: "8px",
-            borderLeft: "1px solid var(--border)",
+            borderLeft: "2px solid var(--status-error)",
+            paddingLeft: "20px",
           }}
         >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p
-              style={{
-                fontSize: "11px",
-                fontFamily: "var(--font-mono)",
-                color: "var(--foreground-dim)",
-                lineHeight: 1.6,
-                wordBreak: "break-word",
-                whiteSpace: "pre-wrap",
-                margin: 0,
-              }}
-            >
-              {content.length > COLLAPSIBLE_THRESHOLD ? content.slice(0, COLLAPSIBLE_THRESHOLD) + "..." : content}
-            </p>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "8px",
+              padding: "8px 12px",
+              borderRadius: "var(--radius)",
+              background: "color-mix(in srgb, var(--status-error) 8%, transparent)",
+            }}
+          >
+            <AlertTriangle size={13} style={{ color: "var(--status-error)", marginTop: "1px", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    color: "var(--status-error)",
+                  }}
+                >
+                  Error
+                </span>
+                {errorToolInfo && (
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "11px",
+                      color: "var(--status-error)",
+                      background: "color-mix(in srgb, var(--status-error) 12%, transparent)",
+                      padding: "1px 6px",
+                      borderRadius: "var(--radius)",
+                    }}
+                  >
+                    {errorToolInfo.isMcp ? errorToolInfo.toolName : errorToolInfo.toolName}
+                  </span>
+                )}
+              </div>
+              {content && (
+                <pre
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--status-error)",
+                    lineHeight: 1.6,
+                    wordBreak: "break-word",
+                    whiteSpace: "pre-wrap",
+                    margin: 0,
+                    opacity: 0.85,
+                  }}
+                >
+                  {content}
+                </pre>
+              )}
+            </div>
+            <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
           </div>
-          <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
       );
-
-    case "diff":
-      return (
-        <div style={{ padding: "10px 4px" }}>
-          <DiffBlock content={content} />
-        </div>
-      );
+    }
 
     case "subagent_spawn": {
       const name = (meta.subagent_name as string) ?? "subagent";

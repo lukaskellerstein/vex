@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import gsap from "gsap";
 import { AgentStepItem } from "./AgentStepItem";
 import type { AgentStep } from "./AgentStepItem";
@@ -11,7 +11,18 @@ interface AgentStepListProps {
 export function AgentStepList({ steps, status }: AgentStepListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
+  const [autoScroll, setAutoScroll] = useState(true);
   const isRunning = status === "running";
+
+  const isAtBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollTop >= el.scrollHeight - el.clientHeight - 40;
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    setAutoScroll(isAtBottom());
+  }, [isAtBottom]);
 
   // Animate new steps in via GSAP
   const animateNewSteps = useCallback((startIndex: number) => {
@@ -36,14 +47,13 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
         ease: "power2.out",
         stagger: 0.06,
         onComplete: () => {
-          // Auto-scroll to bottom after animation
-          if (isRunning && el) {
+          if (isRunning && autoScroll && el) {
             el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
           }
         },
       },
     );
-  }, [isRunning]);
+  }, [isRunning, autoScroll]);
 
   useEffect(() => {
     const prevCount = prevCountRef.current;
@@ -54,13 +64,49 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
     prevCountRef.current = steps.length;
   }, [steps.length, animateNewSteps]);
 
-  // Auto-scroll when running
+  // Auto-scroll when running, only if user is at bottom
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning || !autoScroll) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [steps.length, isRunning]);
+  }, [steps.length, isRunning, autoScroll]);
+
+  // Group tool_result/tool_error and detail steps (bash_command, write_file, diff)
+  // with their preceding tool_call. Skip redundant subagent/skill steps.
+  const grouped = React.useMemo(() => {
+    const redundant = new Set([
+      "subagent_spawn", "subagent_result", "skill_invoke", "skill_result",
+    ]);
+    // Detail step types that should be absorbed into the preceding tool_call
+    const detailTypes = new Set(["bash_command", "write_file", "diff"]);
+    const result: { step: AgentStep; resultSteps: AgentStep[] }[] = [];
+    for (const s of steps) {
+      if (redundant.has(s.type)) continue;
+      const prev = result.length > 0 ? result[result.length - 1] : null;
+      const prevIsToolCall = prev && (prev.step.type === "tool_call" || prev.step.type === "tool_use");
+      // Absorb detail steps into the preceding tool_call's metadata
+      if (detailTypes.has(s.type) && prevIsToolCall) {
+        prev.step = {
+          ...prev.step,
+          metadata: {
+            ...prev.step.metadata,
+            _detail: { type: s.type, content: s.content, metadata: s.metadata },
+          },
+        };
+        continue;
+      }
+      if (
+        (s.type === "tool_result" || s.type === "tool_error") &&
+        prevIsToolCall
+      ) {
+        prev.resultSteps.push(s);
+      } else {
+        result.push({ step: s, resultSteps: [] });
+      }
+    }
+    return result;
+  }, [steps]);
 
   if (steps.length === 0) {
     return (
@@ -82,6 +128,7 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
   return (
     <div
       ref={scrollRef}
+      onScroll={handleScroll}
       style={{
         flex: 1,
         overflowY: "auto",
@@ -102,9 +149,9 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
           }}
         />
 
-        {steps.map((step, index) => (
+        {grouped.map((group, index) => (
           <div
-            key={step.id}
+            key={group.step.id}
             data-step-index={index}
             style={{
               position: "relative",
@@ -125,7 +172,10 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
                 zIndex: 1,
               }}
             />
-            <AgentStepItem step={step} />
+            <AgentStepItem
+              step={group.step}
+              resultSteps={group.resultSteps.length > 0 ? group.resultSteps : undefined}
+            />
           </div>
         ))}
 

@@ -139,8 +139,9 @@ class AgentFileLogger:
         content: str,
         tool_name: str | None = None,
         tool_input: dict | None = None,
+        is_error: bool | None = None,
     ) -> None:
-        """Log a single event (thinking, text, tool_call, tool_result, etc.)."""
+        """Log a single event (thinking, text, tool_call, tool_result, tool_error, etc.)."""
         if not self._enabled:
             return
         self._event_count += 1
@@ -156,6 +157,8 @@ class AgentFileLogger:
                 record["tool_name"] = tool_name
             if tool_input:
                 record["tool_input"] = tool_input
+            if is_error is not None:
+                record["is_error"] = is_error
             _append_jsonl(self._jsonl_path, record)
 
         if self._html_path:
@@ -256,6 +259,7 @@ _HTML_HEAD = """\
   .tag-text {{ color: var(--fg); }}
   .tag-tool_call {{ color: var(--green); }}
   .tag-tool_result {{ color: var(--dim); }}
+  .tag-tool_error {{ color: var(--red); font-weight: bold; }}
   .tag-progress {{ color: var(--yellow); }}
   .tag-diff {{ color: var(--cyan); }}
   .tag-error {{ color: var(--red); }}

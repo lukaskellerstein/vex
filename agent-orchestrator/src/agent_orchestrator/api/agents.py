@@ -153,6 +153,8 @@ async def get_agent_trace(agent_id: str):
         "total_duration_ms": row["total_duration_ms"],
         "total_cost_usd": row["total_cost_usd"],
         "total_tokens": row["total_tokens"],
+        "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
+        "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
         "steps": steps,
         "created_at": row["created_at"],
         "completed_at": row["completed_at"],
@@ -164,19 +166,18 @@ async def get_agent_steps(agent_id: str):
     # Try live steps from batch processor first
     live_steps = batch_processor.get_steps(agent_id)
     if live_steps:
+        serialized = []
+        excluded = {"tool_input"}
+        for i, s in enumerate(live_steps):
+            step_dict = {"index": i}
+            for k, v in s.items():
+                if k not in excluded:
+                    step_dict[k] = v
+            serialized.append(step_dict)
         return {
             "agent_id": agent_id,
             "status": "running",
-            "steps": [
-                {
-                    "index": i,
-                    "type": s.get("type", "unknown"),
-                    "content": s.get("content", ""),
-                    "timestamp": s.get("timestamp", ""),
-                    "status": s.get("status", "past"),
-                }
-                for i, s in enumerate(live_steps)
-            ],
+            "steps": serialized,
         }
 
     # Fall back to persisted trace_steps from DB
@@ -196,19 +197,27 @@ async def get_agent_steps(agent_id: str):
     )
     step_rows = await step_cursor.fetchall()
 
+    persisted_steps = []
+    for s in step_rows:
+        step_dict = {
+            "index": s["sequence_index"],
+            "type": s["type"],
+            "content": s["content"] or "",
+            "timestamp": s["created_at"],
+            "status": "past",
+        }
+        if s["metadata"]:
+            try:
+                meta = json.loads(s["metadata"])
+                step_dict.update(meta)
+            except (ValueError, TypeError):
+                pass
+        persisted_steps.append(step_dict)
+
     return {
         "agent_id": agent_id,
         "status": trace_row["status"] if trace_row else "unknown",
-        "steps": [
-            {
-                "index": s["sequence_index"],
-                "type": s["type"],
-                "content": s["content"] or "",
-                "timestamp": s["created_at"],
-                "status": "past",
-            }
-            for s in step_rows
-        ],
+        "steps": persisted_steps,
     }
 
 
@@ -284,17 +293,21 @@ async def stop_agent(agent_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if row["status"] not in ("running", "starting", "created"):
+    terminal = ("completed", "failed", "stopped", "error")
+    if row["status"] in terminal:
         raise HTTPException(
             status_code=409,
             detail=f"Agent is already {row['status']}",
         )
 
-    # Actually interrupt the agent's SDK session
+    # Try to interrupt the agent's active SDK session
     aborted = await batch_processor.abort_agent(agent_id)
 
+    # If no active session to abort, go straight to 'stopped'
+    # (orphaned record from AO restart or already finishing)
+    final_status = "stopping" if aborted else "stopped"
     await db.execute(
-        "UPDATE agents SET status = 'stopping' WHERE id = ?", (agent_id,)
+        "UPDATE agents SET status = ? WHERE id = ?", (final_status, agent_id)
     )
     await db.commit()
 

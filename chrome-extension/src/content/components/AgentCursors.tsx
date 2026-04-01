@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NatsClient } from "../hooks/useNatsClient";
 import { AGENT_MANAGER_URL } from "../../shared/messages";
+import { clampToViewport } from "../utils/positioning";
 
 /* ─── Types ──────────────────────────────────────── */
 
@@ -99,11 +100,20 @@ function AgentCursor({ agent }: { agent: CursorAgent }) {
           return;
         }
         const rect = el.getBoundingClientRect();
+        // Clamp outline to visible viewport portion
+        const outlineTop = Math.max(0, rect.y);
+        const outlineLeft = Math.max(0, rect.x);
+        const outlineWidth = Math.max(0, Math.min(window.innerWidth, rect.x + rect.width) - outlineLeft);
+        const outlineHeight = Math.max(0, Math.min(window.innerHeight, rect.y + rect.height) - outlineTop);
+        if (outlineWidth === 0 || outlineHeight === 0) {
+          ref.current.style.display = "none";
+          return;
+        }
         ref.current.style.display = "block";
-        ref.current.style.top = rect.y + "px";
-        ref.current.style.left = rect.x + "px";
-        ref.current.style.width = rect.width + "px";
-        ref.current.style.height = rect.height + "px";
+        ref.current.style.top = outlineTop + "px";
+        ref.current.style.left = outlineLeft + "px";
+        ref.current.style.width = outlineWidth + "px";
+        ref.current.style.height = outlineHeight + "px";
       } catch {
         if (ref.current) ref.current.style.display = "none";
       }
@@ -171,9 +181,14 @@ function CursorInner({
       const left = parseFloat(parent.style.left) || 0;
       const width = parseFloat(parent.style.width) || 100;
       const height = parseFloat(parent.style.height) || 50;
-      // Position cursor at ~30% from top-left of the element
-      cursorRef.current.style.top = (top + height * 0.25) + "px";
-      cursorRef.current.style.left = (left + width * 0.2) + "px";
+      // Position cursor at ~30% from top-left, clamped to viewport
+      // Footprint: ~100px wide (icon + name badge), ~56px tall
+      // Margin: 22px absorbs max drift animation displacement (18px) + buffer
+      const rawTop = top + height * 0.25;
+      const rawLeft = left + width * 0.2;
+      const clamped = clampToViewport(rawTop, rawLeft, 100, 56, 22);
+      cursorRef.current.style.top = clamped.top + "px";
+      cursorRef.current.style.left = clamped.left + "px";
     };
 
     update();
@@ -208,12 +223,14 @@ function CursorInner({
 
 interface AgentCursorsProps {
   natsClient: NatsClient;
+  onAgentsDetected?: () => void;
 }
 
-export function AgentCursors({ natsClient }: AgentCursorsProps) {
+export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps) {
   const [agents, setAgents] = useState<CursorAgent[]>([]);
   const subIdsRef = useRef<string[]>([]);
   const knownAgentIdsRef = useRef<Set<string>>(new Set());
+  const completedAgentIdsRef = useRef<Set<string>>(new Set());
 
   const cleanupSubs = useCallback(() => {
     for (const id of subIdsRef.current) {
@@ -224,6 +241,7 @@ export function AgentCursors({ natsClient }: AgentCursorsProps) {
 
   /** Handle agent completion: transition to done state, then fade out. */
   const completeAgent = useCallback((agentId: string, finalStatus: "completed" | "failed") => {
+    completedAgentIdsRef.current.add(agentId);
     setAgents((prev) =>
       prev.map((ag) =>
         ag.agentId === agentId && !ag.fading ? { ...ag, status: finalStatus } : ag,
@@ -271,6 +289,9 @@ export function AgentCursors({ natsClient }: AgentCursorsProps) {
         const updated = [...prev];
 
         for (const a of incoming) {
+          // Don't resurrect agents that already completed
+          if (completedAgentIdsRef.current.has(a.agentId)) continue;
+
           const agentStatus = (a.status as CursorAgent["status"]) || "running";
 
           if (existingIds.has(a.agentId)) {
@@ -317,6 +338,7 @@ export function AgentCursors({ natsClient }: AgentCursorsProps) {
         // Activate new agents
         if (data.agents?.length > 0) {
           activateAgents(data.agents);
+          onAgentsDetected?.();
         }
 
         // Detect agents that vanished from the response (batch completed)
@@ -338,7 +360,7 @@ export function AgentCursors({ natsClient }: AgentCursorsProps) {
       active = false;
       clearInterval(interval);
     };
-  }, [activateAgents, completeAgent]);
+  }, [activateAgents, completeAgent, onAgentsDetected]);
 
   // ── NATS subscription as backup (catches batches starting while page is loaded) ──
   useEffect(() => {

@@ -443,16 +443,24 @@ async def _persist_trace(
     steps = session.steps if session else []
 
     total_tokens = 0
+    input_tokens = 0
+    output_tokens = 0
     for step in steps:
         total_tokens += step.get("token_count", 0)
+        # Extract input/output tokens from the completed step
+        if step.get("type") == "completed":
+            input_tokens = step.get("input_tokens", 0) or 0
+            output_tokens = step.get("output_tokens", 0) or 0
 
     await db.execute(
         """INSERT INTO agent_traces (id, batch_id, agent_id, agent_name, agent_model, status,
-           total_duration_ms, total_cost_usd, total_tokens, created_at, completed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           total_duration_ms, total_cost_usd, total_tokens, input_tokens, output_tokens,
+           created_at, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             trace_id, batch_id, agent_id, agent_name, get_agent_profile().get("model", "claude-opus-4-6"),
-            "completed", duration_ms, cost_usd, total_tokens, now, completed_at,
+            "completed", duration_ms, cost_usd, total_tokens, input_tokens, output_tokens,
+            now, completed_at,
         ),
     )
 
@@ -468,7 +476,7 @@ async def _persist_trace(
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 step_id, trace_id, idx, step.get("type", "unknown"),
-                step.get("content", "")[:2000], metadata,
+                step.get("content", "")[:10000], metadata,
                 step.get("duration_ms"), step.get("token_count"), step.get("timestamp", now),
             ),
         )
@@ -549,9 +557,17 @@ def _build_prompt(
         ])
         if action_type == "insert":
             pos = action_data.get("position", "after")
+            visual_pos = action_data.get("visual_position", "")
             ref = action_data.get("reference_selector", "")
             content = action_data.get("content", {})
             parts.append(f"**Position**: {pos}" + (f" relative to `{ref}`" if ref else ""))
+            if visual_pos in ("left", "right"):
+                parts.append(
+                    f"**Visual placement**: {visual_pos} of the reference element. "
+                    "The new element must appear side-by-side with the reference. "
+                    "If the parent is not already a horizontal layout (flexbox row or CSS grid), "
+                    "wrap the reference and new element in a flex row container."
+                )
             if content:
                 tag = content.get("tag", "div")
                 parts.append(f"**Element to create**: `<{tag}>`")
@@ -632,6 +648,11 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
         ref = data.get("reference_selector", "")
         content = data.get("content", {})
         parts.append(f"**Position**: {pos}" + (f" (visually {visual_pos})" if visual_pos else ""))
+        if visual_pos in ("left", "right"):
+            parts.append(
+                "**Layout**: Place the new element side-by-side with the reference. "
+                "Use a flex row wrapper if the parent is not already horizontal."
+            )
         if ref:
             parts.append(f"**Reference element**: `{ref}`")
         if content:

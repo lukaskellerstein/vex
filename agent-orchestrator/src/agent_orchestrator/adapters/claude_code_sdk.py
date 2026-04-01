@@ -23,6 +23,7 @@ from claude_agent_sdk.types import (
     ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
+    UserMessage,
 )
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
@@ -98,6 +99,8 @@ class SDKAgentSession:
     log_buffer: list[str] = field(default_factory=list)
     steps: list[dict] = field(default_factory=list)
     file_logger: AgentFileLogger | None = None
+    # Maps tool_use_id → tool_name for correlating ToolResultBlocks
+    tool_use_names: dict[str, str] = field(default_factory=dict)
 
 
 class ClaudeCodeSDKAdapter(AgentAdapter):
@@ -337,6 +340,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             )
                             step_index += 1
                         elif isinstance(block, ToolUseBlock):
+                            # Track tool_use_id → name for correlating results
+                            if hasattr(block, "id") and block.id:
+                                session.tool_use_names[block.id] = block.name
                             log_line = f"[tool] {block.name}"
                             session.log_buffer.append(log_line)
                             if session.file_logger:
@@ -385,6 +391,28 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 },
                             )
                             step_index += 1
+                            # Emit bash_command step for Bash tool calls
+                            if block.name == "Bash" and block.input:
+                                bash_step = self._emit_bash_step(
+                                    session, block.input, now_ts
+                                )
+                                if bash_step:
+                                    await nats_service.publish(
+                                        f"vex.agent.{agent_id}.step",
+                                        {"index": step_index, **bash_step},
+                                    )
+                                    step_index += 1
+                            # Emit write_file step for Write tool calls
+                            if block.name == "Write" and block.input:
+                                write_step = self._emit_write_step(
+                                    session, block.input, now_ts
+                                )
+                                if write_step:
+                                    await nats_service.publish(
+                                        f"vex.agent.{agent_id}.step",
+                                        {"index": step_index, **write_step},
+                                    )
+                                    step_index += 1
                             # Emit diff step for Edit tool calls
                             if block.name == "Edit" and block.input:
                                 diff_step = self._emit_diff_step(
@@ -406,15 +434,36 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                     for item in block.content
                                     if isinstance(item, dict)
                                 )
-                            session.log_buffer.append(f"[result] {content_text[:200]}")
+                            is_error = getattr(block, "is_error", False) or False
+                            # Resolve tool name from the preceding ToolUseBlock
+                            result_tool_name = None
+                            tool_use_id = getattr(block, "tool_use_id", None)
+                            if tool_use_id:
+                                result_tool_name = session.tool_use_names.get(tool_use_id)
+                            event_type = "tool_error" if is_error else "tool_result"
+                            label = "[error]" if is_error else "[result]"
+                            tool_tag = f" ({result_tool_name})" if result_tool_name else ""
+                            session.log_buffer.append(f"{label}{tool_tag} {content_text[:200]}")
+                            if is_error:
+                                logger.warning(
+                                    "Agent %s tool error%s: %s",
+                                    agent_id,
+                                    tool_tag,
+                                    content_text[:500],
+                                )
                             if session.file_logger:
                                 session.file_logger.event(
-                                    "tool_result", content_text[:2000]
+                                    event_type,
+                                    content_text[:2000],
+                                    tool_name=result_tool_name,
+                                    is_error=is_error,
                                 )
                             self._mark_previous_steps_past(session)
                             step_data = {
-                                "type": "tool_result",
+                                "type": event_type,
                                 "content": content_text[:2000],
+                                "tool_name": result_tool_name,
+                                "is_error": is_error,
                                 "timestamp": now_ts,
                                 "status": "current",
                             }
@@ -424,7 +473,75 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 {
                                     "task_id": task_id,
                                     "agent_id": agent_id,
-                                    "type": "tool_result",
+                                    "type": event_type,
+                                    "tool_name": result_tool_name,
+                                    "is_error": is_error,
+                                    "content": content_text[:500],
+                                    "timestamp": now_ts,
+                                },
+                            )
+                            await nats_service.publish(
+                                f"vex.agent.{agent_id}.step",
+                                {"index": step_index, **step_data},
+                            )
+                            step_index += 1
+
+                elif isinstance(message, UserMessage):
+                    # UserMessage carries tool results (ToolResultBlock in content)
+                    now_ts = datetime.now(UTC).isoformat()
+                    blocks = message.content if isinstance(message.content, list) else []
+                    for block in blocks:
+                        if isinstance(block, ToolResultBlock):
+                            content_text = ""
+                            if isinstance(block.content, str):
+                                content_text = block.content
+                            elif isinstance(block.content, list):
+                                content_text = " ".join(
+                                    item.get("text", "")
+                                    for item in block.content
+                                    if isinstance(item, dict)
+                                )
+                            is_error = getattr(block, "is_error", False) or False
+                            result_tool_name = None
+                            tool_use_id = getattr(block, "tool_use_id", None)
+                            if tool_use_id:
+                                result_tool_name = session.tool_use_names.get(tool_use_id)
+                            event_type = "tool_error" if is_error else "tool_result"
+                            label = "[error]" if is_error else "[result]"
+                            tool_tag = f" ({result_tool_name})" if result_tool_name else ""
+                            session.log_buffer.append(f"{label}{tool_tag} {content_text[:200]}")
+                            if is_error:
+                                logger.warning(
+                                    "Agent %s tool error%s: %s",
+                                    agent_id,
+                                    tool_tag,
+                                    content_text[:500],
+                                )
+                            if session.file_logger:
+                                session.file_logger.event(
+                                    event_type,
+                                    content_text[:2000],
+                                    tool_name=result_tool_name,
+                                    is_error=is_error,
+                                )
+                            self._mark_previous_steps_past(session)
+                            step_data = {
+                                "type": event_type,
+                                "content": content_text[:2000],
+                                "tool_name": result_tool_name,
+                                "is_error": is_error,
+                                "timestamp": now_ts,
+                                "status": "current",
+                            }
+                            session.steps.append(step_data)
+                            await nats_service.publish(
+                                f"vex.task.{task_id}.progress",
+                                {
+                                    "task_id": task_id,
+                                    "agent_id": agent_id,
+                                    "type": event_type,
+                                    "tool_name": result_tool_name,
+                                    "is_error": is_error,
                                     "content": content_text[:500],
                                     "timestamp": now_ts,
                                 },
@@ -460,6 +577,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 elif isinstance(message, ResultMessage):
                     cost_usd = getattr(message, "total_cost_usd", None)
                     duration_ms = getattr(message, "duration_ms", None)
+                    usage = getattr(message, "usage", None) or {}
+                    input_tokens = usage.get("input_tokens", 0) if isinstance(usage, dict) else 0
+                    output_tokens = usage.get("output_tokens", 0) if isinstance(usage, dict) else 0
                     result_text = (
                         f"Completed in {duration_ms}ms" if duration_ms else "Completed"
                     )
@@ -472,6 +592,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                         "status": "past",
                         "cost_usd": cost_usd,
                         "duration_ms": duration_ms,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
                     }
                     session.steps.append(step_data)
                     await nats_service.publish(
@@ -726,6 +848,44 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         for step in session.steps:
             if step["status"] == "current":
                 step["status"] = "past"
+
+    @staticmethod
+    @staticmethod
+    def _emit_bash_step(
+        session: SDKAgentSession, tool_input: dict, timestamp: str
+    ) -> dict | None:
+        """Emit a bash_command step from a Bash tool call."""
+        command = tool_input.get("command", "")
+        if not command:
+            return None
+        step_data = {
+            "type": "bash_command",
+            "content": command[:5000],
+            "description": tool_input.get("description", ""),
+            "timestamp": timestamp,
+            "status": "current",
+        }
+        session.steps.append(step_data)
+        return step_data
+
+    @staticmethod
+    def _emit_write_step(
+        session: SDKAgentSession, tool_input: dict, timestamp: str
+    ) -> dict | None:
+        """Emit a write_file step from a Write tool call."""
+        file_path = tool_input.get("file_path", "")
+        file_content = tool_input.get("content", "")
+        if not file_path or not file_content:
+            return None
+        step_data = {
+            "type": "write_file",
+            "content": file_content[:10000],
+            "file_path": file_path,
+            "timestamp": timestamp,
+            "status": "current",
+        }
+        session.steps.append(step_data)
+        return step_data
 
     @staticmethod
     def _emit_diff_step(
