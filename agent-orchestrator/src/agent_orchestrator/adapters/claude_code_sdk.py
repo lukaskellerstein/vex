@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import AsyncIterator
 
+from agent_orchestrator.utils.ids import generate_agent_id
+
 from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
 from claude_agent_sdk.types import (
     AssistantMessage,
@@ -117,7 +119,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         self, project_id: str, project_path: str, agent_id: str | None = None
     ) -> AgentProcess:
         """Create a ClaudeSDKClient session for the given project."""
-        agent_id = agent_id or uuid.uuid4().hex
+        agent_id = agent_id or generate_agent_id()
         profile = get_agent_profile(self._profile_name)
 
         # Resolve plugins from marketplace

@@ -1,8 +1,9 @@
 """Agent endpoints (T026)."""
 
 import json
-import uuid
 from datetime import UTC, datetime
+
+from agent_orchestrator.utils.ids import generate_agent_id
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
@@ -77,7 +78,7 @@ async def list_agents():
 @router.post("/agents", status_code=status.HTTP_201_CREATED)
 async def register_agent(body: AgentCreate):
     db = await get_db()
-    agent_id = uuid.uuid4().hex
+    agent_id = generate_agent_id()
     now = datetime.now(UTC).isoformat()
     tier = _TIER_MAP.get(body.type, 1)
     capabilities_json = json.dumps(body.capabilities)

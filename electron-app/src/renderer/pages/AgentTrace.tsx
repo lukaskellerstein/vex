@@ -35,7 +35,7 @@ interface TraceData {
   agent_id: string;
   agent_name: string;
   agent_model: string;
-  status: "running" | "completed" | "failed" | "stopped" | "cancelled";
+  status: "running" | "completed" | "failed" | "stopped" | "cancelled" | "error";
   total_duration_ms: number | null;
   total_cost_usd: number | null;
   total_tokens: number | null;
@@ -117,6 +117,30 @@ const STATUS_CONFIG: Record<
     fg: "var(--status-warning)",
     border: "color-mix(in srgb, var(--status-warning) 20%, transparent)",
   },
+  error: {
+    icon: XCircle,
+    iconColor: "var(--status-error)",
+    label: "Error",
+    bg: "color-mix(in srgb, var(--status-error) 10%, transparent)",
+    fg: "var(--status-error)",
+    border: "color-mix(in srgb, var(--status-error) 20%, transparent)",
+  },
+  created: {
+    icon: Loader2,
+    iconColor: "var(--foreground-dim)",
+    label: "Created",
+    bg: "color-mix(in srgb, var(--foreground-dim) 8%, transparent)",
+    fg: "var(--foreground-dim)",
+    border: "color-mix(in srgb, var(--foreground-dim) 20%, transparent)",
+  },
+  unknown: {
+    icon: XCircle,
+    iconColor: "var(--foreground-dim)",
+    label: "Unknown",
+    bg: "color-mix(in srgb, var(--foreground-dim) 8%, transparent)",
+    fg: "var(--foreground-dim)",
+    border: "color-mix(in srgb, var(--foreground-dim) 20%, transparent)",
+  },
 };
 
 /** Convert a live step from NATS/steps API into the AgentStep shape used by the UI. */
@@ -145,7 +169,7 @@ export function AgentTrace() {
   const navigate = useNavigate();
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
-  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | null>(null);
+  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | "error" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
@@ -181,6 +205,17 @@ export function AgentTrace() {
         if (persisted) {
           setTrace(persisted);
           setAgentStatus(persisted.status);
+          setLoading(false);
+          return;
+        }
+        // Terminal or unknown status with no trace — show error instead of infinite spinner
+        const terminalStatuses = ["completed", "failed", "stopped", "cancelled", "error", "unknown"];
+        if (terminalStatuses.includes(stepsData.status)) {
+          setError(
+            stepsData.status === "unknown"
+              ? "This agent has no execution trace. It may have been interrupted by a server restart."
+              : `Agent ${stepsData.status}, but no detailed trace is available.`
+          );
           setLoading(false);
           return;
         }
@@ -286,7 +321,7 @@ export function AgentTrace() {
   // Determine what to display (must be before early returns to keep hook order stable)
   const displayStatus = trace?.status ?? agentStatus ?? "running";
   const displaySteps = trace?.steps ?? liveSteps;
-  const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId.slice(0, 8)}` : "Agent");
+  const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId}` : "Agent");
   const agentModel = trace?.agent_model ?? "claude-sonnet-4-5";
 
   const statusCfg = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.running;
