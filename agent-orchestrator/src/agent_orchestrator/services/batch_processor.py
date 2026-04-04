@@ -10,6 +10,7 @@ from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services.agent_manager import AgentManagerService
 from agent_orchestrator.services import nats_service
 from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile
+from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     logger.info("Batch %s: processing %d actions", batch_id, len(actions))
 
     # Pre-generate agent IDs so we can publish cursor mapping before execution
-    agent_ids = [uuid.uuid4().hex for _ in actions]
+    agent_ids = [generate_agent_id() for _ in actions]
 
     # Load batch page_url for cursor overlay
     batch_cursor = await db.execute("SELECT page_url FROM batches WHERE id = ?", (batch_id,))
@@ -152,7 +153,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     for idx, action in enumerate(actions):
         cursor_agents.append({
             "agentId": agent_ids[idx],
-            "agentName": f"agent-{agent_ids[idx][:8]}",
+            "agentName": f"agent-{agent_ids[idx]}",
             "selector": action["selector"],
             "colorIndex": idx,
         })
@@ -273,8 +274,8 @@ async def _process_action(
     db = await get_db()
     now = datetime.now(UTC).isoformat()
     if agent_id is None:
-        agent_id = uuid.uuid4().hex
-    agent_name = f"agent-{batch_id[:8]}-{action_idx}"
+        agent_id = generate_agent_id()
+    agent_name = f"agent-{agent_id}"
     task_id = uuid.uuid4().hex
 
     try:
@@ -390,6 +391,10 @@ async def _process_action(
             "UPDATE agents SET status = 'stopped' WHERE id = ?",
             (agent_id,),
         )
+        try:
+            await _persist_error_trace(db, batch_id, agent_id, agent_name, "cancelled", "Cancelled by user", completed_at)
+        except Exception:
+            logger.exception("Failed to persist cancel trace for agent %s", agent_id)
         await db.commit()
         raise  # Re-raise so gather captures it
 
@@ -408,6 +413,10 @@ async def _process_action(
             "UPDATE agents SET status = 'failed', tasks_failed = tasks_failed + 1 WHERE id = ?",
             (agent_id,),
         )
+        try:
+            await _persist_error_trace(db, batch_id, agent_id, agent_name, "failed", error_msg, completed_at)
+        except Exception:
+            logger.exception("Failed to persist error trace for agent %s", agent_id)
 
         await db.execute(
             """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
@@ -482,6 +491,39 @@ async def _persist_trace(
         )
 
     await db.commit()
+
+
+async def _persist_error_trace(
+    db,
+    batch_id: str,
+    agent_id: str,
+    agent_name: str,
+    status: str,
+    error_message: str,
+    completed_at: str,
+) -> None:
+    """Persist a minimal trace for agents that failed/cancelled before normal trace persistence."""
+    trace_id = uuid.uuid4().hex
+    now = datetime.now(UTC).isoformat()
+
+    await db.execute(
+        """INSERT INTO agent_traces (id, batch_id, agent_id, agent_name, agent_model, status,
+           total_duration_ms, total_cost_usd, total_tokens, created_at, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            trace_id, batch_id, agent_id, agent_name,
+            get_agent_profile().get("model", "claude-opus-4-6"),
+            status, None, None, 0, now, completed_at,
+        ),
+    )
+
+    step_id = uuid.uuid4().hex
+    await db.execute(
+        """INSERT INTO trace_steps (id, trace_id, sequence_index, type, content, metadata,
+           duration_ms, token_count, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (step_id, trace_id, 0, "error", error_message[:10000], None, None, None, now),
+    )
 
 
 def get_steps(agent_id: str) -> list[dict]:

@@ -3,8 +3,9 @@
 import asyncio
 import logging
 import shlex
-import uuid
 from typing import AsyncIterator
+
+from agent_orchestrator.utils.ids import generate_agent_id
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
 
@@ -34,7 +35,7 @@ class CLIWrapperAdapter(AgentAdapter):
         self._agent_config: dict[str, dict] = {}
 
     async def start(self, project_id: str, project_path: str) -> AgentProcess:
-        agent_id = uuid.uuid4().hex
+        agent_id = generate_agent_id()
         self._agent_config[agent_id] = {
             "project_id": project_id,
             "project_path": project_path,

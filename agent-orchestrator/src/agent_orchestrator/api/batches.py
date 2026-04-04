@@ -295,7 +295,7 @@ async def get_active_cursors(page_url: str):
                 continue
 
             # Use same format as Electron UI: agent-{agentId[:8]}
-            agent_name = f"agent-{agent_id[:8]}"
+            agent_name = f"agent-{agent_id}"
 
             all_agents.append({
                 "agentId": agent_id,

@@ -121,10 +121,10 @@ async def vex_get_project_context(project_id: str) -> dict:
 
 async def vex_register_agent(name: str, capabilities: list[str]) -> dict:
     """Register a new agent."""
-    import uuid
+    from agent_orchestrator.utils.ids import generate_agent_id
 
     db = await get_db()
-    agent_id = uuid.uuid4().hex
+    agent_id = generate_agent_id()
     now = datetime.now(UTC).isoformat()
     capabilities_json = json.dumps(capabilities)
 
