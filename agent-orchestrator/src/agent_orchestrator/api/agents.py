@@ -8,8 +8,10 @@ from agent_orchestrator.utils.ids import generate_agent_id
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from agent_orchestrator.db.database import get_db
-from agent_orchestrator.models.agent import Agent, AgentCreate, HeartbeatRequest
+from agent_orchestrator.models.agent import Agent, AgentCreate, ContinueRequest, HeartbeatRequest
 from agent_orchestrator.services import batch_processor
+
+import asyncio
 
 router = APIRouter(tags=["agents"])
 
@@ -105,60 +107,94 @@ async def get_agent(agent_id: str):
     return _row_to_agent(row)
 
 
+@router.post("/agents/{agent_id}/continue")
+async def continue_agent(agent_id: str, body: ContinueRequest):
+    db = await get_db()
+    cursor = await db.execute("SELECT id, status FROM agents WHERE id = ?", (agent_id,))
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    if row["status"] == "running":
+        raise HTTPException(status_code=409, detail=f"Agent {agent_id} is currently running")
+
+    terminal = ("completed", "failed", "stopped")
+    if row["status"] not in terminal:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent {agent_id} is in '{row['status']}' state, cannot continue",
+        )
+
+    asyncio.create_task(batch_processor.continue_agent(agent_id, body.message))
+    return {"status": "resuming", "agent_id": agent_id}
+
+
 @router.get("/agents/{agent_id}/trace")
 async def get_agent_trace(agent_id: str):
     db = await get_db()
+
+    # Fetch ALL traces for this agent, ordered chronologically
     cursor = await db.execute(
-        "SELECT * FROM agent_traces WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1",
+        "SELECT * FROM agent_traces WHERE agent_id = ? ORDER BY created_at ASC",
         (agent_id,),
     )
-    row = await cursor.fetchone()
-    if row is None:
+    trace_rows = await cursor.fetchall()
+    if not trace_rows:
         raise HTTPException(status_code=404, detail="Trace not found for this agent")
 
-    step_cursor = await db.execute(
-        "SELECT * FROM trace_steps WHERE trace_id = ? ORDER BY sequence_index",
-        (row["id"],),
-    )
-    step_rows = await step_cursor.fetchall()
-
-    # Fetch the prompt from the tasks table
+    # Fetch all tasks for this agent to map prompts by created_at order
     task_cursor = await db.execute(
-        "SELECT prompt FROM tasks WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1",
+        "SELECT prompt, created_at FROM tasks WHERE agent_id = ? ORDER BY created_at ASC",
         (agent_id,),
     )
-    task_row = await task_cursor.fetchone()
+    task_rows = await task_cursor.fetchall()
 
-    steps = []
-    for s in step_rows:
-        metadata = json.loads(s["metadata"]) if s["metadata"] else None
-        steps.append({
-            "id": s["id"],
-            "sequence_index": s["sequence_index"],
-            "type": s["type"],
-            "content": s["content"],
-            "metadata": metadata,
-            "duration_ms": s["duration_ms"],
-            "token_count": s["token_count"],
-            "created_at": s["created_at"],
+    traces = []
+    for idx, row in enumerate(trace_rows):
+        step_cursor = await db.execute(
+            "SELECT * FROM trace_steps WHERE trace_id = ? ORDER BY sequence_index",
+            (row["id"],),
+        )
+        step_rows = await step_cursor.fetchall()
+
+        steps = []
+        for s in step_rows:
+            metadata = json.loads(s["metadata"]) if s["metadata"] else None
+            steps.append({
+                "id": s["id"],
+                "sequence_index": s["sequence_index"],
+                "type": s["type"],
+                "content": s["content"],
+                "metadata": metadata,
+                "duration_ms": s["duration_ms"],
+                "token_count": s["token_count"],
+                "created_at": s["created_at"],
+            })
+
+        # Match prompt from task by index (tasks and traces created in same order)
+        prompt = task_rows[idx]["prompt"] if idx < len(task_rows) else None
+
+        traces.append({
+            "id": row["id"],
+            "batch_id": row["batch_id"],
+            "agent_id": row["agent_id"],
+            "agent_name": row["agent_name"],
+            "agent_model": row["agent_model"],
+            "prompt": prompt,
+            "status": row["status"],
+            "total_duration_ms": row["total_duration_ms"],
+            "total_cost_usd": row["total_cost_usd"],
+            "total_tokens": row["total_tokens"],
+            "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
+            "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
+            "steps": steps,
+            "created_at": row["created_at"],
+            "completed_at": row["completed_at"],
         })
 
     return {
-        "id": row["id"],
-        "batch_id": row["batch_id"],
-        "agent_id": row["agent_id"],
-        "agent_name": row["agent_name"],
-        "agent_model": row["agent_model"],
-        "prompt": task_row["prompt"] if task_row else None,
-        "status": row["status"],
-        "total_duration_ms": row["total_duration_ms"],
-        "total_cost_usd": row["total_cost_usd"],
-        "total_tokens": row["total_tokens"],
-        "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
-        "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
-        "steps": steps,
-        "created_at": row["created_at"],
-        "completed_at": row["completed_at"],
+        "agent_id": agent_id,
+        "traces": traces,
     }
 
 

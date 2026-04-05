@@ -482,19 +482,21 @@ function ActionRow({ action, index, task, onViewAgent }: { action: BatchAction; 
           {action.type}
         </span>
 
-        {/* Selector */}
-        <span style={{
-          fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--foreground-dim)",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0,
-        }}>
-          {action.selector}
-        </span>
+        {/* Agent ID */}
+        {task && (
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--foreground-dim)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0, maxWidth: "120px",
+          }}>
+            {task.agent_id.slice(0, 8)}
+          </span>
+        )}
 
         {/* Instruction preview (collapsed) */}
         {!expanded && instruction && (
           <span style={{
             fontSize: "11px", color: "var(--foreground-dim)", overflow: "hidden",
-            textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "200px", flexShrink: 1,
+            textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0,
           }}>
             {instruction}
           </span>

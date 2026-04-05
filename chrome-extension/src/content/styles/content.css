@@ -1476,6 +1476,284 @@
   line-height: 1.4;
 }
 
+/* Batch Selector */
+.vex-batch-selector {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2147483645;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.vex-batch-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(137, 180, 250, 0.25);
+  background: rgba(30, 30, 46, 0.92);
+  backdrop-filter: blur(12px);
+  color: #a6adc8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.vex-batch-toggle:hover {
+  background: rgba(30, 30, 46, 0.98);
+  border-color: rgba(137, 180, 250, 0.4);
+  color: #cdd6f4;
+}
+.vex-batch-toggle--active {
+  border-color: rgba(137, 180, 250, 0.5);
+  color: #89b4fa;
+}
+.vex-batch-toggle-icon {
+  font-size: 10px;
+  color: #89b4fa;
+}
+.vex-batch-toggle-count {
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(137, 180, 250, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #89b4fa;
+}
+.vex-batch-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 220px;
+  border-radius: 10px;
+  border: 1px solid rgba(137, 180, 250, 0.2);
+  background: rgba(30, 30, 46, 0.96);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.vex-batch-dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a6adc8;
+  border-bottom: 1px solid rgba(137, 180, 250, 0.1);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.vex-batch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(137, 180, 250, 0.05);
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+  color: #cdd6f4;
+  font-family: inherit;
+}
+.vex-batch-item:last-child { border-bottom: none; }
+.vex-batch-item:hover { background: rgba(137, 180, 250, 0.08); }
+.vex-batch-item--selected { background: rgba(137, 180, 250, 0.12); }
+.vex-batch-item:disabled { opacity: 0.5; cursor: wait; }
+.vex-batch-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #585b70;
+}
+.vex-batch-dot--completed { background: #a6e3a1; }
+.vex-batch-dot--failed { background: #f38ba8; }
+.vex-batch-dot--running { background: #89b4fa; animation: vex-pulse 1.5s ease-in-out infinite; }
+.vex-batch-dot--cancelled { background: #fab387; }
+@keyframes vex-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.vex-batch-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.vex-batch-item-time {
+  font-size: 12px;
+  color: #cdd6f4;
+}
+.vex-batch-item-actions {
+  font-size: 10px;
+  color: #6c7086;
+}
+.vex-batch-item-check {
+  color: #a6e3a1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Reply button + panel */
+.vex-cursor-reply-btn,
+.vex-cursor-dismiss-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(30, 30, 46, 0.9);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.vex-cursor-reply-btn:hover { background: rgba(137, 180, 250, 0.3); }
+.vex-cursor-dismiss-btn:hover { background: rgba(243, 139, 168, 0.3); }
+
+.vex-cursor-reply-panel {
+  position: absolute;
+  left: 16px;
+  top: 34px;
+  width: 260px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(137, 180, 250, 0.3);
+  background: rgba(30, 30, 46, 0.95);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  z-index: 2147483647;
+}
+
+.vex-cursor-reply-textarea {
+  width: 100%;
+  resize: none;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(137, 180, 250, 0.2);
+  background: rgba(17, 17, 27, 0.8);
+  color: #cdd6f4;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  outline: none;
+  margin-bottom: 6px;
+}
+.vex-cursor-reply-textarea:focus {
+  border-color: rgba(137, 180, 250, 0.5);
+}
+
+.vex-cursor-reply-send,
+.vex-cursor-reply-cancel {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: none;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.vex-cursor-reply-send {
+  background: #89b4fa;
+  color: #1e1e2e;
+}
+.vex-cursor-reply-send:hover { background: #b4d0fb; }
+.vex-cursor-reply-send:disabled {
+  background: rgba(137, 180, 250, 0.3);
+  color: rgba(30, 30, 46, 0.5);
+  cursor: not-allowed;
+}
+.vex-cursor-reply-cancel {
+  background: transparent;
+  color: #a6adc8;
+  border: 1px solid rgba(166, 173, 200, 0.2);
+}
+.vex-cursor-reply-cancel:hover { background: rgba(166, 173, 200, 0.1); }
+
+/* Agent Status Panel */
+.vex-status-panel {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 220px;
+  border-radius: 10px;
+  border: 1px solid rgba(137, 180, 250, 0.2);
+  background: rgba(30, 30, 46, 0.95);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  z-index: 2147483646;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.vex-status-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cdd6f4;
+  border-bottom: 1px solid rgba(137, 180, 250, 0.1);
+}
+.vex-status-panel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #89b4fa;
+}
+.vex-status-panel-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.vex-status-panel-item {
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(137, 180, 250, 0.05);
+}
+.vex-status-panel-item:last-child { border-bottom: none; }
+.vex-status-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vex-status-panel-badge {
+  font-size: 10px;
+  width: 14px;
+  text-align: center;
+}
+.vex-status-panel-badge[data-status="running"] { color: #89b4fa; }
+.vex-status-panel-badge[data-status="completed"] { color: #a6e3a1; }
+.vex-status-panel-badge[data-status="failed"] { color: #f38ba8; }
+.vex-status-panel-name {
+  flex: 1;
+  font-size: 11px;
+  color: #a6adc8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vex-status-panel-continue {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(137, 180, 250, 0.3);
+  background: transparent;
+  color: #89b4fa;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.vex-status-panel-continue:hover { background: rgba(137, 180, 250, 0.15); }
+.vex-status-panel-input {
+  margin-top: 6px;
+}
+
 @keyframes vex-cursor-drift {
   0%   { transform: translate(0, 0); }
   20%  { transform: translate(14px, -10px); }

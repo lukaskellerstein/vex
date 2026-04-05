@@ -30,6 +30,7 @@ declare global {
       deleteBatch: (projectId: string, batchId: string) => Promise<void>;
       stopBatch: (projectId: string, batchId: string) => Promise<any>;
       stopAgent: (agentId: string) => Promise<any>;
+      continueAgent: (agentId: string, message: string) => Promise<any>;
       getAgentTrace: (batchId: string) => Promise<any>;
       getActivity: (filters?: { projectId?: string; type?: string; since?: string }) => Promise<any[]>;
       getActivityStats: (since?: string) => Promise<any>;

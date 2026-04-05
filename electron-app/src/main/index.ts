@@ -381,6 +381,10 @@ ipcMain.handle("stop-agent", async (_event, agentId: string) => {
   return apiPost(`/api/agents/${agentId}/stop`);
 });
 
+ipcMain.handle("continue-agent", async (_event, agentId: string, message: string) => {
+  return apiPost(`/api/agents/${agentId}/continue`, { message });
+});
+
 ipcMain.handle("get-agent-trace", async (_event, batchId: string) => {
   return apiGet(`/api/batches/${batchId}/trace`);
 });

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AgentStatus(StrEnum):
@@ -37,6 +37,10 @@ class Agent(BaseModel):
     tasks_failed: int = 0
     total_cost_usd: float = 0
     created_at: datetime
+
+
+class ContinueRequest(BaseModel):
+    message: str = Field(..., min_length=1)
 
 
 class HeartbeatRequest(BaseModel):

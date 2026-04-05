@@ -13,6 +13,7 @@ import {
   ChevronUp,
   Terminal,
   Bot,
+  CornerDownRight,
 } from "lucide-react";
 
 /* ─── Types ──────────────────────────────────────── */
@@ -33,7 +34,8 @@ export type StepType =
   | "skill_result"
   | "completed"
   | "progress"
-  | "error";
+  | "error"
+  | "user_message";
 
 export interface AgentStep {
   id: string;
@@ -495,6 +497,100 @@ function ToolCard({
 }
 
 /* ─── Tool card input renderers ─────────────────── */
+
+function PromptCard({ text }: { text: string }) {
+  const bright = "hsl(142, 69%, 55%)";
+  const lines = text.split("\n");
+  const isStructured = lines.some((l) => l.startsWith("##") || l.startsWith("**Action"));
+
+  return (
+    <div
+      style={{
+        borderRadius: "10px",
+        overflow: "hidden",
+        border: `1.5px solid color-mix(in srgb, ${bright} 40%, transparent)`,
+        boxShadow: `0 2px 16px color-mix(in srgb, ${bright} 10%, transparent)`,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px 16px",
+          background: `linear-gradient(135deg, color-mix(in srgb, ${bright} 18%, transparent) 0%, color-mix(in srgb, ${bright} 10%, transparent) 100%)`,
+          borderBottom: `1px solid color-mix(in srgb, ${bright} 22%, transparent)`,
+        }}
+      >
+        <div
+          style={{
+            width: "26px",
+            height: "26px",
+            borderRadius: "7px",
+            background: `color-mix(in srgb, ${bright} 22%, transparent)`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <CornerDownRight size={14} style={{ color: bright }} />
+        </div>
+        <span
+          style={{
+            fontSize: "12px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: bright,
+          }}
+        >
+          Prompt
+        </span>
+      </div>
+
+      {/* Content body */}
+      <div
+        style={{
+          padding: "14px 16px",
+          background: `color-mix(in srgb, ${bright} 8%, var(--background))`,
+        }}
+      >
+        {isStructured ? (
+          <pre
+            style={{
+              fontSize: "13px",
+              fontFamily: "var(--font-mono)",
+              lineHeight: 1.7,
+              margin: 0,
+              color: "var(--foreground)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              maxHeight: "300px",
+              overflowY: "auto",
+            }}
+          >
+            {text}
+          </pre>
+        ) : (
+          <p
+            style={{
+              fontSize: "14px",
+              lineHeight: 1.7,
+              margin: 0,
+              color: "var(--foreground)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function BashInput({ command, description }: { command: string; description: string }) {
   const termGreen = "hsl(120, 60%, 60%)";
@@ -1343,10 +1439,18 @@ export function AgentStepItem({ step, resultSteps }: { step: AgentStep; resultSt
 
     case "completed":
       return (
-        <div style={rowBase}>
-          <CheckCircle size={14} style={iconStyle("var(--status-success)")} />
+        <div
+          style={{
+            ...rowBase,
+            padding: "12px 16px",
+            borderRadius: "var(--radius)",
+            background: "color-mix(in srgb, hsl(142, 69%, 55%) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, hsl(142, 69%, 55%) 25%, transparent)",
+          }}
+        >
+          <CheckCircle size={16} style={iconStyle("hsl(142, 69%, 55%)")} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: "13px", color: "var(--status-success)", lineHeight: 1.6, margin: 0 }}>
+            <p style={{ fontSize: "14px", fontWeight: 600, color: "hsl(142, 69%, 55%)", lineHeight: 1.6, margin: 0 }}>
               {content || "Task completed"}
             </p>
           </div>
@@ -1366,6 +1470,14 @@ export function AgentStepItem({ step, resultSteps }: { step: AgentStep; resultSt
           <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
       );
+
+    case "user_message": {
+      return (
+        <div style={{ padding: "6px 0" }}>
+          <PromptCard text={content} />
+        </div>
+      );
+    }
 
     default:
       return null;
