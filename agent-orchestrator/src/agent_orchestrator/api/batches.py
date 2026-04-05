@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.models.batch import (
@@ -306,6 +306,63 @@ async def get_active_cursors(page_url: str):
             })
 
     return {"agents": all_agents}
+
+
+@router.get("/batches")
+async def list_batches_by_url(page_url: str = Query(...), limit: int = Query(default=5, le=20)):
+    """Return recent batches for a given page URL."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM batches WHERE page_url = ? ORDER BY submitted_at DESC LIMIT ?",
+        (page_url, limit),
+    )
+    rows = await cursor.fetchall()
+    return [_row_to_summary(r) for r in rows]
+
+
+@router.get("/batches/{batch_id}/cursors")
+async def get_batch_cursors(batch_id: str):
+    """Reconstruct cursor data for a historical batch from actions + agent traces."""
+    db = await get_db()
+
+    batch_cursor = await db.execute("SELECT * FROM batches WHERE id = ?", (batch_id,))
+    batch_row = await batch_cursor.fetchone()
+    if batch_row is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    # Get actions (selectors)
+    action_cursor = await db.execute(
+        "SELECT sequence_index, selector FROM actions WHERE batch_id = ? ORDER BY sequence_index",
+        (batch_id,),
+    )
+    actions = await action_cursor.fetchall()
+
+    # Get agent traces for this batch (one per action, ordered by creation)
+    trace_cursor = await db.execute(
+        "SELECT agent_id, agent_name, status FROM agent_traces WHERE batch_id = ? ORDER BY created_at",
+        (batch_id,),
+    )
+    traces = await trace_cursor.fetchall()
+
+    agents = []
+    for idx, action in enumerate(actions):
+        agent_id = traces[idx]["agent_id"] if idx < len(traces) else None
+        agent_name = traces[idx]["agent_name"] if idx < len(traces) else f"agent-{idx}"
+        agent_status = traces[idx]["status"] if idx < len(traces) else "unknown"
+
+        agents.append({
+            "agentId": agent_id or f"unknown-{idx}",
+            "agentName": agent_name,
+            "selector": action["selector"],
+            "colorIndex": idx,
+            "status": agent_status,
+        })
+
+    return {
+        "batchId": batch_id,
+        "pageUrl": batch_row["page_url"],
+        "agents": agents,
+    }
 
 
 @router.post("/projects/{project_id}/batches/{batch_id}/stop")

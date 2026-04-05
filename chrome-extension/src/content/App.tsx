@@ -302,7 +302,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
   return (
     <>
       {/* Agent cursors — always polls AO; triggers NATS connection when agents found */}
-      <AgentCursors natsClient={natsClient} onAgentsDetected={enableNats} />
+      <AgentCursors natsClient={natsClient} onAgentsDetected={enableNats} shadowRoot={shadowRoot} />
 
       {isActive && (
         <Toolbar

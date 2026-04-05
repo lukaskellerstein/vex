@@ -94,6 +94,117 @@ async def abort_agent(agent_id: str) -> bool:
         return False
 
 
+async def continue_agent(agent_id: str, message: str) -> None:
+    """Continue a conversation with a finished agent by sending a follow-up message."""
+    if _agent_manager is None:
+        logger.error("Batch processor not initialized")
+        return
+
+    db = await get_db()
+
+    # Look up agent and its project
+    agent_row = await db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,))
+    agent = await agent_row.fetchone()
+    if not agent:
+        raise ValueError(f"Agent {agent_id} not found")
+
+    project_id = agent["project_id"]
+    project_row = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
+    project = await project_row.fetchone()
+    if not project:
+        raise ValueError(f"Project {project_id} not found for agent {agent_id}")
+
+    session_id = f"vex-{agent_id}"
+
+    # Create a continuation task
+    task_id = uuid.uuid4().hex
+    now = datetime.now(UTC).isoformat()
+    await db.execute(
+        """INSERT INTO tasks (id, project_id, agent_id, type, status, prompt, created_at, assigned_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (task_id, project_id, agent_id, "continue", "in_progress", message, now, now),
+    )
+    await db.commit()
+
+    try:
+        # Start the agent (transitions status to running)
+        await _agent_manager.start_agent(
+            agent_id=agent_id,
+            project_id=project_id,
+            project_path=project["path"],
+            adapter_type="claude-code-sdk",
+        )
+
+        # Resume conversation via adapter
+        adapter = _agent_manager._adapters.get("claude-code-sdk")
+        if not adapter:
+            raise RuntimeError("claude-code-sdk adapter not available")
+
+        await adapter.resume(
+            agent_id=agent_id,
+            project_id=project_id,
+            project_path=project["path"],
+            message=message,
+            session_id=session_id,
+        )
+
+        # Extract cost/duration from session steps
+        session = adapter._sessions.get(agent_id)
+        cost_usd = None
+        duration_ms = None
+        completed_at = datetime.now(UTC).isoformat()
+
+        if session:
+            for step in reversed(session.steps):
+                if step.get("type") == "completed":
+                    cost_usd = step.get("cost_usd")
+                    duration_ms = step.get("duration_ms")
+                    break
+
+            # Persist trace (batch_id=None for continuations)
+            await _persist_trace(
+                db, None, agent_id, agent["name"],
+                session, cost_usd, duration_ms, completed_at,
+            )
+
+        # Update task as completed
+        await db.execute(
+            "UPDATE tasks SET status = 'completed', completed_at = ? WHERE id = ?",
+            (completed_at, task_id),
+        )
+        await db.execute(
+            "UPDATE agents SET tasks_completed = tasks_completed + 1 WHERE id = ?",
+            (agent_id,),
+        )
+        await db.commit()
+
+        logger.info("Agent %s continuation completed", agent_id)
+
+    except Exception:
+        logger.exception("Agent %s continuation failed", agent_id)
+        completed_at = datetime.now(UTC).isoformat()
+        await db.execute(
+            "UPDATE tasks SET status = 'failed', completed_at = ? WHERE id = ?",
+            (completed_at, task_id),
+        )
+        await db.execute(
+            "UPDATE agents SET tasks_failed = tasks_failed + 1, status = 'failed' WHERE id = ?",
+            (agent_id,),
+        )
+        await db.commit()
+
+        await _persist_error_trace(
+            db, None, agent_id, agent["name"],
+            "failed", str(Exception), completed_at,
+        )
+
+    finally:
+        try:
+            await _agent_manager.stop_agent(agent_id)
+        except Exception:
+            logger.exception("Error stopping agent %s after continuation", agent_id)
+
+
 async def process_batch(project_id: str, batch_id: str) -> None:
     """Process a batch by spawning one agent per action in parallel."""
     if _agent_manager is None:

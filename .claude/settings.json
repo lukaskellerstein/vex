@@ -30,7 +30,8 @@
       "Write",
       "WebSearch",
       "WebFetch",
-      "mcp__vex-chrome"
+      "mcp__electron-chrome",
+      "mcp__extension-chrome"
     ],
     "deny": [
       "Bash(rm -rf /)",

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NatsClient } from "../hooks/useNatsClient";
 import { AGENT_MANAGER_URL } from "../../shared/messages";
+import { AgentStatusPanel } from "./AgentStatusPanel";
+import { FollowUpDialog } from "./FollowUpDialog";
 import { clampToViewport } from "../utils/positioning";
 
 /* ─── Types ──────────────────────────────────────── */
@@ -12,6 +14,7 @@ interface CursorAgent {
   colorIndex: number;
   status: "running" | "completed" | "failed";
   fading: boolean;
+  showReply: boolean;
 }
 
 interface CursorInit {
@@ -84,12 +87,19 @@ function CursorFail({ color }: { color: string }) {
 
 /* ─── Single Cursor ──────────────────────────────── */
 
-function AgentCursor({ agent }: { agent: CursorAgent }) {
+function AgentCursor({
+  agent,
+  onReply,
+  onDismiss,
+}: {
+  agent: CursorAgent;
+  onReply: () => void;
+  onDismiss: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const color = getColor(agent.status, agent.colorIndex);
   const isDone = agent.status === "completed" || agent.status === "failed";
 
-  // Track element position (scroll/resize aware)
   useEffect(() => {
     const update = () => {
       if (!ref.current) return;
@@ -100,7 +110,6 @@ function AgentCursor({ agent }: { agent: CursorAgent }) {
           return;
         }
         const rect = el.getBoundingClientRect();
-        // Clamp outline to visible viewport portion
         const outlineTop = Math.max(0, rect.y);
         const outlineLeft = Math.max(0, rect.x);
         const outlineWidth = Math.max(0, Math.min(window.innerWidth, rect.x + rect.width) - outlineLeft);
@@ -128,25 +137,19 @@ function AgentCursor({ agent }: { agent: CursorAgent }) {
     };
   }, [agent.selector]);
 
-  // Random animation delay so cursors don't sync
   const animDelay = useRef(`${Math.random() * -4}s`);
 
   return (
     <>
-      {/* Outline around target element */}
-      <div
-        ref={ref}
-        className="vex-agent-outline"
-        style={{ borderColor: color }}
-      />
-
-      {/* Cursor + name badge (positioned inside the outline div via portal-like approach) */}
+      <div ref={ref} className="vex-agent-outline" style={{ borderColor: color, display: "none" }} />
       <CursorInner
         parentRef={ref}
         agent={agent}
         color={color}
         isDone={isDone}
         animDelay={animDelay.current}
+        onReply={onReply}
+        onDismiss={onDismiss}
       />
     </>
   );
@@ -158,16 +161,19 @@ function CursorInner({
   color,
   isDone,
   animDelay,
+  onReply,
+  onDismiss,
 }: {
   parentRef: React.RefObject<HTMLDivElement | null>;
   agent: CursorAgent;
   color: string;
   isDone: boolean;
   animDelay: string;
+  onReply: () => void;
+  onDismiss: () => void;
 }) {
   const cursorRef = useRef<HTMLDivElement>(null);
 
-  // Position cursor relative to the outline element
   useEffect(() => {
     const update = () => {
       if (!cursorRef.current || !parentRef.current) return;
@@ -181,9 +187,6 @@ function CursorInner({
       const left = parseFloat(parent.style.left) || 0;
       const width = parseFloat(parent.style.width) || 100;
       const height = parseFloat(parent.style.height) || 50;
-      // Position cursor at ~30% from top-left, clamped to viewport
-      // Footprint: ~100px wide (icon + name badge), ~56px tall
-      // Margin: 22px absorbs max drift animation displacement (18px) + buffer
       const rawTop = top + height * 0.25;
       const rawLeft = left + width * 0.2;
       const clamped = clampToViewport(rawTop, rawLeft, 100, 56, 22);
@@ -200,7 +203,7 @@ function CursorInner({
     <div
       ref={cursorRef}
       className={`vex-agent-cursor ${isDone ? "vex-agent-cursor--done" : ""} ${agent.fading ? "vex-agent-cursor--fading" : ""}`}
-      style={{ animationDelay: animDelay }}
+      style={{ animationDelay: animDelay, pointerEvents: isDone ? "auto" : "none", display: "none" }}
     >
       {agent.status === "failed" ? (
         <CursorFail color={color} />
@@ -209,12 +212,28 @@ function CursorInner({
       ) : (
         <CursorArrow color={color} />
       )}
-      <span
-        className="vex-agent-cursor-name"
-        style={{ background: color }}
-      >
+      <span className="vex-agent-cursor-name" style={{ background: color }}>
         {agent.agentName}
       </span>
+
+      {isDone && agent.showReply && !agent.fading && (
+        <div style={{ position: "absolute", left: "16px", top: "34px", display: "flex", gap: "4px" }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onReply(); }}
+            className="vex-cursor-reply-btn"
+            title="Continue conversation"
+          >
+            💬
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDismiss(); }}
+            className="vex-cursor-dismiss-btn"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -224,13 +243,17 @@ function CursorInner({
 interface AgentCursorsProps {
   natsClient: NatsClient;
   onAgentsDetected?: () => void;
+  shadowRoot: ShadowRoot;
 }
 
-export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps) {
+export function AgentCursors({ natsClient, onAgentsDetected, shadowRoot }: AgentCursorsProps) {
   const [agents, setAgents] = useState<CursorAgent[]>([]);
   const subIdsRef = useRef<string[]>([]);
   const knownAgentIdsRef = useRef<Set<string>>(new Set());
   const completedAgentIdsRef = useRef<Set<string>>(new Set());
+  const [replyAgentId, setReplyAgentId] = useState<string | null>(null);
+  // When viewing a historical batch, polling is paused
+  const historicalModeRef = useRef(false);
 
   const cleanupSubs = useCallback(() => {
     for (const id of subIdsRef.current) {
@@ -239,30 +262,28 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
     subIdsRef.current = [];
   }, [natsClient]);
 
-  /** Handle agent completion: transition to done state, then fade out. */
   const completeAgent = useCallback((agentId: string, finalStatus: "completed" | "failed") => {
     completedAgentIdsRef.current.add(agentId);
     setAgents((prev) =>
       prev.map((ag) =>
-        ag.agentId === agentId && !ag.fading ? { ...ag, status: finalStatus } : ag,
+        ag.agentId === agentId && !ag.fading ? { ...ag, status: finalStatus, showReply: true } : ag,
       ),
     );
+  }, []);
 
-    setTimeout(() => {
-      setAgents((prev) =>
-        prev.map((ag) =>
-          ag.agentId === agentId ? { ...ag, fading: true } : ag,
-        ),
-      );
-    }, 500);
-
+  const dismissAgent = useCallback((agentId: string) => {
+    setReplyAgentId((prev) => prev === agentId ? null : prev);
+    setAgents((prev) =>
+      prev.map((ag) =>
+        ag.agentId === agentId ? { ...ag, showReply: false, fading: true } : ag,
+      ),
+    );
     setTimeout(() => {
       setAgents((prev) => prev.filter((ag) => ag.agentId !== agentId));
       knownAgentIdsRef.current.delete(agentId);
-    }, 500 + FADE_DURATION);
+    }, FADE_DURATION);
   }, []);
 
-  /** Subscribe to an agent's status for real-time completion updates. */
   const subscribeAgentStatus = useCallback(
     (agentId: string) => {
       if (!natsClient.connected) return;
@@ -271,6 +292,8 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
         (statusData: object) => {
           const sd = statusData as { status?: string };
           const raw = sd.status || "";
+          // Ignore non-terminal statuses (e.g. "running" from continuation start)
+          if (raw === "running" || raw === "starting") return;
           const newStatus: "completed" | "failed" =
             raw === "failed" || raw === "error" ? "failed" : "completed";
           completeAgent(agentId, newStatus);
@@ -281,7 +304,30 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
     [natsClient, completeAgent],
   );
 
-  /** Activate new cursors or update existing ones from poll/NATS data. */
+  const continueAgent = useCallback(async (agentId: string, message: string) => {
+    setReplyAgentId(null);
+    try {
+      const res = await fetch(`${AGENT_MANAGER_URL}/api/agents/${agentId}/continue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) return;
+
+      completedAgentIdsRef.current.delete(agentId);
+      setAgents((prev) =>
+        prev.map((ag) =>
+          ag.agentId === agentId ? { ...ag, status: "running", showReply: false, fading: false } : ag,
+        ),
+      );
+
+      subscribeAgentStatus(agentId);
+    } catch {
+      // Error — agent stays in current state
+    }
+  }, [subscribeAgentStatus]);
+
   const activateAgents = useCallback(
     (incoming: { agentId: string; agentName: string; selector: string; colorIndex: number; status?: string }[]) => {
       setAgents((prev) => {
@@ -289,19 +335,16 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
         const updated = [...prev];
 
         for (const a of incoming) {
-          // Don't resurrect agents that already completed
           if (completedAgentIdsRef.current.has(a.agentId)) continue;
 
           const agentStatus = (a.status as CursorAgent["status"]) || "running";
 
           if (existingIds.has(a.agentId)) {
-            // Update status if changed
             const idx = updated.findIndex((x) => x.agentId === a.agentId);
             if (idx >= 0 && updated[idx].status !== agentStatus && !updated[idx].fading) {
               updated[idx] = { ...updated[idx], status: agentStatus };
             }
           } else {
-            // New agent
             knownAgentIdsRef.current.add(a.agentId);
             subscribeAgentStatus(a.agentId);
             updated.push({
@@ -311,6 +354,7 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
               colorIndex: a.colorIndex,
               status: agentStatus,
               fading: false,
+              showReply: false,
             });
           }
         }
@@ -321,27 +365,84 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
     [subscribeAgentStatus],
   );
 
+  // ── Shared handler for loading batch cursors ──
+  const handleLoadBatchCursors = useCallback(
+    (incoming: { agentId: string; agentName: string; selector: string; colorIndex: number; status: string }[]) => {
+      if (incoming.length === 0) {
+        // Deselect — exit historical mode, clear agents, resume polling
+        historicalModeRef.current = false;
+        setAgents([]);
+        knownAgentIdsRef.current.clear();
+        completedAgentIdsRef.current.clear();
+        return;
+      }
+
+      // Enter historical mode — stop polling, load batch agents
+      historicalModeRef.current = true;
+      // Ensure NATS connects so continuations can subscribe to status events
+      onAgentsDetected?.();
+
+      const mapped: CursorAgent[] = incoming.map((a) => {
+        const status = (a.status === "failed" ? "failed" : a.status === "running" ? "running" : "completed") as CursorAgent["status"];
+        return {
+          agentId: a.agentId,
+          agentName: a.agentName,
+          selector: a.selector,
+          colorIndex: a.colorIndex,
+          status,
+          fading: false,
+          showReply: status !== "running",
+        };
+      });
+
+      knownAgentIdsRef.current.clear();
+      completedAgentIdsRef.current.clear();
+      for (const a of mapped) {
+        knownAgentIdsRef.current.add(a.agentId);
+        if (a.status !== "running") {
+          completedAgentIdsRef.current.add(a.agentId);
+        }
+      }
+      setAgents(mapped);
+    },
+    [onAgentsDetected],
+  );
+
+  // ── Listen for loadBatchCursors messages from popup ──
+  useEffect(() => {
+    const listener = (
+      message: { action: string; agents?: { agentId: string; agentName: string; selector: string; colorIndex: number; status: string }[] },
+    ) => {
+      if (message.action !== "loadBatchCursors") return;
+      handleLoadBatchCursors(message.agents ?? []);
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [handleLoadBatchCursors]);
+
   // ── Poll AO API for active cursors on this page ──
   useEffect(() => {
     let active = true;
 
     async function poll() {
-      if (!active) return;
+      if (!active || historicalModeRef.current) return;
       try {
         const url = `${AGENT_MANAGER_URL}/api/cursors?page_url=${encodeURIComponent(location.href)}`;
         const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
         if (!res.ok) return;
+        // Re-check after async fetch — historical mode may have been activated while waiting
+        if (historicalModeRef.current) return;
+
         const data = (await res.json()) as {
           agents: { agentId: string; agentName: string; selector: string; colorIndex: number; status?: string }[];
         };
 
-        // Activate new agents
         if (data.agents?.length > 0) {
           activateAgents(data.agents);
           onAgentsDetected?.();
         }
 
-        // Detect agents that vanished from the response (batch completed)
         const activeIds = new Set((data.agents || []).map((a) => a.agentId));
         for (const knownId of knownAgentIdsRef.current) {
           if (!activeIds.has(knownId)) {
@@ -349,11 +450,10 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
           }
         }
       } catch {
-        // AO not reachable — ignore
+        // AO not reachable
       }
     }
 
-    // Poll immediately, then every 3s
     poll();
     const interval = setInterval(poll, 3000);
     return () => {
@@ -362,7 +462,7 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
     };
   }, [activateAgents, completeAgent, onAgentsDetected]);
 
-  // ── NATS subscription as backup (catches batches starting while page is loaded) ──
+  // ── NATS subscription as backup ──
   useEffect(() => {
     if (!natsClient.connected) return;
 
@@ -370,7 +470,6 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
       const msg = data as CursorInit;
       if (msg.type !== "cursor_init") return;
 
-      // Only activate if this page matches the batch page URL
       const currentUrl = location.href.replace(/\/$/, "");
       const batchUrl = (msg.pageUrl || "").replace(/\/$/, "");
       if (batchUrl && currentUrl !== batchUrl) return;
@@ -382,13 +481,45 @@ export function AgentCursors({ natsClient, onAgentsDetected }: AgentCursorsProps
     return cleanupSubs;
   }, [natsClient, natsClient.connected, cleanupSubs, activateAgents]);
 
+  // Get the cursor position for the reply dialog anchor
+  const replyAgent = replyAgentId ? agents.find((a) => a.agentId === replyAgentId) : null;
+  const replyAnchor = useRef<{ top: number; left: number }>({ top: 200, left: 200 });
+  if (replyAgent) {
+    try {
+      const el = document.querySelector(replyAgent.selector);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        replyAnchor.current = { top: rect.top + rect.height * 0.3, left: rect.left + rect.width * 0.2 };
+      }
+    } catch { /* selector might be invalid */ }
+  }
+
   if (agents.length === 0) return null;
 
   return (
     <div className="cs-overlay">
       {agents.map((agent) => (
-        <AgentCursor key={agent.agentId} agent={agent} />
+        <AgentCursor
+          key={agent.agentId}
+          agent={agent}
+          onReply={() => setReplyAgentId(agent.agentId)}
+          onDismiss={() => dismissAgent(agent.agentId)}
+        />
       ))}
+      <AgentStatusPanel
+        agents={agents.map((a) => ({ agentId: a.agentId, agentName: a.agentName, status: a.status }))}
+        onContinue={(agentId, msg) => continueAgent(agentId, msg)}
+      />
+      {replyAgentId && replyAgent && (
+        <FollowUpDialog
+          agentName={replyAgent.agentName}
+          anchorTop={replyAnchor.current.top}
+          anchorLeft={replyAnchor.current.left}
+          shadowRoot={shadowRoot}
+          onSubmit={(msg) => continueAgent(replyAgentId, msg)}
+          onCancel={() => setReplyAgentId(null)}
+        />
+      )}
     </div>
   );
 }

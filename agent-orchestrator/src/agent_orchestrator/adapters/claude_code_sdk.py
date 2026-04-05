@@ -161,6 +161,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             agent_id=agent_id,
             client=client,
             options=options,
+            session_id=f"vex-{agent_id}",
             project_path=project_path,
             file_logger=file_logger,
         )
@@ -247,30 +248,132 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             for p in intended_plugins:
                 print(f"    {_CYAN}[PLUGIN]{_RESET} {p}")
 
-            await session.client.query(prompt)
+            await session.client.query(prompt, session_id=session.session_id)
 
-            result_text = ""
-            cost_usd = None
-            duration_ms = None
-            session.steps.clear()
+            await self._stream_response(session, task_id)
 
-            # Notify subscribers that agent is now running
-            await nats_service.publish(
-                f"vex.agent.{agent_id}.status",
-                {
-                    "agent_id": agent_id,
-                    "status": "running",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
+        finally:
+            session.current_task_id = None
+
+    async def resume(
+        self,
+        agent_id: str,
+        project_id: str,
+        project_path: str,
+        message: str,
+        session_id: str,
+    ) -> None:
+        """Resume a conversation with a finished agent using SDK session persistence."""
+        profile = get_agent_profile(self._profile_name)
+
+        plugin_refs = profile.get("plugins", [])
+        plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
+
+        options = ClaudeAgentOptions(
+            model=profile.get("model", "claude-sonnet-4-6"),
+            system_prompt={
+                "type": "preset",
+                "preset": "claude_code",
+                "append": profile.get("system_prompt", ""),
+            },
+            cwd=project_path,
+            setting_sources=["project"],
+            max_turns=profile.get("max_turns"),
+            allowed_tools=profile.get("allowed_tools", []),
+            disallowed_tools=profile.get("disallowed_tools", []),
+            mcp_servers=profile.get("mcp_servers", {}),
+            plugins=plugins,
+            hooks=self._make_hooks(agent_id),
+        )
+
+        client = ClaudeSDKClient(options=options)
+
+        log_dir_raw = profile.get("log_dir")
+        log_dir = Path(log_dir_raw).expanduser() if log_dir_raw else None
+        log_formats = profile.get("log_formats", [])
+        file_logger = None
+        if log_formats:
+            file_logger = AgentFileLogger(
+                agent_id=agent_id,
+                log_dir=log_dir,
+                formats=log_formats,
             )
 
-            step_index = 0
+        session = SDKAgentSession(
+            agent_id=agent_id,
+            client=client,
+            options=options,
+            session_id=session_id,
+            project_path=project_path,
+            file_logger=file_logger,
+        )
+        self._sessions[agent_id] = session
 
+        task_id = uuid.uuid4().hex
+        session.current_task_id = task_id
+        session.status = "running"
+
+        if session.file_logger:
+            session.file_logger.start(
+                profile_name=self._profile_name,
+                model=profile.get("model", "?"),
+                prompt=message,
+            )
+
+        try:
+            await session.client.__aenter__()
+            await session.client.query(message, session_id=session_id)
+            await self._stream_response(session, task_id, prompt=message)
+        finally:
+            session.current_task_id = None
+
+    async def _stream_response(
+        self, session: SDKAgentSession, task_id: str, prompt: str | None = None,
+    ) -> None:
+        """Stream SDK response messages, publish steps to NATS, handle completion."""
+        agent_id = session.agent_id
+        result_text = ""
+        cost_usd = None
+        duration_ms = None
+        session.steps.clear()
+
+        await nats_service.publish(
+            f"vex.agent.{agent_id}.status",
+            {
+                "agent_id": agent_id,
+                "status": "running",
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+        )
+
+        step_index = 0
+
+        # Publish the user prompt as the first step so the UI can display it
+        if prompt:
+            prompt_step = {
+                "type": "user_message",
+                "content": prompt,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "status": "done",
+            }
+            session.steps.append(prompt_step)
+            await nats_service.publish(
+                f"vex.agent.{agent_id}.step",
+                {"agent_id": agent_id, "task_id": task_id, "index": step_index, **prompt_step},
+            )
+            step_index += 1
+
+        try:
             async for message in session.client.receive_response():
                 if isinstance(message, SystemMessage):
                     subtype = getattr(message, "subtype", "")
                     data = getattr(message, "data", {})
                     if subtype == "init":
+                        profile = get_agent_profile(self._profile_name)
+                        intended_plugins = [
+                            p.get("path", "")
+                            for p in (session.options.plugins if session.options else [])
+                        ]
                         await self._log_agent_init(
                             agent_id,
                             data,
@@ -342,7 +445,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             )
                             step_index += 1
                         elif isinstance(block, ToolUseBlock):
-                            # Track tool_use_id → name for correlating results
                             if hasattr(block, "id") and block.id:
                                 session.tool_use_names[block.id] = block.name
                             log_line = f"[tool] {block.name}"
@@ -393,7 +495,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 },
                             )
                             step_index += 1
-                            # Emit bash_command step for Bash tool calls
                             if block.name == "Bash" and block.input:
                                 bash_step = self._emit_bash_step(
                                     session, block.input, now_ts
@@ -404,7 +505,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                         {"index": step_index, **bash_step},
                                     )
                                     step_index += 1
-                            # Emit write_file step for Write tool calls
                             if block.name == "Write" and block.input:
                                 write_step = self._emit_write_step(
                                     session, block.input, now_ts
@@ -415,7 +515,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                         {"index": step_index, **write_step},
                                     )
                                     step_index += 1
-                            # Emit diff step for Edit tool calls
                             if block.name == "Edit" and block.input:
                                 diff_step = self._emit_diff_step(
                                     session, block.input, now_ts
@@ -437,7 +536,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                     if isinstance(item, dict)
                                 )
                             is_error = getattr(block, "is_error", False) or False
-                            # Resolve tool name from the preceding ToolUseBlock
                             result_tool_name = None
                             tool_use_id = getattr(block, "tool_use_id", None)
                             if tool_use_id:
@@ -489,7 +587,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             step_index += 1
 
                 elif isinstance(message, UserMessage):
-                    # UserMessage carries tool results (ToolResultBlock in content)
                     now_ts = datetime.now(UTC).isoformat()
                     blocks = message.content if isinstance(message.content, list) else []
                     for block in blocks:
@@ -725,9 +822,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 )
                 logger.exception("Task %s failed for agent %s", task_id, agent_id)
 
-        finally:
-            session.current_task_id = None
-
     @staticmethod
     async def _log_agent_init(
         agent_id: str,
@@ -851,7 +945,6 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             if step["status"] == "current":
                 step["status"] = "past"
 
-    @staticmethod
     @staticmethod
     def _emit_bash_step(
         session: SDKAgentSession, tool_input: dict, timestamp: str

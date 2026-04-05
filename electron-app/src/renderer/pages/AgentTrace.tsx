@@ -10,10 +10,6 @@ import {
   XCircle,
   Loader2,
   Bot,
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
-  X,
   Square,
   Ban,
   Wrench,
@@ -21,6 +17,8 @@ import {
   Sparkles,
   GitFork,
   AlertTriangle,
+  Send,
+  MessageCircle,
 } from "lucide-react";
 import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
@@ -45,6 +43,78 @@ interface TraceData {
   steps: AgentStep[];
   created_at: string;
   completed_at: string | null;
+}
+
+interface MultiTraceResponse {
+  agent_id: string;
+  traces: TraceData[];
+}
+
+/** Merge multiple traces into a single TraceData with turn separator steps injected. */
+function mergeTraces(traces: TraceData[]): TraceData {
+  if (traces.length === 0) throw new Error("No traces to merge");
+  if (traces.length === 1) {
+    const t = traces[0];
+    if (t.prompt) {
+      const promptStep: AgentStep = {
+        id: "turn-prompt-0",
+        sequence_index: 0,
+        type: "user_message" as AgentStep["type"],
+        content: t.prompt,
+        metadata: null,
+        duration_ms: null,
+        token_count: null,
+        created_at: t.created_at,
+      };
+      return { ...t, steps: [promptStep, ...t.steps.map((s, i) => ({ ...s, sequence_index: i + 1 }))] };
+    }
+    return t;
+  }
+
+  const allSteps: AgentStep[] = [];
+  let totalDuration = 0;
+  let totalCost = 0;
+  let totalTokensAcc = 0;
+  let inputTokensAcc = 0;
+  let outputTokensAcc = 0;
+
+  for (let i = 0; i < traces.length; i++) {
+    const t = traces[i];
+    if (t.prompt) {
+      // Insert prompt as a user_message step before each turn's steps
+      allSteps.push({
+        id: `turn-prompt-${i}`,
+        sequence_index: allSteps.length,
+        type: "user_message" as AgentStep["type"],
+        content: t.prompt,
+        metadata: null,
+        duration_ms: null,
+        token_count: null,
+        created_at: t.created_at,
+      });
+    }
+    for (const step of t.steps) {
+      allSteps.push({ ...step, sequence_index: allSteps.length });
+    }
+    if (t.total_duration_ms) totalDuration += t.total_duration_ms;
+    if (t.total_cost_usd) totalCost += t.total_cost_usd;
+    if (t.total_tokens) totalTokensAcc += t.total_tokens;
+    if (t.input_tokens) inputTokensAcc += t.input_tokens;
+    if (t.output_tokens) outputTokensAcc += t.output_tokens;
+  }
+
+  const last = traces[traces.length - 1];
+  return {
+    ...last,
+    id: traces[0].id,
+    steps: allSteps,
+    total_duration_ms: totalDuration || null,
+    total_cost_usd: totalCost || null,
+    total_tokens: totalTokensAcc || null,
+    input_tokens: inputTokensAcc || null,
+    output_tokens: outputTokensAcc || null,
+    created_at: traces[0].created_at,
+  };
 }
 
 /* ─── Helpers ────────────────────────────────────── */
@@ -172,8 +242,10 @@ export function AgentTrace() {
   const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | "error" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [promptExpanded, setPromptExpanded] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const [followUpMessage, setFollowUpMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Fetch the final persisted trace (for completed/failed agents or by traceId)
   const fetchPersistedTrace = useCallback(async () => {
@@ -185,6 +257,14 @@ export function AgentTrace() {
         data = await window.electronAPI.getAgentTraceByAgent(agentId);
       }
       if (!data || data.detail) return null;
+
+      // Handle multi-trace response from updated API
+      if (data.traces && Array.isArray(data.traces)) {
+        const resp = data as MultiTraceResponse;
+        if (resp.traces.length === 0) return null;
+        return mergeTraces(resp.traces);
+      }
+
       return data as TraceData;
     } catch {
       return null;
@@ -267,7 +347,9 @@ export function AgentTrace() {
 
   // When status changes to completed/failed, fetch the full persisted trace
   useEffect(() => {
-    if (!agentStatus || agentStatus === "running" || trace) return;
+    if (!agentStatus || agentStatus === "running") return;
+    // Skip only if trace exists AND no live steps (no continuation happened)
+    if (trace && liveSteps.length === 0) return;
     let cancelled = false;
 
     // Small delay to let the backend persist the trace
@@ -276,16 +358,18 @@ export function AgentTrace() {
       if (cancelled) return;
       if (persisted) {
         setTrace(persisted);
+        setLiveSteps([]);
       }
     }, 1500);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [agentStatus, trace, fetchPersistedTrace]);
+  }, [agentStatus, trace, liveSteps.length, fetchPersistedTrace]);
 
   // Main mount effect
   useEffect(() => {
     if (!traceId && !agentId) return;
     let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
     async function init() {
       // Try fetching persisted trace first
@@ -295,6 +379,24 @@ export function AgentTrace() {
       if (persisted) {
         setTrace(persisted);
         setLoading(false);
+
+        // Poll for status changes — detect when agent resumes via continuation
+        if (agentId) {
+          pollTimer = setInterval(async () => {
+            if (cancelled) return;
+            try {
+              const stepsData = await window.electronAPI.getAgentSteps(agentId);
+              if (cancelled) return;
+              if (stepsData?.status === "running") {
+                // Agent resumed — stop polling, keep trace, subscribe to live steps
+                if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+                setAgentStatus("running");
+                setLiveSteps([]);
+                await subscribeToAgent(agentId);
+              }
+            } catch { /* agent endpoint not available */ }
+          }, 3000);
+        }
         return;
       }
 
@@ -311,6 +413,7 @@ export function AgentTrace() {
 
     return () => {
       cancelled = true;
+      if (pollTimer) clearInterval(pollTimer);
       if (cleanupRef.current) {
         cleanupRef.current();
         cleanupRef.current = null;
@@ -319,8 +422,12 @@ export function AgentTrace() {
   }, [traceId, agentId, fetchPersistedTrace, subscribeToAgent]);
 
   // Determine what to display (must be before early returns to keep hook order stable)
-  const displayStatus = trace?.status ?? agentStatus ?? "running";
-  const displaySteps = trace?.steps ?? liveSteps;
+  // agentStatus "running" overrides trace status (agent resumed via continuation)
+  const displayStatus = (agentStatus === "running" ? "running" : null) ?? trace?.status ?? agentStatus ?? "running";
+  // When continuing, append live steps after existing trace steps
+  const displaySteps = trace?.steps && liveSteps.length > 0
+    ? [...trace.steps, ...liveSteps]
+    : trace?.steps ?? liveSteps;
   const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId}` : "Agent");
   const agentModel = trace?.agent_model ?? "claude-sonnet-4-5";
 
@@ -490,6 +597,79 @@ export function AgentTrace() {
     }
   }
 
+  async function handleContinue() {
+    if (!agentId || !followUpMessage.trim() || isSending) return;
+    const msg = followUpMessage.trim();
+    setIsSending(true);
+    setSendError(null);
+    try {
+      await window.electronAPI.continueAgent(agentId, msg);
+      setFollowUpMessage("");
+
+      // Build a user_message step from the follow-up text
+      const promptStep: AgentStep = {
+        id: `user-msg-${Date.now()}`,
+        sequence_index: displaySteps.length,
+        type: "user_message" as AgentStep["type"],
+        content: msg,
+        metadata: null,
+        duration_ms: null,
+        token_count: null,
+        created_at: new Date().toISOString(),
+      };
+
+      // Preserve current steps (from trace or live), append the prompt
+      const currentSteps = [...displaySteps, promptStep];
+      setTrace(null);
+      setLiveSteps(currentSteps);
+      setAgentStatus("running");
+
+      // Re-subscribe to NATS — new steps will append after the prompt
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+
+      // Subscribe, but don't clear steps on reconnect
+      await window.electronAPI.subscribeAgentSteps(agentId);
+
+      const removeStepListener = window.electronAPI.onAgentStep((data) => {
+        if (data.agentId !== agentId) return;
+        const idx = typeof data.index === "number" ? data.index : -1;
+        const step = liveStepToAgentStep(data, idx >= 0 ? idx : Date.now());
+        setLiveSteps((prev) => [...prev, step]);
+      });
+
+      const removeStatusListener = window.electronAPI.onAgentStatus((data) => {
+        if (data.agentId !== agentId) return;
+        const status = data.status as "completed" | "failed" | "stopped" | "cancelled";
+        if (["completed", "failed", "stopped", "cancelled"].includes(status)) {
+          setAgentStatus(status);
+        }
+      });
+
+      const removeHookListener = window.electronAPI.onAgentHook((data) => {
+        if (data.agentId !== agentId) return;
+        const hookStep = hookEventToStep(data);
+        if (hookStep) setLiveSteps((prev) => [...prev, hookStep]);
+      });
+
+      cleanupRef.current = () => {
+        removeStepListener();
+        removeStatusListener();
+        removeHookListener();
+        window.electronAPI.unsubscribeAgentSteps(agentId);
+      };
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to continue agent");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  const isTerminal = ["completed", "failed", "stopped"].includes(displayStatus);
+  const showFollowUpBar = isTerminal && !!agentId;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* ─── Header ──────────────────────────────── */}
@@ -657,59 +837,111 @@ export function AgentTrace() {
         </div>
       </header>
 
-      {/* ─── Prompt (collapsible) ────────────────── */}
-      {trace?.prompt && (
-        <div
-          style={{
-            flexShrink: 0,
-            borderBottom: "1px solid var(--border)",
-            background: "color-mix(in srgb, var(--primary) 4%, var(--background))",
-          }}
-        >
-          <button
-            onClick={() => setPromptExpanded((v) => !v)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              width: "100%",
-              padding: "10px 20px",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "var(--foreground-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-            }}
-          >
-            <MessageSquare size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />
-            <span>Prompt</span>
-            {promptExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </button>
-          {promptExpanded && (
-            <div
-              style={{
-                padding: "0 20px 14px 41px",
-                fontSize: "13px",
-                lineHeight: "1.5",
-                color: "var(--foreground-muted)",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              <PromptContent text={trace.prompt} />
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ─── Body ────────────────────────────────── */}
       {isRunning && displaySteps.length === 0 ? (
         <AgentWorkingAnimation />
       ) : (
         <AgentStepList steps={displaySteps} status={displayStatus} />
+      )}
+
+      {/* ─── Follow-up input bar ─────────────── */}
+      {showFollowUpBar && (
+        <div
+          style={{
+            flexShrink: 0,
+            borderTop: "1px solid var(--border)",
+            background: "var(--surface)",
+            padding: "12px 20px",
+          }}
+        >
+          {sendError && (
+            <div
+              style={{
+                marginBottom: "8px",
+                padding: "6px 12px",
+                borderRadius: "var(--radius)",
+                background: "color-mix(in srgb, var(--status-error) 10%, transparent)",
+                color: "var(--status-error)",
+                fontSize: "12px",
+              }}
+            >
+              {sendError}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+            <div style={{ flex: 1, position: "relative" }}>
+              <textarea
+                value={followUpMessage}
+                onChange={(e) => setFollowUpMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleContinue();
+                  }
+                }}
+                placeholder="Send a follow-up message..."
+                disabled={isSending}
+                rows={1}
+                style={{
+                  width: "100%",
+                  resize: "none",
+                  padding: "10px 12px",
+                  borderRadius: "var(--radius)",
+                  border: "1px solid var(--border)",
+                  background: "var(--background)",
+                  color: "var(--foreground)",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                  outline: "none",
+                  opacity: isSending ? 0.5 : 1,
+                }}
+              />
+            </div>
+            <button
+              onClick={handleContinue}
+              disabled={isSending || !followUpMessage.trim()}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "10px 16px",
+                borderRadius: "var(--radius)",
+                background: isSending || !followUpMessage.trim()
+                  ? "var(--surface-elevated)"
+                  : "var(--primary)",
+                color: isSending || !followUpMessage.trim()
+                  ? "var(--foreground-dim)"
+                  : "var(--primary-foreground)",
+                border: "none",
+                cursor: isSending || !followUpMessage.trim() ? "not-allowed" : "pointer",
+                fontSize: "13px",
+                fontWeight: 500,
+                transition: "background 0.15s",
+              }}
+            >
+              {isSending ? (
+                <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+              ) : (
+                <Send size={14} />
+              )}
+              {isSending ? "Sending..." : "Send"}
+            </button>
+          </div>
+          <div
+            style={{
+              marginTop: "4px",
+              fontSize: "11px",
+              color: "var(--foreground-dim)",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <MessageCircle size={10} />
+            Continue this conversation — the agent will have full context of its prior work
+          </div>
+        </div>
       )}
 
       {/* Spin keyframes (shared) */}
@@ -747,97 +979,3 @@ function Separator() {
   );
 }
 
-/* ─── Screenshot path detection & inline preview ── */
-
-const SCREENSHOT_BASE = "http://localhost:8420/api/storage/screenshot?path=";
-const SCREENSHOT_PATH_RE = /`([^`]+\.(?:png|jpg|jpeg))`/i;
-
-function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "rgba(0,0,0,0.85)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "zoom-out",
-      }}
-    >
-      <button
-        onClick={onClose}
-        style={{
-          position: "absolute",
-          top: "16px",
-          right: "16px",
-          background: "rgba(255,255,255,0.1)",
-          border: "none",
-          borderRadius: "50%",
-          width: "36px",
-          height: "36px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          color: "#fff",
-        }}
-      >
-        <X size={18} />
-      </button>
-      <img
-        src={src}
-        alt="Screenshot full size"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: "90vw",
-          maxHeight: "90vh",
-          borderRadius: "8px",
-          cursor: "default",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-        }}
-      />
-    </div>
-  );
-}
-
-function PromptContent({ text }: { text: string }) {
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const lines = text.split("\n");
-
-  return (
-    <>
-      {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
-      {lines.map((line, i) => {
-        const match = SCREENSHOT_PATH_RE.exec(line);
-        if (!match) return <div key={i}>{line || "\u00A0"}</div>;
-
-        const filePath = match[1];
-        const imgUrl = `${SCREENSHOT_BASE}${encodeURIComponent(filePath)}`;
-
-        return (
-          <div key={i}>
-            <div>{line}</div>
-            <img
-              src={imgUrl}
-              alt={filePath}
-              onClick={() => setLightboxSrc(imgUrl)}
-              style={{
-                maxWidth: "400px",
-                maxHeight: "300px",
-                marginTop: "6px",
-                marginBottom: "8px",
-                borderRadius: "6px",
-                border: "1px solid var(--border)",
-                cursor: "zoom-in",
-                display: "block",
-              }}
-            />
-          </div>
-        );
-      })}
-    </>
-  );
-}

@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("stop-batch", projectId, batchId),
   stopAgent: (agentId: string) =>
     ipcRenderer.invoke("stop-agent", agentId),
+  continueAgent: (agentId: string, message: string) =>
+    ipcRenderer.invoke("continue-agent", agentId, message),
   getAgentTrace: (batchId: string) =>
     ipcRenderer.invoke("get-agent-trace", batchId),
   getActivity: (filters?: { projectId?: string; type?: string; since?: string }) =>

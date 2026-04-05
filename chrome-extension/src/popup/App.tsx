@@ -4,6 +4,7 @@ import type { GetStateResponse } from "../shared/messages";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { type Project } from "./components/ProjectSelector";
 import { Controls } from "./components/Controls";
+import { BatchSelector } from "./components/BatchSelector";
 import "./styles/popup.css";
 
 function sendToContent(
@@ -184,6 +185,8 @@ export function App() {
         onClear={handleClear}
         onRefreshState={refreshState}
       />
+
+      <BatchSelector tabUrl={tabUrl} activeTabId={activeTabId} />
 
       <PopupActionList
         actions={actions}

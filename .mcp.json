@@ -1,12 +1,19 @@
 {
   "mcpServers": {
-    "vex-chrome": {
+    "electron-chrome": {
       "command": "npx",
       "args": [
         "-y",
         "chrome-devtools-mcp@latest",
-        "--browserUrl=http://localhost:9222",
-        "--experimental-screencast"
+        "--browserUrl=http://localhost:9222"
+      ]
+    },
+    "extension-chrome": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browserUrl=http://localhost:9333"
       ]
     }
   }

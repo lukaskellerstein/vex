@@ -40,6 +40,17 @@ class AgentAdapter(ABC):
         await self.stop(agent_id)
 
     @abstractmethod
+    async def resume(
+        self,
+        agent_id: str,
+        project_id: str,
+        project_path: str,
+        message: str,
+        session_id: str,
+    ) -> None:
+        """Resume a conversation with a finished agent."""
+
+    @abstractmethod
     async def get_status(self, agent_id: str) -> str:
         """Get the current status of the agent."""
 
