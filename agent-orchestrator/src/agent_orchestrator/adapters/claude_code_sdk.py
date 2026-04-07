@@ -35,6 +35,10 @@ from agent_orchestrator.services.agent_logger import AgentFileLogger
 
 logger = logging.getLogger(__name__)
 
+# Fixed namespace for deterministic UUID generation from agent IDs.
+# uuid5(namespace, agent_id) produces a stable UUID usable as --session-id.
+_VEX_SESSION_NS = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+
 # ── ANSI colors for terminal output ─────────────────────────────
 _CYAN = "\033[96m"
 _YELLOW = "\033[93m"
@@ -126,6 +130,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         plugin_refs = profile.get("plugins", [])
         plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
 
+        session_id = str(uuid.uuid5(_VEX_SESSION_NS, agent_id))
         options = ClaudeAgentOptions(
             model=profile.get("model", "claude-sonnet-4-6"),
             system_prompt={
@@ -141,6 +146,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             mcp_servers=profile.get("mcp_servers", {}),
             plugins=plugins,
             hooks=self._make_hooks(agent_id),
+            session_id=session_id,
         )
 
         client = ClaudeSDKClient(options=options)
@@ -161,7 +167,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             agent_id=agent_id,
             client=client,
             options=options,
-            session_id=f"vex-{agent_id}",
+            session_id=session_id,
             project_path=project_path,
             file_logger=file_logger,
         )
@@ -201,7 +207,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             return
         session.cancelled = True
         try:
-            session.client.interrupt()
+            await session.client.interrupt()
             logger.info("Sent interrupt to agent %s", agent_id)
         except Exception:
             logger.exception("Error interrupting agent %s", agent_id)
@@ -269,6 +275,20 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         plugin_refs = profile.get("plugins", [])
         plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
 
+        # Check if a session file exists for this agent so we can resume it.
+        # Agents created before the session_id fix won't have one.
+        session_file = self._find_session_file(project_path, session_id)
+        resume_opts: dict[str, str] = {}
+        if session_file:
+            resume_opts["resume"] = session_id
+            logger.info("Resuming session %s for agent %s", session_id, agent_id)
+        else:
+            resume_opts["session_id"] = session_id
+            logger.warning(
+                "No session file found for %s — starting fresh session for agent %s",
+                session_id, agent_id,
+            )
+
         options = ClaudeAgentOptions(
             model=profile.get("model", "claude-sonnet-4-6"),
             system_prompt={
@@ -284,6 +304,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             mcp_servers=profile.get("mcp_servers", {}),
             plugins=plugins,
             hooks=self._make_hooks(agent_id),
+            **resume_opts,
         )
 
         client = ClaudeSDKClient(options=options)
@@ -1027,7 +1048,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         # Stream new logs while task is running
         last_idx = len(session.log_buffer)
         while session.status == "running":
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.5)
             new_logs = session.log_buffer[last_idx:]
             for line in new_logs:
                 yield line
@@ -1039,6 +1060,15 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             yield line
 
     # ── Hook helpers ────────────────────────────────────────────────
+
+    @staticmethod
+    def _find_session_file(project_path: str, session_id: str) -> Path | None:
+        """Return the session JSONL path if it exists, else None."""
+        from claude_agent_sdk._internal.sessions import _sanitize_path, _get_projects_dir
+        projects_dir = Path(_get_projects_dir())
+        sanitized = _sanitize_path(project_path)
+        session_file = projects_dir / sanitized / f"{session_id}.jsonl"
+        return session_file if session_file.exists() else None
 
     @staticmethod
     def _make_hooks(agent_id: str) -> dict:

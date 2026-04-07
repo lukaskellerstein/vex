@@ -204,8 +204,18 @@ export function Projects() {
 
   useEffect(() => {
     fetchProjects();
-    const interval = setInterval(fetchProjects, 5000);
-    return () => clearInterval(interval);
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const debouncedFetch = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchProjects, 300);
+    };
+    const cleanupProject = window.electronAPI.onProjectEvent(debouncedFetch);
+    const cleanupBatch = window.electronAPI.onBatchEvent(debouncedFetch);
+    return () => {
+      clearTimeout(debounceTimer);
+      cleanupProject();
+      cleanupBatch();
+    };
   }, []);
 
   const filtered = useMemo(() => {

@@ -84,6 +84,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("agent-hook", handler);
     return () => ipcRenderer.removeListener("agent-hook", handler);
   },
+  // Broadcast event subscriptions
+  subscribeProjectEvents: () => ipcRenderer.invoke("subscribe-project-events"),
+  unsubscribeProjectEvents: () => ipcRenderer.invoke("unsubscribe-project-events"),
+  onProjectEvent: (callback: (data: Record<string, unknown>) => void) => {
+    const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
+    ipcRenderer.on("project-event", handler);
+    return () => ipcRenderer.removeListener("project-event", handler);
+  },
+  subscribeBatchEvents: () => ipcRenderer.invoke("subscribe-batch-events"),
+  unsubscribeBatchEvents: () => ipcRenderer.invoke("unsubscribe-batch-events"),
+  onBatchEvent: (callback: (data: Record<string, unknown>) => void) => {
+    const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
+    ipcRenderer.on("batch-event", handler);
+    return () => ipcRenderer.removeListener("batch-event", handler);
+  },
+  subscribeActivityEvents: () => ipcRenderer.invoke("subscribe-activity-events"),
+  unsubscribeActivityEvents: () => ipcRenderer.invoke("unsubscribe-activity-events"),
+  onActivityEvent: (callback: (data: Record<string, unknown>) => void) => {
+    const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
+    ipcRenderer.on("activity-event", handler);
+    return () => ipcRenderer.removeListener("activity-event", handler);
+  },
   // Window controls
   windowMinimize: () => ipcRenderer.invoke("window-minimize"),
   windowMaximize: () => ipcRenderer.invoke("window-maximize"),

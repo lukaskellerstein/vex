@@ -439,8 +439,22 @@ async function ensureNatsConnection(): Promise<any> {
     natsConnection = await natsWs.connect({
       servers: `ws://localhost:${NATS_WS_PORT}`,
       name: "vex-electron-main",
+      reconnect: true,
+      maxReconnectAttempts: -1,
+      reconnectTimeWait: 2000,
     });
     console.log("[nats-bridge] Connected to NATS WS");
+
+    // Monitor connection status for reconnection events
+    (async () => {
+      for await (const s of natsConnection.status()) {
+        if (s.type === "reconnect") {
+          console.log("[nats-bridge] NATS reconnected — notifying renderer");
+          mainWindow?.webContents.send("nats-reconnected", {});
+        }
+      }
+    })();
+
     natsConnection.closed().then((err: Error | undefined) => {
       if (err) console.warn("[nats-bridge] NATS closed with error:", err.message);
       else console.log("[nats-bridge] NATS connection closed");
@@ -527,6 +541,51 @@ ipcMain.handle("unsubscribe-agent-steps", async (_event, agentId: string) => {
   console.log(`[nats-bridge] Unsubscribed from agent ${agentId}`);
   return { ok: true };
 });
+
+// --- Broadcast event subscriptions (project/batch/activity) ---
+
+const broadcastSubjects: Record<string, { nats: string; ipc: string }> = {
+  "project-events": { nats: "vex.project.events", ipc: "project-event" },
+  "batch-events": { nats: "vex.batch.events", ipc: "batch-event" },
+  "activity-events": { nats: "vex.activity.events", ipc: "activity-event" },
+};
+
+for (const [key, { nats: natsSubject, ipc: ipcChannel }] of Object.entries(broadcastSubjects)) {
+  ipcMain.handle(`subscribe-${key}`, async () => {
+    const nc = await ensureNatsConnection();
+    if (!nc) return { ok: false, error: "NATS not connected" };
+
+    const existing = natsSubscriptions.get(natsSubject);
+    if (existing) {
+      existing.unsubscribe();
+      natsSubscriptions.delete(natsSubject);
+    }
+
+    const sub = nc.subscribe(natsSubject);
+    natsSubscriptions.set(natsSubject, sub);
+    (async () => {
+      for await (const msg of sub) {
+        try {
+          const data = natsJsonDecode(msg.data);
+          mainWindow?.webContents.send(ipcChannel, data);
+        } catch { /* decode error */ }
+      }
+    })();
+
+    console.log(`[nats-bridge] Subscribed to ${natsSubject}`);
+    return { ok: true };
+  });
+
+  ipcMain.handle(`unsubscribe-${key}`, async () => {
+    const sub = natsSubscriptions.get(natsSubject);
+    if (sub) {
+      sub.unsubscribe();
+      natsSubscriptions.delete(natsSubject);
+    }
+    console.log(`[nats-bridge] Unsubscribed from ${natsSubject}`);
+    return { ok: true };
+  });
+}
 
 // --- Standalone health-check helpers ---
 

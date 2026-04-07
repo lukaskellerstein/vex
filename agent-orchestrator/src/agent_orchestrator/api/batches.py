@@ -12,7 +12,7 @@ from agent_orchestrator.models.batch import (
     BatchSubmission,
     BatchSummary,
 )
-from agent_orchestrator.services import batch_processor
+from agent_orchestrator.services import batch_processor, nats_service
 from agent_orchestrator.services.screenshot_store import delete_screenshot, save_screenshot
 
 router = APIRouter(tags=["batches"])
@@ -93,6 +93,13 @@ async def submit_batch(project_id: str, body: BatchSubmission):
     # Fire-and-forget: trigger batch processing (store ref for cancellation)
     task = asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
     batch_processor.register_batch_task(batch_id, task)
+
+    await nats_service.publish("vex.batch.events", {
+        "event": "submitted",
+        "project_id": project_id,
+        "batch_id": batch_id,
+        "timestamp": now,
+    })
 
     cursor = await db.execute("SELECT * FROM batches WHERE id = ?", (batch_id,))
     row = await cursor.fetchone()
@@ -303,6 +310,7 @@ async def get_active_cursors(page_url: str):
                 "selector": action["selector"],
                 "colorIndex": idx,
                 "batchId": batch_id,
+                "status": agent_status if agent_status else "running",
             })
 
     return {"agents": all_agents}

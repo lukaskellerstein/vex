@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
 import { Projects } from "./pages/Projects";
@@ -9,6 +9,17 @@ import { Settings } from "./pages/Settings";
 import { AgentTraceDemo } from "./pages/AgentTraceDemo";
 
 export function App() {
+  useEffect(() => {
+    window.electronAPI.subscribeProjectEvents();
+    window.electronAPI.subscribeBatchEvents();
+    window.electronAPI.subscribeActivityEvents();
+    return () => {
+      window.electronAPI.unsubscribeProjectEvents();
+      window.electronAPI.unsubscribeBatchEvents();
+      window.electronAPI.unsubscribeActivityEvents();
+    };
+  }, []);
+
   return (
     <MemoryRouter>
       <Routes>

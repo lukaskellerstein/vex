@@ -43,6 +43,16 @@ declare global {
       onAgentStep: (callback: (data: Record<string, unknown>) => void) => () => void;
       onAgentStatus: (callback: (data: Record<string, unknown>) => void) => () => void;
       onAgentHook: (callback: (data: Record<string, unknown>) => void) => () => void;
+      // Broadcast event subscriptions
+      subscribeProjectEvents: () => Promise<{ ok: boolean; error?: string }>;
+      unsubscribeProjectEvents: () => Promise<{ ok: boolean }>;
+      onProjectEvent: (callback: (data: Record<string, unknown>) => void) => () => void;
+      subscribeBatchEvents: () => Promise<{ ok: boolean; error?: string }>;
+      unsubscribeBatchEvents: () => Promise<{ ok: boolean }>;
+      onBatchEvent: (callback: (data: Record<string, unknown>) => void) => () => void;
+      subscribeActivityEvents: () => Promise<{ ok: boolean; error?: string }>;
+      unsubscribeActivityEvents: () => Promise<{ ok: boolean }>;
+      onActivityEvent: (callback: (data: Record<string, unknown>) => void) => () => void;
       // Window controls
       windowMinimize: () => Promise<void>;
       windowMaximize: () => Promise<void>;

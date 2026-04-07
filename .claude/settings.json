@@ -241,7 +241,7 @@
   },
   "enabledPlugins": {
     "dev-tools-plugin@claude-my-marketplace": true,
-    "documentation-plugin@claude-my-marketplace": true,
+    "office-plugin@claude-my-marketplace": true,
     "plugin-dev@claude-plugins-official": true
   }
 }

@@ -114,24 +114,26 @@ export function ProjectDetail() {
     fetchAgents();
   }, [projectId]);
 
-  // Poll project status while starting/running
+  // Listen for project/agent events via NATS (replaces polling)
   useEffect(() => {
-    const status = project?.status;
-    if (status !== "starting" && status !== "running" && status !== "stopping") return;
-
-    const interval = setInterval(() => {
-      fetchProject();
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [project?.status, projectId]);
-
-  // Poll agents every 3s when on agents tab
-  useEffect(() => {
-    if (activeTab !== "agents") return;
-    const interval = setInterval(fetchAgents, 3000);
-    return () => clearInterval(interval);
-  }, [activeTab, projectId]);
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const debouncedFetchProject = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchProject, 300);
+    };
+    const cleanupProject = window.electronAPI.onProjectEvent((data) => {
+      debouncedFetchProject();
+      if (data.event === "agent_registered" || data.event === "agent_deregistered") {
+        fetchAgents();
+      }
+    });
+    const cleanupBatch = window.electronAPI.onBatchEvent(debouncedFetchProject);
+    return () => {
+      clearTimeout(debounceTimer);
+      cleanupProject();
+      cleanupBatch();
+    };
+  }, [projectId]);
 
 
   async function handleServerToggle() {

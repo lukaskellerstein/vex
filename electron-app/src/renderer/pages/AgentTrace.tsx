@@ -55,7 +55,9 @@ function mergeTraces(traces: TraceData[]): TraceData {
   if (traces.length === 0) throw new Error("No traces to merge");
   if (traces.length === 1) {
     const t = traces[0];
-    if (t.prompt) {
+    // Only add a synthetic prompt step if the prompt isn't already in the steps
+    const stepsAlreadyHavePrompt = t.steps[0]?.type === "user_message";
+    if (t.prompt && !stepsAlreadyHavePrompt) {
       const promptStep: AgentStep = {
         id: "turn-prompt-0",
         sequence_index: 0,
@@ -80,8 +82,9 @@ function mergeTraces(traces: TraceData[]): TraceData {
 
   for (let i = 0; i < traces.length; i++) {
     const t = traces[i];
-    if (t.prompt) {
-      // Insert prompt as a user_message step before each turn's steps
+    // Only add a synthetic prompt step if the steps don't already contain it
+    const stepsAlreadyHavePrompt = t.steps[0]?.type === "user_message";
+    if (t.prompt && !stepsAlreadyHavePrompt) {
       allSteps.push({
         id: `turn-prompt-${i}`,
         sequence_index: allSteps.length,
@@ -239,13 +242,16 @@ export function AgentTrace() {
   const navigate = useNavigate();
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
+  const [livePrompt, setLivePrompt] = useState<string | null>(null);
   const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | "error" | null>(null);
+  const [idCopied, setIdCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const continuingLocallyRef = useRef(false);
 
   // Fetch the final persisted trace (for completed/failed agents or by traceId)
   const fetchPersistedTrace = useCallback(async () => {
@@ -276,6 +282,9 @@ export function AgentTrace() {
     // First, try to load any steps already accumulated
     try {
       const stepsData = await window.electronAPI.getAgentSteps(aid);
+      if (stepsData?.prompt) {
+        setLivePrompt(stepsData.prompt);
+      }
       if (stepsData?.steps?.length > 0) {
         setLiveSteps(stepsData.steps.map((s: Record<string, unknown>, i: number) => liveStepToAgentStep(s, i)));
       }
@@ -360,6 +369,7 @@ export function AgentTrace() {
         setTrace(persisted);
         setLiveSteps([]);
       }
+      continuingLocallyRef.current = false;
     }, 1500);
 
     return () => { cancelled = true; clearTimeout(timer); };
@@ -388,8 +398,11 @@ export function AgentTrace() {
               const stepsData = await window.electronAPI.getAgentSteps(agentId);
               if (cancelled) return;
               if (stepsData?.status === "running") {
-                // Agent resumed — stop polling, keep trace, subscribe to live steps
+                // Agent resumed — stop polling and subscribe to live steps.
+                // If handleContinue already set up the subscription (local
+                // continuation), skip — it preserved the previous steps.
                 if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+                if (continuingLocallyRef.current) return;
                 setAgentStatus("running");
                 setLiveSteps([]);
                 await subscribeToAgent(agentId);
@@ -425,9 +438,28 @@ export function AgentTrace() {
   // agentStatus "running" overrides trace status (agent resumed via continuation)
   const displayStatus = (agentStatus === "running" ? "running" : null) ?? trace?.status ?? agentStatus ?? "running";
   // When continuing, append live steps after existing trace steps
-  const displaySteps = trace?.steps && liveSteps.length > 0
-    ? [...trace.steps, ...liveSteps]
-    : trace?.steps ?? liveSteps;
+  const displaySteps = useMemo(() => {
+    const baseSteps = trace?.steps && liveSteps.length > 0
+      ? [...trace.steps, ...liveSteps]
+      : trace?.steps ?? liveSteps;
+
+    // If no trace (running agent) and we have a live prompt, prepend it as a prompt step
+    if (!trace && livePrompt && baseSteps[0]?.type !== "user_message") {
+      const promptStep: AgentStep = {
+        id: "live-prompt-0",
+        sequence_index: 0,
+        type: "user_message" as AgentStep["type"],
+        content: livePrompt,
+        metadata: null,
+        duration_ms: null,
+        token_count: null,
+        created_at: baseSteps[0]?.created_at ?? new Date().toISOString(),
+      };
+      return [promptStep, ...baseSteps.map((s, i) => ({ ...s, sequence_index: i + 1 }))];
+    }
+
+    return baseSteps;
+  }, [trace, liveSteps, livePrompt]);
   const agentName = trace?.agent_name ?? (agentId ? `agent-${agentId}` : "Agent");
   const agentModel = trace?.agent_model ?? "claude-sonnet-4-5";
 
@@ -602,24 +634,14 @@ export function AgentTrace() {
     const msg = followUpMessage.trim();
     setIsSending(true);
     setSendError(null);
+    continuingLocallyRef.current = true;
     try {
       await window.electronAPI.continueAgent(agentId, msg);
       setFollowUpMessage("");
 
-      // Build a user_message step from the follow-up text
-      const promptStep: AgentStep = {
-        id: `user-msg-${Date.now()}`,
-        sequence_index: displaySteps.length,
-        type: "user_message" as AgentStep["type"],
-        content: msg,
-        metadata: null,
-        duration_ms: null,
-        token_count: null,
-        created_at: new Date().toISOString(),
-      };
-
-      // Preserve current steps (from trace or live), append the prompt
-      const currentSteps = [...displaySteps, promptStep];
+      // Preserve current steps; the backend publishes the user_message
+      // step via NATS, so the subscription will pick it up automatically.
+      const currentSteps = [...displaySteps];
       setTrace(null);
       setLiveSteps(currentSteps);
       setAgentStatus("running");
@@ -721,13 +743,21 @@ export function AgentTrace() {
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Bot size={16} style={{ color: "var(--primary)" }} />
               <span
+                onClick={() => {
+                  navigator.clipboard.writeText(agentName);
+                  setIdCopied(true);
+                  setTimeout(() => setIdCopied(false), 2000);
+                }}
+                title="Click to copy"
                 style={{
                   fontSize: "16px",
                   fontWeight: 600,
-                  color: "var(--foreground)",
+                  color: idCopied ? "var(--status-success)" : "var(--foreground)",
+                  cursor: "pointer",
+                  transition: "color 0.15s",
                 }}
               >
-                {agentName}
+                {idCopied ? "Copied!" : agentName}
               </span>
               <span
                 style={{
