@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vex",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Visually select elements on any webpage, annotate them with instructions, and send to a coding agent for automatic code changes.",
   "permissions": [
     "activeTab",
@@ -42,8 +42,13 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["screenshot-viewer.html", "screenshot-viewer.js"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "screenshot-viewer.html",
+        "screenshot-viewer.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

@@ -60,10 +60,16 @@ export function BatchList({ projectId, onViewTrace, onViewAgent, onDeleteBatch, 
     }
 
     fetchBatches();
-    const interval = setInterval(fetchBatches, 5000);
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const debouncedFetch = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchBatches, 300);
+    };
+    const cleanupBatch = window.electronAPI.onBatchEvent(debouncedFetch);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearTimeout(debounceTimer);
+      cleanupBatch();
     };
   }, [projectId]);
 

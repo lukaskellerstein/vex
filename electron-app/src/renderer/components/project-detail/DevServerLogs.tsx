@@ -102,7 +102,7 @@ export function DevServerLogs({ projectId, isRunning }: DevServerLogsProps) {
       } catch {
         // Backend not ready
       }
-    }, 1000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [projectId, isRunning]);

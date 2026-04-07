@@ -195,7 +195,7 @@ function CursorInner({
     };
 
     update();
-    const interval = setInterval(update, 200);
+    const interval = setInterval(update, 500);
     return () => clearInterval(interval);
   }, [parentRef]);
 
@@ -421,17 +421,15 @@ export function AgentCursors({ natsClient, onAgentsDetected, shadowRoot }: Agent
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, [handleLoadBatchCursors]);
 
-  // ── Poll AO API for active cursors on this page ──
+  // ── Initial fetch of active cursors on mount (no polling) ──
   useEffect(() => {
-    let active = true;
+    if (historicalModeRef.current) return;
 
-    async function poll() {
-      if (!active || historicalModeRef.current) return;
+    async function fetchInitialCursors() {
       try {
         const url = `${AGENT_MANAGER_URL}/api/cursors?page_url=${encodeURIComponent(location.href)}`;
         const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
         if (!res.ok) return;
-        // Re-check after async fetch — historical mode may have been activated while waiting
         if (historicalModeRef.current) return;
 
         const data = (await res.json()) as {
@@ -442,25 +440,23 @@ export function AgentCursors({ natsClient, onAgentsDetected, shadowRoot }: Agent
           activateAgents(data.agents);
           onAgentsDetected?.();
         }
-
-        const activeIds = new Set((data.agents || []).map((a) => a.agentId));
-        for (const knownId of knownAgentIdsRef.current) {
-          if (!activeIds.has(knownId)) {
-            completeAgent(knownId, "completed");
-          }
-        }
       } catch {
         // AO not reachable
       }
     }
 
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [activateAgents, completeAgent, onAgentsDetected]);
+    fetchInitialCursors();
+  }, [activateAgents, onAgentsDetected]);
+
+  // ── When NATS connects, subscribe to status for all known running agents ──
+  useEffect(() => {
+    if (!natsClient.connected) return;
+    for (const agentId of knownAgentIdsRef.current) {
+      if (!completedAgentIdsRef.current.has(agentId)) {
+        subscribeAgentStatus(agentId);
+      }
+    }
+  }, [natsClient.connected, subscribeAgentStatus]);
 
   // ── NATS subscription as backup ──
   useEffect(() => {

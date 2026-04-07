@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.models.agent import Agent, AgentCreate, ContinueRequest, HeartbeatRequest
-from agent_orchestrator.services import batch_processor
+from agent_orchestrator.services import batch_processor, nats_service
 
 import asyncio
 
@@ -94,7 +94,16 @@ async def register_agent(body: AgentCreate):
 
     cursor = await db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,))
     row = await cursor.fetchone()
-    return _row_to_agent(row)
+    agent_data = _row_to_agent(row)
+
+    await nats_service.publish("vex.project.events", {
+        "event": "agent_registered",
+        "project_id": agent_data.get("project_id"),
+        "agent": agent_data,
+        "timestamp": now,
+    })
+
+    return agent_data
 
 
 @router.get("/agents/{agent_id}")
@@ -200,6 +209,15 @@ async def get_agent_trace(agent_id: str):
 
 @router.get("/agents/{agent_id}/steps")
 async def get_agent_steps(agent_id: str):
+    # Fetch prompt from the most recent task for this agent
+    db = await get_db()
+    task_cursor = await db.execute(
+        "SELECT prompt FROM tasks WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1",
+        (agent_id,),
+    )
+    task_row = await task_cursor.fetchone()
+    prompt = task_row["prompt"] if task_row else None
+
     # Try live steps from batch processor first
     live_steps = batch_processor.get_steps(agent_id)
     if live_steps:
@@ -214,11 +232,11 @@ async def get_agent_steps(agent_id: str):
         return {
             "agent_id": agent_id,
             "status": "running",
+            "prompt": prompt,
             "steps": serialized,
         }
 
     # Fall back to persisted trace_steps from DB
-    db = await get_db()
     cursor = await db.execute(
         "SELECT at.status FROM agent_traces at WHERE at.agent_id = ? ORDER BY at.created_at DESC LIMIT 1",
         (agent_id,),
@@ -254,6 +272,7 @@ async def get_agent_steps(agent_id: str):
     return {
         "agent_id": agent_id,
         "status": trace_row["status"] if trace_row else "unknown",
+        "prompt": prompt,
         "steps": persisted_steps,
     }
 
@@ -286,6 +305,13 @@ async def deregister_agent(agent_id: str):
 
     await db.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
     await db.commit()
+
+    await nats_service.publish("vex.project.events", {
+        "event": "agent_deregistered",
+        "agent_id": agent_id,
+        "timestamp": datetime.now(UTC).isoformat(),
+    })
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

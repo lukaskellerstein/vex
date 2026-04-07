@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 
 from agent_orchestrator.db.database import DATA_DIR, get_db
 from agent_orchestrator.models.project import Project, ProjectCreate, ProjectUpdate
+from agent_orchestrator.services import nats_service
 from agent_orchestrator.services.project_detector import detect as detect_project
 
 router = APIRouter(tags=["projects"])
@@ -93,7 +94,16 @@ async def create_project(body: ProjectCreate):
 
     cursor = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
     row = await cursor.fetchone()
-    return _row_to_project(row)
+    project_data = _row_to_project(row)
+
+    await nats_service.publish("vex.project.events", {
+        "event": "created",
+        "project_id": project_id,
+        "project": project_data,
+        "timestamp": now,
+    })
+
+    return project_data
 
 
 @router.get("/projects/{project_id}")
@@ -130,7 +140,16 @@ async def update_project(project_id: str, body: ProjectUpdate):
 
     cursor = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
     row = await cursor.fetchone()
-    return _row_to_project(row)
+    project_data = _row_to_project(row)
+
+    await nats_service.publish("vex.project.events", {
+        "event": "updated",
+        "project_id": project_id,
+        "project": project_data,
+        "timestamp": updates["updated_at"],
+    })
+
+    return project_data
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -192,6 +211,12 @@ async def delete_project(project_id: str, delete_source: bool = False):
     # Delete the project row (batches, actions, config cascade via FK)
     await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     await db.commit()
+
+    await nats_service.publish("vex.project.events", {
+        "event": "deleted",
+        "project_id": project_id,
+        "timestamp": datetime.now(UTC).isoformat(),
+    })
 
     # Clean up screenshot directory from filesystem
     project_data_dir = DATA_DIR / project_id

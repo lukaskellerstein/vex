@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronDown, Radio } from "lucide-react";
 import { ActivityStats, type ActivityStatsData } from "../components/activity/ActivityStats";
 import {
@@ -48,7 +48,6 @@ export function Activity() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [stats, setStats] = useState<ActivityStatsData>(EMPTY_STATS);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
     const since = getSinceISO(timeRange);
@@ -77,9 +76,17 @@ export function Activity() {
 
   useEffect(() => {
     fetchData();
-    intervalRef.current = setInterval(fetchData, 10000);
+    let debounceTimer: ReturnType<typeof setTimeout>;
+    const debouncedFetch = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchData, 300);
+    };
+    const cleanupActivity = window.electronAPI.onActivityEvent(debouncedFetch);
+    const cleanupBatch = window.electronAPI.onBatchEvent(debouncedFetch);
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearTimeout(debounceTimer);
+      cleanupActivity();
+      cleanupBatch();
     };
   }, [fetchData]);
 

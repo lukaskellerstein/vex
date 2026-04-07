@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services.agent_manager import AgentManagerService
 from agent_orchestrator.services import nats_service
-from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile
+from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile, _VEX_SESSION_NS
 from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
@@ -64,10 +64,16 @@ async def stop_batch(batch_id: str) -> bool:
     await db.commit()
 
     # Publish batch status event
+    now_ts = datetime.now(UTC).isoformat()
     await nats_service.publish(
         f"vex.batch.{batch_id}.status",
-        {"batch_id": batch_id, "status": "cancelled", "timestamp": datetime.now(UTC).isoformat()},
+        {"batch_id": batch_id, "status": "cancelled", "timestamp": now_ts},
     )
+    await nats_service.publish("vex.batch.events", {
+        "event": "cancelled",
+        "batch_id": batch_id,
+        "timestamp": now_ts,
+    })
 
     logger.info("Batch %s: stop requested", batch_id)
     return True
@@ -114,7 +120,7 @@ async def continue_agent(agent_id: str, message: str) -> None:
     if not project:
         raise ValueError(f"Project {project_id} not found for agent {agent_id}")
 
-    session_id = f"vex-{agent_id}"
+    session_id = str(uuid.uuid5(_VEX_SESSION_NS, agent_id))
 
     # Create a continuation task
     task_id = uuid.uuid4().hex
@@ -153,6 +159,7 @@ async def continue_agent(agent_id: str, message: str) -> None:
         cost_usd = None
         duration_ms = None
         completed_at = datetime.now(UTC).isoformat()
+        was_cancelled = session and session.status == "cancelled"
 
         if session:
             for step in reversed(session.steps):
@@ -167,18 +174,28 @@ async def continue_agent(agent_id: str, message: str) -> None:
                 session, cost_usd, duration_ms, completed_at,
             )
 
-        # Update task as completed
-        await db.execute(
-            "UPDATE tasks SET status = 'completed', completed_at = ? WHERE id = ?",
-            (completed_at, task_id),
-        )
-        await db.execute(
-            "UPDATE agents SET tasks_completed = tasks_completed + 1 WHERE id = ?",
-            (agent_id,),
-        )
-        await db.commit()
-
-        logger.info("Agent %s continuation completed", agent_id)
+        if was_cancelled:
+            await db.execute(
+                "UPDATE tasks SET status = 'cancelled', result = 'Cancelled by user', completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            await db.execute(
+                "UPDATE agents SET status = 'stopped' WHERE id = ?",
+                (agent_id,),
+            )
+            await db.commit()
+            logger.info("Agent %s continuation cancelled", agent_id)
+        else:
+            await db.execute(
+                "UPDATE tasks SET status = 'completed', completed_at = ? WHERE id = ?",
+                (completed_at, task_id),
+            )
+            await db.execute(
+                "UPDATE agents SET tasks_completed = tasks_completed + 1 WHERE id = ?",
+                (agent_id,),
+            )
+            await db.commit()
+            logger.info("Agent %s continuation completed", agent_id)
 
     except Exception:
         logger.exception("Agent %s continuation failed", agent_id)
@@ -249,6 +266,20 @@ async def process_batch(project_id: str, batch_id: str) -> None:
          datetime.now(UTC).isoformat()),
     )
     await db.commit()
+
+    await nats_service.publish("vex.activity.events", {
+        "event": "batch_processing",
+        "project_id": project_id,
+        "batch_id": batch_id,
+        "timestamp": datetime.now(UTC).isoformat(),
+    })
+    await nats_service.publish("vex.batch.events", {
+        "event": "processing",
+        "project_id": project_id,
+        "batch_id": batch_id,
+        "timestamp": datetime.now(UTC).isoformat(),
+    })
+
     logger.info("Batch %s: processing %d actions", batch_id, len(actions))
 
     # Pre-generate agent IDs so we can publish cursor mapping before execution
@@ -353,6 +384,18 @@ async def process_batch(project_id: str, batch_id: str) -> None:
             f"vex.batch.{batch_id}.status",
             {"batch_id": batch_id, "status": batch_status, "timestamp": now},
         )
+        await nats_service.publish("vex.batch.events", {
+            "event": batch_status,
+            "project_id": project_id,
+            "batch_id": batch_id,
+            "timestamp": now,
+        })
+        await nats_service.publish("vex.activity.events", {
+            "event": f"batch_{batch_status}",
+            "project_id": project_id,
+            "batch_id": batch_id,
+            "timestamp": now,
+        })
         logger.info("Batch %s: %s", batch_id, batch_status)
 
     except asyncio.CancelledError:
@@ -368,6 +411,12 @@ async def process_batch(project_id: str, batch_id: str) -> None:
             f"vex.batch.{batch_id}.status",
             {"batch_id": batch_id, "status": "cancelled", "timestamp": now},
         )
+        await nats_service.publish("vex.batch.events", {
+            "event": "cancelled",
+            "project_id": project_id,
+            "batch_id": batch_id,
+            "timestamp": now,
+        })
         logger.info("Batch %s: cancelled via task cancellation", batch_id)
 
     finally:
