@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("get-agent-logs", agentId),
   getAgentTraceByAgent: (agentId: string) =>
     ipcRenderer.invoke("get-agent-trace-by-agent", agentId),
+  getAgentSubagents: (agentId: string) =>
+    ipcRenderer.invoke("get-agent-subagents", agentId),
+  getSubagentTranscript: (agentId: string, subagentId: string) =>
+    ipcRenderer.invoke("get-subagent-transcript", agentId, subagentId),
   getNatsStatus: () => ipcRenderer.invoke("get-nats-status"),
   getConfig: () => ipcRenderer.invoke("get-config"),
   updateConfig: (config: Record<string, unknown>) =>

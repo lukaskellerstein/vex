@@ -1,6 +1,32 @@
 export {};
 
 declare global {
+  interface SubagentMetadata {
+    id: string;
+    parent_agent_id: string;
+    subagent_id: string;
+    subagent_type: string;
+    description: string | null;
+    transcript_path: string | null;
+    started_at: string;
+    completed_at: string | null;
+  }
+
+  interface SubagentTranscriptResponse {
+    subagent: SubagentMetadata;
+    steps: Array<{
+      id: string;
+      sequence_index: number;
+      type: string;
+      content: string | null;
+      metadata: Record<string, unknown> | null;
+      duration_ms: number | null;
+      token_count: number | null;
+      created_at: string;
+    }>;
+    skipped_lines?: number;
+  }
+
   interface Window {
     electronAPI: {
       getProjects: () => Promise<any[]>;
@@ -19,6 +45,8 @@ declare global {
       getAgentSteps: (agentId: string) => Promise<any>;
       getAgentLogs: (agentId: string) => Promise<any[]>;
       getAgentTraceByAgent: (agentId: string) => Promise<any>;
+      getAgentSubagents: (agentId: string) => Promise<SubagentMetadata[]>;
+      getSubagentTranscript: (agentId: string, subagentId: string) => Promise<SubagentTranscriptResponse>;
       getNatsStatus: () => Promise<{ healthy: boolean }>;
       getConfig: () => Promise<Record<string, string>>;
       updateConfig: (config: Record<string, unknown>) => Promise<Record<string, string>>;
