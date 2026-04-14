@@ -190,6 +190,23 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_trace_steps_trace
             ON trace_steps(trace_id, sequence_index);
+
+        CREATE TABLE IF NOT EXISTS subagent_metadata (
+            id TEXT PRIMARY KEY,
+            parent_agent_id TEXT NOT NULL,
+            subagent_id TEXT NOT NULL,
+            subagent_type TEXT NOT NULL,
+            description TEXT,
+            transcript_path TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY (parent_agent_id) REFERENCES agents(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_subagent_parent
+            ON subagent_metadata(parent_agent_id);
+        CREATE INDEX IF NOT EXISTS idx_subagent_sid
+            ON subagent_metadata(subagent_id);
     """)
 
     # Migrations for existing databases: add new columns if missing.

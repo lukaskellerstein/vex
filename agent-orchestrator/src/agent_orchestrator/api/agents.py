@@ -138,6 +138,79 @@ async def continue_agent(agent_id: str, body: ContinueRequest):
     return {"status": "resuming", "agent_id": agent_id}
 
 
+@router.get("/agents/{agent_id}/subagents")
+async def list_agent_subagents(agent_id: str):
+    db = await get_db()
+    cursor = await db.execute("SELECT id FROM agents WHERE id = ?", (agent_id,))
+    if await cursor.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    cursor = await db.execute(
+        """SELECT id, parent_agent_id, subagent_id, subagent_type,
+                  description, transcript_path, started_at, completed_at
+           FROM subagent_metadata
+           WHERE parent_agent_id = ?
+           ORDER BY started_at ASC""",
+        (agent_id,),
+    )
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+@router.get("/agents/{agent_id}/subagents/{subagent_id}/transcript")
+async def get_subagent_transcript(agent_id: str, subagent_id: str):
+    from agent_orchestrator.services import transcript_parser
+
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT id, parent_agent_id, subagent_id, subagent_type,
+                  description, transcript_path, started_at, completed_at
+           FROM subagent_metadata
+           WHERE id = ? AND parent_agent_id = ?""",
+        (subagent_id, agent_id),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Subagent not found")
+
+    subagent = dict(row)
+    transcript_path = subagent.get("transcript_path")
+    if not transcript_path:
+        raise HTTPException(status_code=422, detail="No transcript path recorded for this subagent")
+
+    try:
+        steps, skipped, prompt = transcript_parser.parse_transcript(transcript_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Transcript file not found at {transcript_path}",
+        )
+
+    # Compute duration from started_at / completed_at timestamps
+    duration_ms = None
+    started = subagent.get("started_at")
+    completed = subagent.get("completed_at")
+    if started and completed:
+        from datetime import datetime
+
+        try:
+            t0 = datetime.fromisoformat(started)
+            t1 = datetime.fromisoformat(completed)
+            duration_ms = int((t1 - t0).total_seconds() * 1000)
+        except (ValueError, TypeError):
+            pass
+
+    result: dict = {
+        "subagent": subagent,
+        "steps": steps,
+        "prompt": prompt,
+        "duration_ms": duration_ms,
+    }
+    if skipped > 0:
+        result["skipped_lines"] = skipped
+    return result
+
+
 @router.get("/agents/{agent_id}/trace")
 async def get_agent_trace(agent_id: str):
     db = await get_db()

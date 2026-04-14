@@ -336,6 +336,14 @@ ipcMain.handle("get-agent-trace-by-agent", async (_event, agentId: string) => {
   return apiGet(`/api/agents/${agentId}/trace`);
 });
 
+ipcMain.handle("get-agent-subagents", async (_event, agentId: string) => {
+  return apiGet(`/api/agents/${agentId}/subagents`);
+});
+
+ipcMain.handle("get-subagent-transcript", async (_event, agentId: string, subagentId: string) => {
+  return apiGet(`/api/agents/${agentId}/subagents/${subagentId}/transcript`);
+});
+
 ipcMain.handle("get-nats-status", async () => {
   if (cliArgs.standalone) {
     const healthy = await checkTcp(cliArgs.natsPort);

@@ -28,6 +28,7 @@ export function App() {
           <Route path="/project/:id" element={<ProjectDetail />} />
           <Route path="/project/:id/trace/:traceId" element={<AgentTrace />} />
           <Route path="/project/:id/agent/:agentId" element={<AgentTrace />} />
+          <Route path="/project/:id/agent/:agentId/subagent/:subagentId" element={<AgentTrace />} />
           <Route path="/activity" element={<Activity />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/demo/agent-trace" element={<AgentTraceDemo />} />

@@ -29,6 +29,7 @@ from claude_agent_sdk.types import (
 )
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
+from agent_orchestrator.db import database
 from agent_orchestrator.services import nats_service
 from agent_orchestrator.services import marketplace as marketplace_service
 from agent_orchestrator.services.agent_logger import AgentFileLogger
@@ -1087,14 +1088,32 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             tool_use_id: str | None,
             ctx: HookContext,
         ) -> HookJSONOutput:
+            sub_id = hook_input.get("agent_id", "")
+            sub_type = hook_input.get("agent_type", "")
+            now = datetime.now(UTC).isoformat()
+
+            # Persist subagent metadata to DB
+            try:
+                db = await database.get_db()
+                row_id = uuid.uuid4().hex
+                await db.execute(
+                    """INSERT INTO subagent_metadata
+                       (id, parent_agent_id, subagent_id, subagent_type, started_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (row_id, agent_id, sub_id, sub_type, now),
+                )
+                await db.commit()
+            except Exception:
+                logger.exception("Failed to persist SubagentStart metadata")
+
             await nats_service.publish(
                 f"vex.agent.{agent_id}.hooks",
                 {
                     "hook": "SubagentStart",
                     "agent_id": agent_id,
-                    "subagent_id": hook_input.get("agent_id", ""),
-                    "subagent_type": hook_input.get("agent_type", ""),
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "subagent_id": sub_id,
+                    "subagent_type": sub_type,
+                    "timestamp": now,
                 },
             )
             return _CONTINUE
@@ -1104,15 +1123,34 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             tool_use_id: str | None,
             ctx: HookContext,
         ) -> HookJSONOutput:
+            sub_id = hook_input.get("agent_id", "")
+            sub_type = hook_input.get("agent_type", "")
+            transcript_path = hook_input.get("agent_transcript_path", "")
+            now = datetime.now(UTC).isoformat()
+
+            # Update subagent metadata in DB
+            try:
+                db = await database.get_db()
+                await db.execute(
+                    """UPDATE subagent_metadata
+                       SET transcript_path = ?, completed_at = ?
+                       WHERE parent_agent_id = ? AND subagent_id = ?
+                         AND completed_at IS NULL""",
+                    (transcript_path, now, agent_id, sub_id),
+                )
+                await db.commit()
+            except Exception:
+                logger.exception("Failed to persist SubagentStop metadata")
+
             await nats_service.publish(
                 f"vex.agent.{agent_id}.hooks",
                 {
                     "hook": "SubagentStop",
                     "agent_id": agent_id,
-                    "subagent_id": hook_input.get("agent_id", ""),
-                    "subagent_type": hook_input.get("agent_type", ""),
-                    "transcript_path": hook_input.get("agent_transcript_path", ""),
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "subagent_id": sub_id,
+                    "subagent_type": sub_type,
+                    "transcript_path": transcript_path,
+                    "timestamp": now,
                 },
             )
             return _CONTINUE

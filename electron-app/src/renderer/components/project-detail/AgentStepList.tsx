@@ -6,9 +6,10 @@ import type { AgentStep } from "./AgentStepItem";
 interface AgentStepListProps {
   steps: AgentStep[];
   status: string;
+  onAgentClick?: (agentType: string) => void;
 }
 
-export function AgentStepList({ steps, status }: AgentStepListProps) {
+export function AgentStepList({ steps, status, onAgentClick }: AgentStepListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -175,6 +176,7 @@ export function AgentStepList({ steps, status }: AgentStepListProps) {
             <AgentStepItem
               step={group.step}
               resultSteps={group.resultSteps.length > 0 ? group.resultSteps : undefined}
+              onAgentClick={onAgentClick}
             />
           </div>
         ))}

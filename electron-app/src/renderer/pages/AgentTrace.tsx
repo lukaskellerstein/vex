@@ -23,6 +23,7 @@ import {
 import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
 import { AgentWorkingAnimation } from "../components/project-detail/AgentWorkingAnimation";
+import { SubagentList } from "../components/project-detail/SubagentList";
 import { hookEventToStep } from "../utils/hook-steps";
 
 /* ─── Types ──────────────────────────────────────── */
@@ -238,8 +239,9 @@ function liveStepToAgentStep(step: Record<string, unknown>, index: number): Agen
 /* ─── Component ──────────────────────────────────── */
 
 export function AgentTrace() {
-  const { id: projectId, traceId, agentId } = useParams<{ id: string; traceId: string; agentId: string }>();
+  const { id: projectId, traceId, agentId, subagentId } = useParams<{ id: string; traceId: string; agentId: string; subagentId: string }>();
   const navigate = useNavigate();
+  const isSubagentMode = !!subagentId;
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
   const [livePrompt, setLivePrompt] = useState<string | null>(null);
@@ -252,6 +254,7 @@ export function AgentTrace() {
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const continuingLocallyRef = useRef(false);
+  const [subagents, setSubagents] = useState<SubagentMetadata[]>([]);
 
   // Fetch the final persisted trace (for completed/failed agents or by traceId)
   const fetchPersistedTrace = useCallback(async () => {
@@ -375,8 +378,9 @@ export function AgentTrace() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [agentStatus, trace, liveSteps.length, fetchPersistedTrace]);
 
-  // Main mount effect
+  // Main mount effect (skip in subagent mode — handled by separate effect)
   useEffect(() => {
+    if (isSubagentMode) return;
     if (!traceId && !agentId) return;
     let cancelled = false;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -432,7 +436,130 @@ export function AgentTrace() {
         cleanupRef.current = null;
       }
     };
-  }, [traceId, agentId, fetchPersistedTrace, subscribeToAgent]);
+  }, [traceId, agentId, isSubagentMode, fetchPersistedTrace, subscribeToAgent]);
+
+  // Fetch subagent list when in parent agent view (not subagent mode)
+  useEffect(() => {
+    if (!agentId || isSubagentMode) return;
+    let cancelled = false;
+
+    async function fetchSubagents() {
+      try {
+        const data = await window.electronAPI.getAgentSubagents(agentId!);
+        if (!cancelled && Array.isArray(data)) setSubagents(data);
+      } catch { /* agent might not exist yet */ }
+    }
+
+    fetchSubagents();
+    return () => { cancelled = true; };
+  }, [agentId, isSubagentMode]);
+
+  // Real-time subagent updates from NATS hook events (US3)
+  useEffect(() => {
+    if (!agentId || isSubagentMode || !agentStatus || agentStatus !== "running") return;
+
+    const removeHookListener = window.electronAPI.onAgentHook((data) => {
+      if (data.agentId !== agentId) return;
+      const hook = data.hook as string;
+
+      if (hook === "SubagentStart") {
+        const newSub: SubagentMetadata = {
+          id: `live-${Date.now()}`,
+          parent_agent_id: agentId!,
+          subagent_id: (data.subagent_id as string) ?? "",
+          subagent_type: (data.subagent_type as string) ?? "",
+          description: null,
+          transcript_path: null,
+          started_at: (data.timestamp as string) ?? new Date().toISOString(),
+          completed_at: null,
+        };
+        setSubagents((prev) => [...prev, newSub]);
+      } else if (hook === "SubagentStop") {
+        const subId = (data.subagent_id as string) ?? "";
+        setSubagents((prev) =>
+          prev.map((s) =>
+            s.subagent_id === subId && !s.completed_at
+              ? {
+                  ...s,
+                  completed_at: (data.timestamp as string) ?? new Date().toISOString(),
+                  transcript_path: (data.transcript_path as string) ?? null,
+                }
+              : s
+          )
+        );
+      }
+    });
+
+    return () => removeHookListener();
+  }, [agentId, isSubagentMode, agentStatus]);
+
+  // Subagent mode: fetch transcript instead of normal trace
+  useEffect(() => {
+    if (!isSubagentMode || !agentId || !subagentId) return;
+    let cancelled = false;
+
+    async function fetchTranscript() {
+      try {
+        const data = await window.electronAPI.getSubagentTranscript(agentId!, subagentId!);
+        if (cancelled) return;
+        if (data?.steps) {
+          const parsedSteps: AgentStep[] = data.steps.map((s) => ({
+            id: s.id,
+            sequence_index: s.sequence_index,
+            type: s.type as AgentStep["type"],
+            content: s.content,
+            metadata: s.metadata,
+            duration_ms: s.duration_ms,
+            token_count: s.token_count,
+            created_at: s.created_at,
+          }));
+          // Prepend a synthetic prompt step (same as mergeTraces does for the main agent)
+          const steps: AgentStep[] = data.prompt
+            ? [
+                {
+                  id: "subagent-prompt-0",
+                  sequence_index: 0,
+                  type: "user_message" as AgentStep["type"],
+                  content: data.prompt,
+                  metadata: null,
+                  duration_ms: null,
+                  token_count: null,
+                  created_at: data.subagent?.started_at ?? new Date().toISOString(),
+                },
+                ...parsedSteps.map((s, i) => ({ ...s, sequence_index: i + 1 })),
+              ]
+            : parsedSteps;
+          setTrace({
+            id: `subagent-${subagentId}`,
+            batch_id: "",
+            agent_id: agentId!,
+            agent_name: data.subagent?.subagent_type ?? "Subagent",
+            agent_model: "",
+            status: "completed",
+            total_duration_ms: data.duration_ms ?? null,
+            total_cost_usd: null,
+            total_tokens: null,
+            input_tokens: null,
+            output_tokens: null,
+            prompt: data.prompt ?? null,
+            steps,
+            created_at: data.subagent?.started_at ?? new Date().toISOString(),
+            completed_at: data.subagent?.completed_at ?? null,
+          });
+          setAgentStatus("completed");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load subagent transcript");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchTranscript();
+    return () => { cancelled = true; };
+  }, [isSubagentMode, agentId, subagentId]);
 
   // Determine what to display (must be before early returns to keep hook order stable)
   // agentStatus "running" overrides trace status (agent resumed via continuation)
@@ -690,7 +817,7 @@ export function AgentTrace() {
   }
 
   const isTerminal = ["completed", "failed", "stopped"].includes(displayStatus);
-  const showFollowUpBar = isTerminal && !!agentId;
+  const showFollowUpBar = isTerminal && !!agentId && !isSubagentMode;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -865,13 +992,61 @@ export function AgentTrace() {
           <Separator />
           <MetricItem icon={<AlertTriangle size={12} />} label="errors" value={String(stats.errorCount)} highlight={stats.errorCount > 0 ? "error" : undefined} />
         </div>
+
+        {/* Breadcrumb for subagent mode */}
+        {isSubagentMode && agentId && (
+          <div
+            style={{
+              padding: "6px 20px 8px",
+              fontSize: "12px",
+              color: "var(--foreground-dim)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <button
+              onClick={() => navigate(`/project/${projectId}/agent/${agentId}`)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--primary)",
+                cursor: "pointer",
+                fontSize: "12px",
+                padding: 0,
+                textDecoration: "underline",
+              }}
+            >
+              Parent Agent
+            </button>
+            <span>/</span>
+            <span style={{ color: "var(--foreground-muted)" }}>Subagent Trace</span>
+          </div>
+        )}
+
+        {/* Subagent list (only in parent agent view) */}
+        {!isSubagentMode && subagents.length > 0 && (
+          <SubagentList
+            subagents={subagents}
+            onSubagentClick={(sub) =>
+              navigate(`/project/${projectId}/agent/${agentId}/subagent/${sub.id}`)
+            }
+          />
+        )}
       </header>
 
       {/* ─── Body ────────────────────────────────── */}
       {isRunning && displaySteps.length === 0 ? (
         <AgentWorkingAnimation />
       ) : (
-        <AgentStepList steps={displaySteps} status={displayStatus} />
+        <AgentStepList
+          steps={displaySteps}
+          status={displayStatus}
+          onAgentClick={!isSubagentMode ? (agentType) => {
+            const sub = subagents.find((s) => s.subagent_type === agentType);
+            if (sub) navigate(`/project/${projectId}/agent/${agentId}/subagent/${sub.id}`);
+          } : undefined}
+        />
       )}
 
       {/* ─── Follow-up input bar ─────────────── */}

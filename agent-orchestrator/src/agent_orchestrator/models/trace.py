@@ -16,6 +16,17 @@ class TraceStep(BaseModel):
     created_at: datetime
 
 
+class SubagentMetadata(BaseModel):
+    id: str
+    parent_agent_id: str
+    subagent_id: str
+    subagent_type: str
+    description: str | None = None
+    transcript_path: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
 class AgentTrace(BaseModel):
     id: str
     batch_id: str
