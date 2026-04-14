@@ -503,7 +503,7 @@ export function AgentTrace() {
         const data = await window.electronAPI.getSubagentTranscript(agentId!, subagentId!);
         if (cancelled) return;
         if (data?.steps) {
-          const steps: AgentStep[] = data.steps.map((s) => ({
+          const parsedSteps: AgentStep[] = data.steps.map((s) => ({
             id: s.id,
             sequence_index: s.sequence_index,
             type: s.type as AgentStep["type"],
@@ -513,6 +513,22 @@ export function AgentTrace() {
             token_count: s.token_count,
             created_at: s.created_at,
           }));
+          // Prepend a synthetic prompt step (same as mergeTraces does for the main agent)
+          const steps: AgentStep[] = data.prompt
+            ? [
+                {
+                  id: "subagent-prompt-0",
+                  sequence_index: 0,
+                  type: "user_message" as AgentStep["type"],
+                  content: data.prompt,
+                  metadata: null,
+                  duration_ms: null,
+                  token_count: null,
+                  created_at: data.subagent?.started_at ?? new Date().toISOString(),
+                },
+                ...parsedSteps.map((s, i) => ({ ...s, sequence_index: i + 1 })),
+              ]
+            : parsedSteps;
           setTrace({
             id: `subagent-${subagentId}`,
             batch_id: "",
@@ -520,12 +536,12 @@ export function AgentTrace() {
             agent_name: data.subagent?.subagent_type ?? "Subagent",
             agent_model: "",
             status: "completed",
-            total_duration_ms: null,
+            total_duration_ms: data.duration_ms ?? null,
             total_cost_usd: null,
             total_tokens: null,
             input_tokens: null,
             output_tokens: null,
-            prompt: null,
+            prompt: data.prompt ?? null,
             steps,
             created_at: data.subagent?.started_at ?? new Date().toISOString(),
             completed_at: data.subagent?.completed_at ?? null,
@@ -1023,7 +1039,14 @@ export function AgentTrace() {
       {isRunning && displaySteps.length === 0 ? (
         <AgentWorkingAnimation />
       ) : (
-        <AgentStepList steps={displaySteps} status={displayStatus} />
+        <AgentStepList
+          steps={displaySteps}
+          status={displayStatus}
+          onAgentClick={!isSubagentMode ? (agentType) => {
+            const sub = subagents.find((s) => s.subagent_type === agentType);
+            if (sub) navigate(`/project/${projectId}/agent/${agentId}/subagent/${sub.id}`);
+          } : undefined}
+        />
       )}
 
       {/* ─── Follow-up input bar ─────────────── */}

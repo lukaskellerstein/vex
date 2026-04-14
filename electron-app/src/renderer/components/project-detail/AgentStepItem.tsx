@@ -754,11 +754,13 @@ function AgentBlock({
   prompt,
   agentType,
   resultContent,
+  onAgentClick,
 }: {
   description: string;
   prompt: string;
   agentType: string;
   resultContent: string | null;
+  onAgentClick?: (agentType: string) => void;
 }) {
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [resultExpanded, setResultExpanded] = useState(false);
@@ -775,6 +777,7 @@ function AgentBlock({
     >
       {/* Header */}
       <div
+        onClick={onAgentClick && agentType ? () => onAgentClick(agentType) : undefined}
         style={{
           display: "flex",
           alignItems: "center",
@@ -782,7 +785,11 @@ function AgentBlock({
           padding: "10px 14px",
           background: `color-mix(in srgb, ${agentColor} 10%, transparent)`,
           borderBottom: `1px solid color-mix(in srgb, ${agentColor} 20%, transparent)`,
+          cursor: onAgentClick && agentType ? "pointer" : undefined,
+          transition: "background 0.15s",
         }}
+        onMouseEnter={onAgentClick && agentType ? (e) => { e.currentTarget.style.background = `color-mix(in srgb, ${agentColor} 18%, transparent)`; } : undefined}
+        onMouseLeave={onAgentClick && agentType ? (e) => { e.currentTarget.style.background = `color-mix(in srgb, ${agentColor} 10%, transparent)`; } : undefined}
       >
         <Bot size={18} style={{ color: agentColor, flexShrink: 0 }} />
         <span
@@ -991,7 +998,11 @@ const iconStyle = (color: string): React.CSSProperties => ({
   flexShrink: 0,
 });
 
-export function AgentStepItem({ step, resultSteps }: { step: AgentStep; resultSteps?: AgentStep[] }) {
+export function AgentStepItem({ step, resultSteps, onAgentClick }: {
+  step: AgentStep;
+  resultSteps?: AgentStep[];
+  onAgentClick?: (agentType: string) => void;
+}) {
   const content = step.content ?? "";
   const meta = step.metadata ?? {};
 
@@ -1113,6 +1124,7 @@ export function AgentStepItem({ step, resultSteps }: { step: AgentStep; resultSt
               prompt={(parsed.prompt as string) ?? ""}
               agentType={(parsed.subagent_type as string) ?? ""}
               resultContent={resultContent}
+              onAgentClick={onAgentClick}
             />
             {errors.map((rs) => (
               <ToolErrorStep key={rs.id} step={rs} content={rs.content ?? ""} />

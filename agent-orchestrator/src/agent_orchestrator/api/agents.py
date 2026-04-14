@@ -179,14 +179,33 @@ async def get_subagent_transcript(agent_id: str, subagent_id: str):
         raise HTTPException(status_code=422, detail="No transcript path recorded for this subagent")
 
     try:
-        steps, skipped = transcript_parser.parse_transcript(transcript_path)
+        steps, skipped, prompt = transcript_parser.parse_transcript(transcript_path)
     except FileNotFoundError:
         raise HTTPException(
             status_code=422,
             detail=f"Transcript file not found at {transcript_path}",
         )
 
-    result = {"subagent": subagent, "steps": steps}
+    # Compute duration from started_at / completed_at timestamps
+    duration_ms = None
+    started = subagent.get("started_at")
+    completed = subagent.get("completed_at")
+    if started and completed:
+        from datetime import datetime
+
+        try:
+            t0 = datetime.fromisoformat(started)
+            t1 = datetime.fromisoformat(completed)
+            duration_ms = int((t1 - t0).total_seconds() * 1000)
+        except (ValueError, TypeError):
+            pass
+
+    result: dict = {
+        "subagent": subagent,
+        "steps": steps,
+        "prompt": prompt,
+        "duration_ms": duration_ms,
+    }
     if skipped > 0:
         result["skipped_lines"] = skipped
     return result

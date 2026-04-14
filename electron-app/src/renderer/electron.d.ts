@@ -24,6 +24,8 @@ declare global {
       token_count: number | null;
       created_at: string;
     }>;
+    prompt: string | null;
+    duration_ms: number | null;
     skipped_lines?: number;
   }
 
