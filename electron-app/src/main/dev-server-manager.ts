@@ -63,7 +63,7 @@ export class DevServerManager {
       return { status: "error", detail: "Cannot determine dev command" };
     }
 
-    const [exe, args] = cmd;
+    const { exe, args, env: extraEnv } = cmd;
     await this.updateProjectStatus(project.id, "starting");
 
     let child: ChildProcess;
@@ -72,7 +72,7 @@ export class DevServerManager {
         cwd: project.path,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...extraEnv },
       });
     } catch (err: unknown) {
       await this.updateProjectStatus(project.id, "error");
@@ -210,12 +210,27 @@ export class DevServerManager {
     }
   }
 
-  private buildRunCommand(project: ProjectInfo): [string, string[]] | null {
-    if (!project.dev_command) return null;
-    const pkgManager = project.package_manager ?? "npm";
+  private buildRunCommand(
+    project: ProjectInfo
+  ): { exe: string; args: string[]; env?: Record<string, string> } | null {
     const scriptKey = this.findScriptKey(project.path);
-    if (!scriptKey) return null;
-    return [pkgManager, ["run", scriptKey]];
+    if (scriptKey) {
+      const pkgManager = project.package_manager ?? "npm";
+      return { exe: pkgManager, args: ["run", scriptKey] };
+    }
+
+    // Fallback for static sites with no runnable script: serve the folder
+    // directly via the bundled static server, launched as Electron-as-Node.
+    if (fs.existsSync(path.join(project.path, "index.html"))) {
+      const script = path.join(__dirname, "static-server.js");
+      return {
+        exe: process.execPath,
+        args: [script, project.path],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      };
+    }
+
+    return null;
   }
 
   private findScriptKey(projectPath: string): string | null {

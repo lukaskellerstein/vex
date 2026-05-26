@@ -102,21 +102,9 @@ The Chrome Extension captures visual edits as structured actions. The Agent Orch
 | [uv](https://github.com/astral-sh/uv) | latest |
 | [Chrome](https://www.google.com/chrome/) | 116+ |
 
-### Option A: Electron App (recommended)
+### Option A: Dev setup script (recommended)
 
-The Electron app automatically manages NATS and the Agent Orchestrator for you:
-
-```bash
-cd electron-app
-npm install
-npm run dev
-```
-
-Then load the Chrome extension (see below).
-
-### Option B: Dev setup script
-
-Starts all three components as separate processes with unified logging:
+Starts all three components (NATS, Agent Orchestrator, Electron app) with unified logging. The Electron app launches in standalone dev mode with the Vite renderer and remote debugging enabled:
 
 ```bash
 ./dev-setup.sh
@@ -128,9 +116,17 @@ Customize ports if needed:
 ./dev-setup.sh --ao-port 9000 --nats-port 5222 --nats-ws-port 5223
 ```
 
-Logs are written to `/tmp/vex-logs/` (`nats.log`, `ao.log`, `electron.log`). Press `Ctrl+C` to stop everything.
+By default no browser is launched. To also start Chrome with remote debugging (port 9333) for Chrome-extension testing, pass `--with-chrome`:
 
-### Option C: Manual setup
+```bash
+./dev-setup.sh --with-chrome
+```
+
+Logs are written to `/tmp/vex-logs/` (`nats.log`, `ao.log`, `vite.log`, `electron.log`; `chrome.log` only with `--with-chrome`). Press `Ctrl+C` to stop everything.
+
+Then load the Chrome extension (see below).
+
+### Option B: Manual setup
 
 ```bash
 # 1. Start NATS
@@ -311,7 +307,8 @@ vex/
 ```bash
 # Electron App
 cd electron-app && npm install      # Install dependencies
-cd electron-app && npm run dev      # Start dev mode
+./dev-setup.sh                      # Launch full app (NATS + AO + Electron)
+cd electron-app && npm run dev      # Renderer-only Vite server (no Electron; for renderer dev)
 cd electron-app && npm run build    # Production build
 
 # Chrome Extension

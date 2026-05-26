@@ -9,6 +9,7 @@
 #   ./dev-setup.sh                          # default ports
 #   ./dev-setup.sh --ao-port 9000           # custom AO port
 #   ./dev-setup.sh --nats-port 5222         # custom NATS port
+#   ./dev-setup.sh --with-chrome            # also launch Chrome (extension testing)
 #
 set -euo pipefail
 
@@ -18,6 +19,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AO_PORT=8420
 NATS_PORT=4222
 NATS_WS_PORT=4223
+WITH_CHROME=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -25,6 +27,7 @@ while [[ $# -gt 0 ]]; do
     --ao-port)   AO_PORT="$2"; shift 2 ;;
     --nats-port) NATS_PORT="$2"; shift 2 ;;
     --nats-ws-port) NATS_WS_PORT="$2"; shift 2 ;;
+    --with-chrome) WITH_CHROME=true; shift ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -111,14 +114,18 @@ echo "  NATS:                port ${NATS_PORT} (ws: ${NATS_WS_PORT})"
 echo "  Agent Orchestrator:  port ${AO_PORT}"
 echo "  Vite (HMR):          port 5199"
 echo "  Electron:            standalone + dev mode (devtools: 9222)"
-echo "  Chrome:              devtools port 9333"
+if [[ "$WITH_CHROME" == true ]]; then
+  echo "  Chrome:              devtools port 9333"
+fi
 echo ""
 echo "  Log files:"
 echo "    /tmp/vex-logs/nats.log"
 echo "    /tmp/vex-logs/ao.log"
 echo "    /tmp/vex-logs/vite.log"
 echo "    /tmp/vex-logs/electron.log"
-echo "    /tmp/vex-logs/chrome.log"
+if [[ "$WITH_CHROME" == true ]]; then
+  echo "    /tmp/vex-logs/chrome.log"
+fi
 echo ""
 
 # --- 1. Start NATS ---
@@ -214,40 +221,42 @@ echo "Starting Electron app (standalone + dev mode)..."
 run_prefixed "elec" "$LOG_DIR/electron.log" npx --prefix "$ELECTRON_DIR" electron --no-sandbox --remote-debugging-port=9222 "$ELECTRON_DIR/dist/main/index.js" \
   --standalone --dev --ao-port "$AO_PORT" --nats-port "$NATS_PORT" --vite-port "$VITE_PORT"
 
-# --- 5. Start Chrome browser with CDP ---
-CHROME_CDP_PORT=9333
-# Kill any stale process on the Chrome CDP port from a previous run
-if lsof -ti ":${CHROME_CDP_PORT}" > /dev/null 2>&1; then
-  echo "Killing stale process on port ${CHROME_CDP_PORT}..."
-  lsof -ti ":${CHROME_CDP_PORT}" | xargs kill 2>/dev/null || true
-  sleep 0.5
-fi
-
-# Find Chrome/Chromium binary
-CHROME_BIN=""
-for candidate in \
-  google-chrome \
-  google-chrome-stable \
-  chromium \
-  chromium-browser \
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; do
-  if command -v "$candidate" > /dev/null 2>&1 || [[ -x "$candidate" ]]; then
-    CHROME_BIN="$candidate"
-    break
+# --- 5. Start Chrome browser with CDP (opt-in, for Chrome-extension testing) ---
+if [[ "$WITH_CHROME" == true ]]; then
+  CHROME_CDP_PORT=9333
+  # Kill any stale process on the Chrome CDP port from a previous run
+  if lsof -ti ":${CHROME_CDP_PORT}" > /dev/null 2>&1; then
+    echo "Killing stale process on port ${CHROME_CDP_PORT}..."
+    lsof -ti ":${CHROME_CDP_PORT}" | xargs kill 2>/dev/null || true
+    sleep 0.5
   fi
-done
 
-if [[ -z "$CHROME_BIN" ]]; then
-  echo "WARNING: Chrome/Chromium not found. Skipping browser launch."
-else
-  echo "Starting Chrome with CDP on port ${CHROME_CDP_PORT}..."
-  "$CHROME_BIN" \
-    --remote-debugging-port="${CHROME_CDP_PORT}" \
-    --user-data-dir="/tmp/vex-chrome-profile" \
-    --no-first-run \
-    --no-default-browser-check \
-    > >(tee -a "$LOG_DIR/chrome.log" | sed "s/^/[chrome] /") 2>&1 &
-  PIDS+=($!)
+  # Find Chrome/Chromium binary
+  CHROME_BIN=""
+  for candidate in \
+    google-chrome \
+    google-chrome-stable \
+    chromium \
+    chromium-browser \
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; do
+    if command -v "$candidate" > /dev/null 2>&1 || [[ -x "$candidate" ]]; then
+      CHROME_BIN="$candidate"
+      break
+    fi
+  done
+
+  if [[ -z "$CHROME_BIN" ]]; then
+    echo "WARNING: Chrome/Chromium not found. Skipping browser launch."
+  else
+    echo "Starting Chrome with CDP on port ${CHROME_CDP_PORT}..."
+    "$CHROME_BIN" \
+      --remote-debugging-port="${CHROME_CDP_PORT}" \
+      --user-data-dir="/tmp/vex-chrome-profile" \
+      --no-first-run \
+      --no-default-browser-check \
+      > >(tee -a "$LOG_DIR/chrome.log" | sed "s/^/[chrome] /") 2>&1 &
+    PIDS+=($!)
+  fi
 fi
 
 echo ""

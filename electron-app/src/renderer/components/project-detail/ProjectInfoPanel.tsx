@@ -215,7 +215,9 @@ export function ProjectInfoPanel({
             <div style={serverRow}>
               <Terminal size={12} style={{ color: "var(--foreground-dim)", flexShrink: 0 }} />
               <span style={serverLabel}>Dev Command</span>
-              <span style={serverValue}>{project.dev_command ?? "npm run dev"}</span>
+              <span style={serverValue}>
+                {project.dev_command ?? (project.framework === "static" ? "built-in static server" : "npm run dev")}
+              </span>
             </div>
             {project.pid && (
               <div style={serverRow}>

@@ -146,9 +146,16 @@ def detect(path: str) -> dict:
 
     pkg = _read_package_json(root)
     dev_command = _detect_dev_command(pkg)
+    framework = _detect_framework(root, pkg)
+
+    # A folder with no runnable dev script but an index.html is a plain static
+    # site. VEX serves it with a built-in static server, so leave dev_command
+    # null and just label the framework for display.
+    if framework is None and dev_command is None and (root / "index.html").is_file():
+        framework = "static"
 
     return {
-        "framework": _detect_framework(root, pkg),
+        "framework": framework,
         "dev_command": dev_command,
         "dev_port": _detect_port(dev_command),
         "package_manager": _detect_package_manager(root),
