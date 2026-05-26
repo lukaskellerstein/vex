@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "tsc --noEmit && vite build",
+    "release": "node scripts/make-release.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },

@@ -7,16 +7,53 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "start": "electron --no-sandbox --remote-debugging-port=9222 dist/main/index.js",
-    "build:start": "npm run build && npm run start"
+    "build:start": "npm run build && npm run start",
+    "bundle:python": "node scripts/bundle-python.mjs",
+    "dist:mac": "npm run build && npm run bundle:python && electron-builder --mac"
   },
   "build": {
     "appId": "com.vex.desktop",
     "productName": "Vex",
     "icon": "resources/icon.png",
-    "linux": {
-      "icon": "resources/icon.png"
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
     },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
     "mac": {
+      "icon": "resources/build-icon.png",
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "bin/darwin-arm64",
+          "to": "bin/darwin-arm64"
+        },
+        {
+          "from": "python-dist",
+          "to": "python"
+        },
+        {
+          "from": "../agent-orchestrator/src",
+          "to": "agent-orchestrator/src"
+        },
+        {
+          "from": "../agent-orchestrator/config.json",
+          "to": "agent-orchestrator/config.json"
+        }
+      ]
+    },
+    "linux": {
       "icon": "resources/icon.png"
     },
     "win": {
@@ -24,13 +61,7 @@
     }
   },
   "dependencies": {
-    "electron": "^30.5.1",
-    "gsap": "^3.14.2",
-    "lucide-react": "^1.7.0",
     "nats.ws": "^1.30.3",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "react-router-dom": "^7.13.2",
     "ws": "^8.20.0"
   },
   "devDependencies": {
@@ -38,7 +69,13 @@
     "@types/react-dom": "^18.3.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^30.5.1",
     "electron-builder": "^25.1.0",
+    "gsap": "^3.14.2",
+    "lucide-react": "^1.7.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^7.13.2",
     "typescript": "^5.7.0",
     "vite": "^6.0.0"
   }

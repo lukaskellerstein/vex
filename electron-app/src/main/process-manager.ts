@@ -1,5 +1,6 @@
 import { ChildProcess, execSync, spawn } from "child_process";
 import { EventEmitter } from "events";
+import { app } from "electron";
 import path from "path";
 import net from "net";
 import fs from "fs";
@@ -107,8 +108,15 @@ export class ProcessManager extends EventEmitter {
       return null;
     }
 
+    // In production (packaged): bin/ is shipped via extraResources under resourcesPath
+    if (app.isPackaged) {
+      const packagedPath = path.join(process.resourcesPath, "bin", dirName, binaryName);
+      if (fs.existsSync(packagedPath)) {
+        return packagedPath;
+      }
+    }
+
     // In development: bin/ is next to src/ in electron-app/
-    // In production (packaged): bin/ would be in app resources
     const devPath = path.resolve(__dirname, "..", "..", "bin", dirName, binaryName);
     if (fs.existsSync(devPath)) {
       return devPath;
@@ -281,21 +289,72 @@ export class ProcessManager extends EventEmitter {
     }
 
     return new Promise((resolve) => {
-      const cwd = path.resolve(__dirname, "..", "..", "..", "agent-orchestrator");
-      const venvPython = path.join(cwd, ".venv", "bin", "python");
-      const pythonBin = fs.existsSync(venvPython) ? venvPython : "python";
+      const { pythonBin, cwd, env } = this.resolveAgentManagerRuntime();
 
       this.emit("log", `Using Python: ${pythonBin}`);
 
       const child = spawn(
         pythonBin,
         ["-m", "uvicorn", "agent_orchestrator.main:app", "--port", "8420"],
-        { cwd, stdio: ["ignore", "pipe", "pipe"] }
+        { cwd, env, stdio: ["ignore", "pipe", "pipe"] }
       );
 
       this.trackProcess("agent-manager", child);
       resolve();
     });
+  }
+
+  /**
+   * Resolve how to launch the Agent Orchestrator.
+   * - Packaged: bundled standalone Python + AO source shipped via extraResources.
+   * - Dev: the agent-orchestrator/.venv interpreter next to the source tree.
+   */
+  private resolveAgentManagerRuntime(): {
+    pythonBin: string;
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+  } {
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: this.buildChildPath() };
+
+    if (app.isPackaged) {
+      const aoDir = path.join(process.resourcesPath, "agent-orchestrator");
+      const pythonName = process.platform === "win32" ? "python.exe" : "python3";
+      const pythonBin = path.join(
+        process.resourcesPath,
+        "python",
+        process.platform === "win32" ? "" : "bin",
+        pythonName
+      );
+      // AO is shipped as source (not installed) so config.json resolves relative
+      // to src/agent_orchestrator/.../claude_code_sdk.py (parents[3]/config.json).
+      env.PYTHONPATH = path.join(aoDir, "src");
+      return { pythonBin, cwd: aoDir, env };
+    }
+
+    const cwd = path.resolve(__dirname, "..", "..", "..", "agent-orchestrator");
+    const venvPython = path.join(cwd, ".venv", "bin", "python");
+    const pythonBin = fs.existsSync(venvPython) ? venvPython : "python";
+    return { pythonBin, cwd, env };
+  }
+
+  /**
+   * macOS/Linux GUI apps launch with a minimal PATH that omits user-local bins.
+   * The bundled backend spawns the `claude` CLI via claude-agent-sdk, so we
+   * prepend the common install locations to the child's PATH.
+   */
+  private buildChildPath(): string {
+    const home = os.homedir();
+    const extra = [
+      path.join(home, ".local", "bin"),
+      path.join(home, ".npm-global", "bin"),
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+    ];
+    const current = process.env.PATH ?? "";
+    const merged = [...extra, ...current.split(path.delimiter)].filter(Boolean);
+    return Array.from(new Set(merged)).join(path.delimiter);
   }
 
   private waitForAgentManagerHealth(): Promise<void> {

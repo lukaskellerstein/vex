@@ -16,6 +16,11 @@ node_modules/
 dist/
 build/
 
+# Build artifacts published to GitHub Releases (not committed)
+release/
+releases/
+python-dist/
+
 # Python
 __pycache__/
 *.pyc
