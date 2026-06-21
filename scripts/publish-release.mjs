@@ -55,16 +55,21 @@ if (!existsSync(extManifest)) {
 const extVersion = readJson(extManifest).version;
 
 // --- Collect assets ---
+// Match only the dmg(s) for the version being released — older builds left in
+// release/ must not be attached to this release (any arch suffix is fine).
 const dmgDir = join(electronDir, "release");
 const dmgs = existsSync(dmgDir)
-  ? readdirSync(dmgDir).filter((f) => f.endsWith(".dmg")).map((f) => join(dmgDir, f))
+  ? readdirSync(dmgDir)
+      .filter((f) => f.endsWith(".dmg") && f.includes(`-${electronVersion}-`))
+      .map((f) => join(dmgDir, f))
   : [];
 const extZip = join(extDir, "releases", `vex-extension-${extVersion}.zip`);
 
 const assets = [...dmgs];
 if (existsSync(extZip)) assets.push(extZip);
 
-if (dmgs.length === 0) throw new Error(`No .dmg in ${dmgDir} — run without --skip-build.`);
+if (dmgs.length === 0)
+  throw new Error(`No Vex-${electronVersion}-*.dmg in ${dmgDir} — run without --skip-build.`);
 if (!existsSync(extZip)) throw new Error(`No extension zip at ${extZip} — run without --skip-build.`);
 
 log(`Tag: ${tag}`);
