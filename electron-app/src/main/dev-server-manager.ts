@@ -12,6 +12,7 @@
 import { ChildProcess, spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { getEnhancedPath, resolveExecutable } from "./system-path.js";
 
 const MAX_LOG_LINES = 2000;
 
@@ -72,7 +73,13 @@ export class DevServerManager {
         cwd: project.path,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...extraEnv },
+        env: {
+          ...process.env,
+          PATH: getEnhancedPath(),
+          FORCE_COLOR: "0",
+          NO_COLOR: "1",
+          ...extraEnv,
+        },
       });
     } catch (err: unknown) {
       await this.updateProjectStatus(project.id, "error");
@@ -216,7 +223,10 @@ export class DevServerManager {
     const scriptKey = this.findScriptKey(project.path);
     if (scriptKey) {
       const pkgManager = project.package_manager ?? "npm";
-      return { exe: pkgManager, args: ["run", scriptKey] };
+      // Resolve to an absolute path so the spawn can't miss it when the GUI
+      // app's PATH differs from the user's shell (nvm/fnm/`n`/asdf/volta).
+      const exe = resolveExecutable(pkgManager) ?? pkgManager;
+      return { exe, args: ["run", scriptKey] };
     }
 
     // Fallback for static sites with no runnable script: serve the folder

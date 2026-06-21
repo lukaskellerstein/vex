@@ -6,6 +6,7 @@ import net from "net";
 import fs from "fs";
 import http from "http";
 import os from "os";
+import { getEnhancedPath } from "./system-path.js";
 
 interface ManagedProcess {
   process: ChildProcess;
@@ -314,7 +315,7 @@ export class ProcessManager extends EventEmitter {
     cwd: string;
     env: NodeJS.ProcessEnv;
   } {
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: this.buildChildPath() };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: getEnhancedPath() };
 
     if (app.isPackaged) {
       const aoDir = path.join(process.resourcesPath, "agent-orchestrator");
@@ -335,26 +336,6 @@ export class ProcessManager extends EventEmitter {
     const venvPython = path.join(cwd, ".venv", "bin", "python");
     const pythonBin = fs.existsSync(venvPython) ? venvPython : "python";
     return { pythonBin, cwd, env };
-  }
-
-  /**
-   * macOS/Linux GUI apps launch with a minimal PATH that omits user-local bins.
-   * The bundled backend spawns the `claude` CLI via claude-agent-sdk, so we
-   * prepend the common install locations to the child's PATH.
-   */
-  private buildChildPath(): string {
-    const home = os.homedir();
-    const extra = [
-      path.join(home, ".local", "bin"),
-      path.join(home, ".npm-global", "bin"),
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-      "/usr/bin",
-      "/bin",
-    ];
-    const current = process.env.PATH ?? "";
-    const merged = [...extra, ...current.split(path.delimiter)].filter(Boolean);
-    return Array.from(new Set(merged)).join(path.delimiter);
   }
 
   private waitForAgentManagerHealth(): Promise<void> {
