@@ -3,6 +3,7 @@ import type { Action, ResizeAction } from "../../shared/types";
 import { generateSelector } from "../utils/selector";
 import { computeDeltas, isSmallChange } from "../utils/delta";
 import { captureScreenshot } from "../hooks/useScreenshot";
+import { registerVisualRevert } from "../hooks/useUndo";
 
 interface ResizeModeProps {
   addAction: (action: Action) => void;
@@ -79,6 +80,13 @@ function getBoxValues(el: Element): {
       left: parseFloat(cs.marginLeft) || 0,
     },
   };
+}
+
+function restoreStyles(el: HTMLElement, styles: Record<string, string>) {
+  for (const [prop, value] of Object.entries(styles)) {
+    const cssProp = prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+    el.style.setProperty(cssProp, value);
+  }
 }
 
 function elementLabel(el: Element): string {
@@ -193,11 +201,7 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
   useEffect(() => {
     return () => {
       if (pendingActionRef.current && selectedElRef.current) {
-        const { beforeStyles } = pendingActionRef.current;
-        for (const [prop, value] of Object.entries(beforeStyles)) {
-          const cssProp = prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
-          selectedElRef.current.style.setProperty(cssProp, value);
-        }
+        restoreStyles(selectedElRef.current, pendingActionRef.current.beforeStyles);
         pendingActionRef.current = null;
       }
     };
@@ -299,6 +303,8 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
         setShowConfirm(true);
       } else {
         addAction(action);
+        const el = selectedEl;
+        registerVisualRevert(() => restoreStyles(el, beforeStyles));
       }
 
       updateRect();
@@ -314,7 +320,12 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
 
   const handleKeep = useCallback(() => {
     if (pendingActionRef.current) {
+      const { beforeStyles } = pendingActionRef.current;
       addAction(pendingActionRef.current);
+      const el = selectedElRef.current;
+      if (el) {
+        registerVisualRevert(() => restoreStyles(el, beforeStyles));
+      }
       pendingActionRef.current = null;
     }
     setShowConfirm(false);
@@ -323,11 +334,7 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
   const handleDiscard = useCallback(() => {
     // Revert styles
     if (pendingActionRef.current && selectedEl) {
-      const { beforeStyles } = pendingActionRef.current;
-      for (const [prop, value] of Object.entries(beforeStyles)) {
-        const cssProp = prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
-        selectedEl.style.setProperty(cssProp, value);
-      }
+      restoreStyles(selectedEl, pendingActionRef.current.beforeStyles);
       updateRect();
     }
     pendingActionRef.current = null;

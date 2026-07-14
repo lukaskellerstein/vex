@@ -3,6 +3,7 @@ import type { Action, InteractionMode, Selection } from "../shared/types";
 import { useSelectionState } from "./hooks/useSelectionState";
 import { useActions } from "./hooks/useActions";
 import { useHoverHighlight } from "./hooks/useHoverHighlight";
+import { revertAllVisualChanges } from "./hooks/useUndo";
 import { useNatsClient } from "./hooks/useNatsClient";
 import { captureScreenshot } from "./hooks/useScreenshot";
 import { collectMetadata } from "./utils/metadata";
@@ -262,6 +263,11 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         clearActions();
         deactivate();
         sendResponse({ cleared: true });
+        return;
+      }
+      if (message.action === "resetVisualChanges") {
+        revertAllVisualChanges();
+        sendResponse({ reset: true });
         return;
       }
     };

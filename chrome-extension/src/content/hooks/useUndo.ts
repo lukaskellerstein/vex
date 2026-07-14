@@ -1,23 +1,37 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-const MAX_STACK = 50;
+const MAX_STACK = 200;
+
+// Module-level stack so committed visual changes can be reverted even after
+// the mode component that applied them has unmounted (e.g. on batch send).
+const undoStack: Array<() => void> = [];
+
+export function registerVisualRevert(revert: () => void) {
+  undoStack.push(revert);
+  if (undoStack.length > MAX_STACK) {
+    undoStack.shift();
+  }
+}
+
+/** Revert all committed visual changes, newest first. */
+export function revertAllVisualChanges() {
+  while (undoStack.length > 0) {
+    undoStack.pop()!();
+  }
+}
 
 export function useUndo() {
-  const stackRef = useRef<Array<() => void>>([]);
-  const [canUndo, setCanUndo] = useState(false);
+  const [canUndo, setCanUndo] = useState(undoStack.length > 0);
 
   const pushUndo = useCallback((undo: () => void) => {
-    stackRef.current.push(undo);
-    if (stackRef.current.length > MAX_STACK) {
-      stackRef.current.shift();
-    }
+    registerVisualRevert(undo);
     setCanUndo(true);
   }, []);
 
   const undo = useCallback(() => {
-    const fn = stackRef.current.pop();
+    const fn = undoStack.pop();
     if (fn) fn();
-    setCanUndo(stackRef.current.length > 0);
+    setCanUndo(undoStack.length > 0);
   }, []);
 
   useEffect(() => {

@@ -7,6 +7,7 @@ import type {
 } from "../../shared/types";
 import { generateSelector } from "../utils/selector";
 import { captureScreenshot } from "../hooks/useScreenshot";
+import { registerVisualRevert } from "../hooks/useUndo";
 
 interface StylePanelProps {
   addAction: (action: Action) => void;
@@ -721,7 +722,14 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
 
   // Apply and commit styles, then close panel
   const handleApply = useCallback(async () => {
+    const el = selectedElRef.current;
+    const initialCssText = initialCssTextRef.current;
     await finalizeAction();
+    if (el) {
+      registerVisualRevert(() => {
+        el.style.cssText = initialCssText;
+      });
+    }
     cleanupHoverStyle();
     setSelectedEl(null);
   }, [finalizeAction, cleanupHoverStyle]);

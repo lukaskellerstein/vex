@@ -20,6 +20,38 @@ function sendToContent(
   });
 }
 
+const PERSISTENT_SCRIPT_ID = "vex-content";
+const LOCAL_HOSTNAMES = ["localhost", "127.0.0.1"];
+
+/** Register the content script for localhost origins so it survives page
+ *  reloads (e.g. dev-server HMR) and agent cursors can appear mid-batch. */
+async function ensurePersistentInjection(tabUrl: string): Promise<void> {
+  try {
+    const { hostname } = new URL(tabUrl);
+    if (!LOCAL_HOSTNAMES.includes(hostname)) return;
+
+    const existing = await chrome.scripting.getRegisteredContentScripts({
+      ids: [PERSISTENT_SCRIPT_ID],
+    });
+    if (existing.length > 0) return;
+
+    await chrome.scripting.registerContentScripts([
+      {
+        id: PERSISTENT_SCRIPT_ID,
+        js: ["src/content/index.js"],
+        matches: LOCAL_HOSTNAMES.flatMap((host) => [
+          `http://${host}/*`,
+          `https://${host}/*`,
+        ]),
+        runAt: "document_idle",
+        persistAcrossSessions: false,
+      },
+    ]);
+  } catch {
+    // Best effort — per-tab injection below still works without it.
+  }
+}
+
 async function ensureContentScript(tabId: number): Promise<boolean> {
   const pong = await sendToContent(tabId, { action: "ping" });
   if (pong) return true;
@@ -123,10 +155,11 @@ export function App() {
     if (response) {
       setSelectorIsActive(response.isActive);
       if (response.isActive) {
+        await ensurePersistentInjection(tabUrl);
         window.close();
       }
     }
-  }, [activeTabId, selectorIsActive]);
+  }, [activeTabId, selectorIsActive, tabUrl]);
 
   const handleClear = useCallback(async () => {
     await sendToContent(activeTabId, { action: "clearActions" });

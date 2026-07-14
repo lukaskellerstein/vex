@@ -121,10 +121,17 @@ export function Controls({
       setUploadProgress(100);
       setSendState("sent");
 
-      // Clear actions from extension and reload the page to remove visual changes
+      // Clear actions first (unmounts edit modes, reverting unsaved tweaks),
+      // then revert committed visual changes. No page reload — the content
+      // script must stay alive so agent cursors can appear once the batch runs.
       await onClear();
       if (activeTabId) {
-        chrome.tabs.reload(activeTabId);
+        await new Promise<void>((resolve) => {
+          chrome.tabs.sendMessage(activeTabId, { action: "resetVisualChanges" }, () => {
+            void chrome.runtime.lastError;
+            resolve();
+          });
+        });
       }
 
       // Close the popup after a brief delay so the user sees "Sent ✓"

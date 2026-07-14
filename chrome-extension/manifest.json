@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vex",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Visually select elements on any webpage, annotate them with instructions, and send to a coding agent for automatic code changes.",
   "permissions": [
     "activeTab",
@@ -9,7 +9,10 @@
     "storage"
   ],
   "host_permissions": [
-    "http://localhost:8420/*"
+    "http://localhost/*",
+    "https://localhost/*",
+    "http://127.0.0.1/*",
+    "https://127.0.0.1/*"
   ],
   "action": {
     "default_popup": "src/popup/index.html",
