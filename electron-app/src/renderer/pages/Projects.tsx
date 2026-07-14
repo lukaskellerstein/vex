@@ -168,19 +168,6 @@ function DeleteProjectDialog({
   );
 }
 
-const FAKE_PROJECTS: Project[] = [
-  { id: "fake-1", name: "acme-dashboard", path: "/home/lukas/Projects/acme-dashboard", framework: "Next.js", status: "running", lastActivityAt: "2026-03-31T09:12:00Z", agentCount: 3, agentRunningSeconds: 252 },
-  { id: "fake-2", name: "design-system", path: "/home/lukas/Projects/design-system", framework: "React + Storybook", status: "running", lastActivityAt: "2026-03-31T10:05:00Z", agentCount: 2, agentRunningSeconds: 723 },
-  { id: "fake-3", name: "shopfront-web", path: "/home/lukas/Projects/shopfront-web", framework: "Nuxt", status: "running", lastActivityAt: "2026-03-31T08:30:00Z", agentCount: 5, agentRunningSeconds: 107 },
-  { id: "fake-4", name: "portfolio-site", path: "/home/lukas/Projects/portfolio-site", framework: "Astro", status: "stopped", lastActivityAt: "2026-03-29T14:20:00Z", agentCount: 0 },
-  { id: "fake-5", name: "admin-panel", path: "/home/lukas/Projects/admin-panel", framework: "Angular", status: "running", lastActivityAt: "2026-03-28T11:00:00Z", agentCount: 1, agentRunningSeconds: 511 },
-  { id: "fake-6", name: "landing-page-v2", path: "/home/lukas/Projects/landing-page-v2", framework: "Svelte", status: "stopped", lastActivityAt: "2026-03-27T16:30:00Z", agentCount: 0 },
-  { id: "fake-7", name: "blog-platform", path: "/home/lukas/Projects/blog-platform", framework: "Remix", status: "running", lastActivityAt: "2026-03-26T09:15:00Z", agentCount: 4, agentRunningSeconds: 1338 },
-  { id: "fake-8", name: "docs-site", path: "/home/lukas/Projects/docs-site", framework: "VitePress", status: "stopped", lastActivityAt: "2026-03-25T20:00:00Z", agentCount: 0 },
-  { id: "fake-9", name: "crm-frontend", path: "/home/lukas/Projects/crm-frontend", framework: "Vue.js", status: "stopped", lastActivityAt: "2026-03-24T13:45:00Z", agentCount: 0 },
-  { id: "fake-10", name: "booking-app", path: "/home/lukas/Projects/booking-app", framework: "SolidJS", status: "running", lastActivityAt: "2026-03-23T18:00:00Z", agentCount: 2, agentRunningSeconds: 45 },
-];
-
 export function Projects() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -193,10 +180,9 @@ export function Projects() {
   async function fetchProjects() {
     try {
       const data = await window.electronAPI.getProjects();
-      const real = Array.isArray(data) ? data : [];
-      setProjects([...real, ...FAKE_PROJECTS]);
+      setProjects(Array.isArray(data) ? data : []);
     } catch {
-      setProjects(FAKE_PROJECTS);
+      setProjects([]);
     } finally {
       setLoading(false);
     }

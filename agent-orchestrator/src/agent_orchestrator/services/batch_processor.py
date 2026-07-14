@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services.agent_manager import AgentManagerService
 from agent_orchestrator.services import nats_service
-from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile, _VEX_SESSION_NS
+from agent_orchestrator.adapters.claude_code_sdk import _VEX_SESSION_NS
 from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
@@ -139,6 +139,8 @@ async def continue_agent(agent_id: str, message: str) -> None:
             project_id=project_id,
             project_path=project["path"],
             adapter_type="claude-code-sdk",
+            model=project["model"],
+            auth_header=project["auth_header"],
         )
 
         # Resume conversation via adapter
@@ -152,6 +154,8 @@ async def continue_agent(agent_id: str, message: str) -> None:
             project_path=project["path"],
             message=message,
             session_id=session_id,
+            model=project["model"],
+            auth_header=project["auth_header"],
         )
 
         # Extract cost/duration from session steps
@@ -172,6 +176,7 @@ async def continue_agent(agent_id: str, message: str) -> None:
             await _persist_trace(
                 db, None, agent_id, agent["name"],
                 session, cost_usd, duration_ms, completed_at,
+                agent_model=project["model"],
             )
 
         if was_cancelled:
@@ -213,6 +218,7 @@ async def continue_agent(agent_id: str, message: str) -> None:
         await _persist_error_trace(
             db, None, agent_id, agent["name"],
             "failed", str(Exception), completed_at,
+            agent_model=project["model"],
         )
 
     finally:
@@ -466,6 +472,8 @@ async def _process_action(
             project_id=project["id"],
             project_path=project["path"],
             adapter_type="claude-code-sdk",
+            model=project["model"],
+            auth_header=project["auth_header"],
         )
 
         # Get adapter and send task
@@ -501,7 +509,10 @@ async def _process_action(
 
         # Persist trace
         completed_at = datetime.now(UTC).isoformat()
-        await _persist_trace(db, batch_id, agent_id, agent_name, session, cost_usd, duration_ms, completed_at)
+        await _persist_trace(
+            db, batch_id, agent_id, agent_name, session, cost_usd, duration_ms,
+            completed_at, agent_model=project["model"],
+        )
 
         if was_cancelled:
             await db.execute(
@@ -552,7 +563,10 @@ async def _process_action(
             (agent_id,),
         )
         try:
-            await _persist_error_trace(db, batch_id, agent_id, agent_name, "cancelled", "Cancelled by user", completed_at)
+            await _persist_error_trace(
+                db, batch_id, agent_id, agent_name, "cancelled", "Cancelled by user",
+                completed_at, agent_model=project["model"],
+            )
         except Exception:
             logger.exception("Failed to persist cancel trace for agent %s", agent_id)
         await db.commit()
@@ -574,7 +588,10 @@ async def _process_action(
             (agent_id,),
         )
         try:
-            await _persist_error_trace(db, batch_id, agent_id, agent_name, "failed", error_msg, completed_at)
+            await _persist_error_trace(
+                db, batch_id, agent_id, agent_name, "failed", error_msg,
+                completed_at, agent_model=project["model"],
+            )
         except Exception:
             logger.exception("Failed to persist error trace for agent %s", agent_id)
 
@@ -605,6 +622,7 @@ async def _persist_trace(
     cost_usd: float | None,
     duration_ms: int | None,
     completed_at: str,
+    agent_model: str | None = None,
 ) -> None:
     """Persist agent execution trace and steps to DB."""
     trace_id = uuid.uuid4().hex
@@ -627,7 +645,7 @@ async def _persist_trace(
            created_at, completed_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            trace_id, batch_id, agent_id, agent_name, get_agent_profile().get("model", "claude-opus-4-6"),
+            trace_id, batch_id, agent_id, agent_name, agent_model or "default",
             "completed", duration_ms, cost_usd, total_tokens, input_tokens, output_tokens,
             now, completed_at,
         ),
@@ -661,6 +679,7 @@ async def _persist_error_trace(
     status: str,
     error_message: str,
     completed_at: str,
+    agent_model: str | None = None,
 ) -> None:
     """Persist a minimal trace for agents that failed/cancelled before normal trace persistence."""
     trace_id = uuid.uuid4().hex
@@ -672,7 +691,7 @@ async def _persist_error_trace(
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             trace_id, batch_id, agent_id, agent_name,
-            get_agent_profile().get("model", "claude-opus-4-6"),
+            agent_model or "default",
             status, None, None, 0, now, completed_at,
         ),
     )
@@ -745,6 +764,13 @@ def _build_prompt(
     url = action_data.get("url")
     if url:
         parts.append(f"URL: {url}")
+
+    if project["auth_header"]:
+        parts.append(
+            "The running app at this URL is pre-authenticated in your `playwright-vex` "
+            "browser — you may open it to visually verify your change. Do NOT start, "
+            "restart, or manage any dev server."
+        )
 
     parts.append("")
 

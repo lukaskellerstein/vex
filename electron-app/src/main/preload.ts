@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   getProjects: () => ipcRenderer.invoke("get-projects"),
+  getModels: () => ipcRenderer.invoke("get-models"),
   selectFolder: () => ipcRenderer.invoke("select-folder"),
   createProject: (name: string, path: string) =>
     ipcRenderer.invoke("create-project", name, path),
@@ -13,6 +14,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("stop-dev-server", projectId),
   getDevServerLogs: (projectId: string, offset: number) =>
     ipcRenderer.invoke("get-dev-server-logs", projectId, offset),
+  killProjectPort: (projectId: string) =>
+    ipcRenderer.invoke("kill-project-port", projectId),
+  resolveDevPort: (projectId: string) =>
+    ipcRenderer.invoke("resolve-dev-port", projectId),
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
   getAgents: () => ipcRenderer.invoke("get-agents"),
   getProjectAgents: (projectId: string) =>

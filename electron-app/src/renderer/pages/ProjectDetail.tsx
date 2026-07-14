@@ -16,6 +16,8 @@ interface ProjectData {
   dev_command?: string | null;
   dev_port?: number | null;
   dev_server_url?: string | null;
+  model?: string | null;
+  auth_header?: string | null;
   status?: string;
   pid?: number | null;
   started_at?: string | null;

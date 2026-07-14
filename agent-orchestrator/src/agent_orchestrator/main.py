@@ -19,8 +19,8 @@ from agent_orchestrator.services import nats_service
 from agent_orchestrator.services import batch_processor
 from agent_orchestrator.services import marketplace as marketplace_service
 from agent_orchestrator.services.agent_manager import AgentManagerService
-from agent_orchestrator.adapters.claude_code_sdk import ClaudeCodeSDKAdapter, load_config, get_agent_profile
-from agent_orchestrator.api import projects, batches, agents, tasks, config, activity, storage
+from agent_orchestrator.adapters.claude_code_sdk import ClaudeCodeSDKAdapter, load_config
+from agent_orchestrator.api import projects, batches, agents, tasks, config, activity, storage, models
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +63,10 @@ async def _cleanup_orphaned_records() -> None:
 
     # Find orphaned agents that have no trace before updating their status
     cursor = await db.execute(
-        """SELECT a.id, a.name, t.batch_id FROM agents a
+        """SELECT a.id, a.name, t.batch_id, p.model FROM agents a
            LEFT JOIN tasks t ON t.agent_id = a.id
            LEFT JOIN agent_traces at ON at.agent_id = a.id
+           LEFT JOIN projects p ON p.id = a.project_id
            WHERE a.status IN ('running', 'starting', 'stopping', 'created', 'registered')
              AND at.id IS NULL"""
     )
@@ -73,14 +74,13 @@ async def _cleanup_orphaned_records() -> None:
 
     # Create synthetic traces for orphaned agents
     now = datetime.now(UTC).isoformat()
-    model = get_agent_profile().get("model", "claude-opus-4-6")
     for row in orphaned_rows:
         trace_id = uuid.uuid4().hex
         await db.execute(
             """INSERT INTO agent_traces (id, batch_id, agent_id, agent_name, agent_model, status,
                total_duration_ms, total_cost_usd, total_tokens, created_at, completed_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (trace_id, row["batch_id"], row["id"], row["name"], model,
+            (trace_id, row["batch_id"], row["id"], row["name"], row["model"] or "default",
              "failed", None, None, 0, now, now),
         )
         step_id = uuid.uuid4().hex
@@ -134,3 +134,4 @@ app.include_router(tasks.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(storage.router, prefix="/api")
+app.include_router(models.router, prefix="/api")

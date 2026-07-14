@@ -1,8 +1,10 @@
 """Claude Code SDK adapter — real integration via ClaudeSDKClient."""
 
 import asyncio
+import copy
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -74,6 +76,69 @@ def get_config() -> dict:
     return _config
 
 
+# Temp dir for per-agent Playwright MCP auth config files.
+_PW_CONFIG_DIR = Path.home() / ".vex" / "tmp"
+
+
+def _parse_headers(raw: str | None) -> dict[str, str]:
+    """Parse a pasted auth value into HTTP headers.
+
+    Two accepted forms:
+      * One or more ``Name: value`` header lines — used verbatim.
+      * A bare token with no ``:`` — wrapped as ``Authorization: Bearer <token>``
+        (a leading ``Bearer `` the user may have included is not doubled).
+
+    Blank and malformed lines (empty name/value) are skipped.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return {}
+
+    # A bare token (no header name) → default to a Bearer Authorization header.
+    if ":" not in raw:
+        token = raw[7:].strip() if raw[:7].lower() == "bearer " else raw
+        return {"Authorization": f"Bearer {token}"}
+
+    headers: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        name, _, value = line.partition(":")
+        name, value = name.strip(), value.strip()
+        if name and value:
+            headers[name] = value
+    return headers
+
+
+def _inject_playwright_auth(
+    mcp_servers: dict, auth_header: str | None, agent_id: str
+) -> tuple[dict, Path | None]:
+    """Rewrite the ``playwright-vex`` MCP server to launch with an auth ``--config``.
+
+    Writes a Playwright MCP config file that injects ``extraHTTPHeaders`` into the
+    browser context so the agent's Playwright browser can reach an authenticated
+    web app. Returns ``(mcp_servers, cfg_path)``; a no-op ``(mcp_servers, None)``
+    when there is no auth header or no ``playwright-vex`` server to rewrite.
+    """
+    headers = _parse_headers(auth_header)
+    if not headers or "playwright-vex" not in mcp_servers:
+        return mcp_servers, None
+
+    _PW_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg_path = _PW_CONFIG_DIR / f"pw-{agent_id}.json"
+    cfg = {"browser": {"isolated": True, "contextOptions": {"extraHTTPHeaders": headers}}}
+    cfg_path.write_text(json.dumps(cfg))
+    try:
+        os.chmod(cfg_path, 0o600)
+    except OSError:
+        pass
+
+    servers = copy.deepcopy(mcp_servers)
+    servers["playwright-vex"]["args"] = ["@playwright/mcp@latest", "--config", str(cfg_path)]
+    return servers, cfg_path
+
+
 def get_agent_profile(profile_name: str = "general") -> dict:
     """Return an agent profile from config, or sensible defaults."""
     agents = _config.get("agents", {})
@@ -82,7 +147,6 @@ def get_agent_profile(profile_name: str = "general") -> dict:
         return profile
     logger.warning("Agent profile '%s' not found, using defaults", profile_name)
     return {
-        "model": "claude-sonnet-4-6",
         "max_turns": None,
         "plugins": [],
         "allowed_tools": [],
@@ -108,6 +172,8 @@ class SDKAgentSession:
     file_logger: AgentFileLogger | None = None
     # Maps tool_use_id → tool_name for correlating ToolResultBlocks
     tool_use_names: dict[str, str] = field(default_factory=dict)
+    # Per-agent Playwright MCP auth config file, deleted on stop()
+    pw_config_path: Path | None = None
 
 
 class ClaudeCodeSDKAdapter(AgentAdapter):
@@ -121,9 +187,18 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         self._profile_name = profile_name
 
     async def start(
-        self, project_id: str, project_path: str, agent_id: str | None = None
+        self,
+        project_id: str,
+        project_path: str,
+        agent_id: str | None = None,
+        model: str | None = None,
+        auth_header: str | None = None,
     ) -> AgentProcess:
-        """Create a ClaudeSDKClient session for the given project."""
+        """Create a ClaudeSDKClient session for the given project.
+
+        model=None runs the agent on the Claude Code default model.
+        auth_header, when set, is injected into the agent's Playwright browser.
+        """
         agent_id = agent_id or generate_agent_id()
         profile = get_agent_profile(self._profile_name)
 
@@ -131,9 +206,13 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         plugin_refs = profile.get("plugins", [])
         plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
 
+        mcp_servers, pw_config_path = _inject_playwright_auth(
+            profile.get("mcp_servers", {}), auth_header, agent_id
+        )
+
         session_id = str(uuid.uuid5(_VEX_SESSION_NS, agent_id))
         options = ClaudeAgentOptions(
-            model=profile.get("model", "claude-sonnet-4-6"),
+            model=model,
             system_prompt={
                 "type": "preset",
                 "preset": "claude_code",
@@ -144,7 +223,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             max_turns=profile.get("max_turns"),
             allowed_tools=profile.get("allowed_tools", []),
             disallowed_tools=profile.get("disallowed_tools", []),
-            mcp_servers=profile.get("mcp_servers", {}),
+            mcp_servers=mcp_servers,
             plugins=plugins,
             hooks=self._make_hooks(agent_id),
             session_id=session_id,
@@ -171,6 +250,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             session_id=session_id,
             project_path=project_path,
             file_logger=file_logger,
+            pw_config_path=pw_config_path,
         )
         self._sessions[agent_id] = session
 
@@ -179,7 +259,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             "for project %s at %s",
             agent_id,
             self._profile_name,
-            profile.get("model", "?"),
+            model or "default",
             len(plugins),
             project_id,
             project_path,
@@ -194,6 +274,11 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 try:
                     await session.client.__aexit__(None, None, None)
                 except Exception:
+                    pass
+            if session.pw_config_path:
+                try:
+                    session.pw_config_path.unlink(missing_ok=True)
+                except OSError:
                     pass
             session.status = "idle"
             logger.info("Stopped claude-code-sdk agent %s", agent_id)
@@ -228,10 +313,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
 
         # Start file logger
         if session.file_logger:
-            profile = get_agent_profile(self._profile_name)
             session.file_logger.start(
                 profile_name=self._profile_name,
-                model=profile.get("model", "?"),
+                model=(session.options.model if session.options else None) or "default",
                 prompt=prompt,
             )
 
@@ -243,14 +327,14 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 p.get("path", "")
                 for p in (session.options.plugins if session.options else [])
             ]
-            profile = get_agent_profile(self._profile_name)
+            intended_model = (session.options.model if session.options else None) or "default"
             print(
                 f"\n{_BOLD}{_BLUE}{'─' * 60}{_RESET}"
                 f"\n{_BOLD}{_BLUE}  Agent {agent_id} — Intended Config{_RESET}"
                 f"\n{_BLUE}{'─' * 60}{_RESET}"
             )
             print(f"  {_BLUE}[CONFIG]{_RESET} Profile: {self._profile_name}")
-            print(f"  {_BLUE}[CONFIG]{_RESET} Model: {profile.get('model', '?')}")
+            print(f"  {_BLUE}[CONFIG]{_RESET} Model: {intended_model}")
             print(f"  {_BLUE}[CONFIG]{_RESET} Plugins ({len(intended_plugins)}):")
             for p in intended_plugins:
                 print(f"    {_CYAN}[PLUGIN]{_RESET} {p}")
@@ -269,12 +353,18 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         project_path: str,
         message: str,
         session_id: str,
+        model: str | None = None,
+        auth_header: str | None = None,
     ) -> None:
         """Resume a conversation with a finished agent using SDK session persistence."""
         profile = get_agent_profile(self._profile_name)
 
         plugin_refs = profile.get("plugins", [])
         plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
+
+        mcp_servers, pw_config_path = _inject_playwright_auth(
+            profile.get("mcp_servers", {}), auth_header, agent_id
+        )
 
         # Check if a session file exists for this agent so we can resume it.
         # Agents created before the session_id fix won't have one.
@@ -291,7 +381,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             )
 
         options = ClaudeAgentOptions(
-            model=profile.get("model", "claude-sonnet-4-6"),
+            model=model,
             system_prompt={
                 "type": "preset",
                 "preset": "claude_code",
@@ -302,7 +392,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             max_turns=profile.get("max_turns"),
             allowed_tools=profile.get("allowed_tools", []),
             disallowed_tools=profile.get("disallowed_tools", []),
-            mcp_servers=profile.get("mcp_servers", {}),
+            mcp_servers=mcp_servers,
             plugins=plugins,
             hooks=self._make_hooks(agent_id),
             **resume_opts,
@@ -328,6 +418,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             session_id=session_id,
             project_path=project_path,
             file_logger=file_logger,
+            pw_config_path=pw_config_path,
         )
         self._sessions[agent_id] = session
 
@@ -338,7 +429,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         if session.file_logger:
             session.file_logger.start(
                 profile_name=self._profile_name,
-                model=profile.get("model", "?"),
+                model=model or "default",
                 prompt=message,
             )
 
@@ -402,6 +493,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             profile,
                             intended_plugins,
                             session.file_logger,
+                            intended_model=(
+                                session.options.model if session.options else None
+                            ),
                         )
                     continue
 
@@ -851,6 +945,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         intended_profile: dict,
         intended_plugins: list[str],
         file_logger: AgentFileLogger | None = None,
+        intended_model: str | None = None,
     ) -> None:
         """Print colored agent init summary and publish config to NATS."""
         loaded_plugins = init_data.get("plugins", [])
@@ -931,7 +1026,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 "agent_id": agent_id,
                 "timestamp": datetime.now(UTC).isoformat(),
                 "intended": {
-                    "profile": intended_profile.get("model", "?"),
+                    "profile": intended_model or "default",
                     "plugins": intended_plugins,
                     "allowed_tools": intended_profile.get("allowed_tools", []),
                     "disallowed_tools": intended_profile.get("disallowed_tools", []),

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   FolderOpen,
   ExternalLink,
@@ -9,6 +9,11 @@ import {
   Play,
   Square,
   Loader2,
+  ChevronDown,
+  Check,
+  Zap,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { FrameworkBadge } from "../projects/FrameworkBadge";
 import { StatusIndicator } from "../projects/StatusIndicator";
@@ -23,10 +28,25 @@ interface ProjectData {
   dev_command?: string | null;
   dev_port?: number | null;
   dev_server_url?: string | null;
+  model?: string | null;
+  auth_header?: string | null;
   status?: string;
   pid?: number | null;
   started_at?: string | null;
 }
+
+interface ModelOption {
+  value: string;
+  displayName: string;
+  description?: string;
+}
+
+const FALLBACK_MODELS: ModelOption[] = [
+  { value: "default", displayName: "Default" },
+  { value: "sonnet", displayName: "Sonnet" },
+  { value: "opus", displayName: "Opus" },
+  { value: "haiku", displayName: "Haiku" },
+];
 
 interface ProjectInfoPanelProps {
   project: ProjectData;
@@ -170,7 +190,17 @@ export function ProjectInfoPanel({
             <span style={metaLabel}>Package Manager</span>
             <span style={metaValue}>{project.package_manager ?? "npm"}</span>
           </div>
+          <div style={metaRow}>
+            <span style={metaLabel}>Model</span>
+            <ModelSelect project={project} />
+          </div>
         </div>
+      </div>
+
+      {/* Authentication */}
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+        <p style={{ ...sectionLabel, marginBottom: "8px" }}>Authentication</p>
+        <AuthHeaderField project={project} />
       </div>
 
       {/* Dev Server */}
@@ -181,6 +211,10 @@ export function ProjectInfoPanel({
         </div>
 
         <ServerToggleButton status={status} onClick={onServerToggle} />
+
+        {!isRunning && !isStarting && (
+          <FreePortButton projectId={project.id} />
+        )}
 
         {isRunning && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "12px" }}>
@@ -256,6 +290,167 @@ export function ProjectInfoPanel({
             </span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ModelSelect({ project }: { project: ProjectData }) {
+  const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
+  const [selected, setSelected] = useState(project.model ?? "default");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    window.electronAPI
+      .getModels()
+      .then((data) => {
+        if (data?.models?.length) setModels(data.models);
+      })
+      .catch(() => setModels(FALLBACK_MODELS));
+  }, []);
+
+  // Resync when the project refreshes (e.g. via NATS project events)
+  useEffect(() => {
+    setSelected(project.model ?? "default");
+  }, [project.model]);
+
+  // The stored value may be a custom/stale model not present in the list —
+  // keep it selectable so the dropdown never shows a wrong value.
+  const options = models.some((m) => m.value === selected)
+    ? models
+    : [...models, { value: selected, displayName: selected }];
+
+  async function handleChange(value: string) {
+    const previous = selected;
+    setSelected(value);
+    try {
+      await window.electronAPI.updateProject(project.id, {
+        model: value === "default" ? null : value,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setSelected(previous);
+    }
+  }
+
+  return (
+    <span style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+      {saved && <Check size={12} style={{ color: "var(--status-success)" }} />}
+      <select
+        value={selected}
+        onChange={(e) => handleChange(e.target.value)}
+        title={options.find((m) => m.value === selected)?.description ?? ""}
+        style={{
+          ...metaValue,
+          border: "1px solid var(--border)",
+          appearance: "none",
+          cursor: "pointer",
+          paddingRight: "22px",
+          maxWidth: "210px",
+          outline: "none",
+        }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
+        onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+      >
+        {options.map((m) => (
+          <option key={m.value} value={m.value} title={m.description ?? ""}>
+            {m.displayName}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        size={12}
+        style={{
+          position: "absolute",
+          right: "6px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          color: "var(--foreground-dim)",
+          pointerEvents: "none",
+        }}
+      />
+    </span>
+  );
+}
+
+function AuthHeaderField({ project }: { project: ProjectData }) {
+  const [value, setValue] = useState(project.auth_header ?? "");
+  const [show, setShow] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Resync when the project refreshes (e.g. via NATS project events)
+  useEffect(() => {
+    setValue(project.auth_header ?? "");
+  }, [project.auth_header]);
+
+  async function save() {
+    if (value === (project.auth_header ?? "")) return; // no change
+    try {
+      await window.electronAPI.updateProject(project.id, {
+        auth_header: value.trim() ? value : null,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setValue(project.auth_header ?? ""); // roll back on failure
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onFocus={(e) => (e.currentTarget.style.borderColor = "var(--primary)")}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = "var(--border)";
+          save();
+        }}
+        rows={2}
+        spellCheck={false}
+        placeholder="Paste a token, or a full header line — e.g. Authorization: Bearer …"
+        style={
+          {
+            width: "100%",
+            resize: "vertical",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
+            fontSize: "12px",
+            lineHeight: 1.5,
+            padding: "8px 10px",
+            borderRadius: "var(--radius)",
+            border: "1px solid var(--border)",
+            background: "var(--background)",
+            color: "var(--foreground)",
+            outline: "none",
+            WebkitTextSecurity: show ? "none" : "disc",
+          } as React.CSSProperties
+        }
+      />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+        <span style={{ fontSize: "11px", color: "var(--foreground-dim)", lineHeight: 1.4 }}>
+          Sent to your app in the agent's Playwright browser. Paste a bare token (used as{" "}
+          <code>Authorization: Bearer …</code>) or full <code>Name: value</code> header lines, one
+          per line. Leave empty for no auth.
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          {saved && <Check size={12} style={{ color: "var(--status-success)" }} />}
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            title={show ? "Hide" : "Show"}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--foreground-dim)",
+              display: "inline-flex",
+              padding: 0,
+            }}
+          >
+            {show ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
+        </span>
       </div>
     </div>
   );
@@ -341,5 +536,91 @@ function ServerToggleButton({ status, onClick }: { status: string; onClick: () =
       <Square size={14} />
       Stop Server
     </button>
+  );
+}
+
+function FreePortButton({ projectId }: { projectId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [port, setPort] = useState<number | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI
+      .resolveDevPort(projectId)
+      .then((p) => {
+        if (!cancelled) setPort(p);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  async function handleClick() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await window.electronAPI.killProjectPort(projectId);
+      const freed = result?.port ?? port;
+      const killedCount = result?.killed?.length ?? 0;
+      if (result?.status === "killed") {
+        setMessage(`Freed port ${freed} (killed ${killedCount} process${killedCount === 1 ? "" : "es"}).`);
+      } else if (result?.status === "no_process") {
+        setMessage(`No process was using port ${freed}.`);
+      } else if (result?.status === "partial") {
+        setMessage(`Port ${freed} is still in use — some processes could not be killed.`);
+      } else {
+        setMessage(result?.detail ?? `Could not free port ${freed}.`);
+      }
+    } catch {
+      setMessage(`Could not free port ${port ?? ""}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: "8px" }}>
+      <button
+        onClick={handleClick}
+        disabled={busy}
+        title={port != null ? `Kill any process listening on port ${port}` : "Kill the process on this project's dev port"}
+        style={{
+          width: "100%",
+          height: "28px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "6px",
+          borderRadius: "var(--radius)",
+          fontSize: "12px",
+          fontWeight: 500,
+          background: "transparent",
+          border: "1px solid var(--border)",
+          color: "var(--foreground-muted)",
+          cursor: busy ? "not-allowed" : "pointer",
+          opacity: busy ? 0.7 : 1,
+          transition: "all 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          if (busy) return;
+          e.currentTarget.style.color = "var(--status-error)";
+          e.currentTarget.style.borderColor = "hsla(0, 84%, 60%, 0.3)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--foreground-muted)";
+          e.currentTarget.style.borderColor = "var(--border)";
+        }}
+      >
+        {busy ? <Loader2 size={13} className="spin" /> : <Zap size={13} />}
+        {busy ? "Freeing port..." : port != null ? `Free Port ${port}` : "Free Dev Port"}
+      </button>
+      {message && (
+        <p style={{ fontSize: "11px", color: "var(--foreground-dim)", marginTop: "6px", lineHeight: 1.4 }}>
+          {message}
+        </p>
+      )}
+    </div>
   );
 }

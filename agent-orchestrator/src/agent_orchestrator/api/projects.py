@@ -25,11 +25,26 @@ def _row_to_project(row) -> dict:
         dev_port=row["dev_port"],
         package_manager=row["package_manager"],
         styling_approach=row["styling_approach"],
+        model=row["model"],
+        auth_header=row["auth_header"],
         status=row["status"],
         dev_server_url=row["dev_server_url"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     ).model_dump(mode="json")
+
+
+def _redact(project_dict: dict) -> dict:
+    """Return a copy of a project dict with secret fields stripped.
+
+    ``auth_header`` is a credential — it must never reach the Chrome extension
+    (which reads the project list over HTTP and subscribes to project events over
+    NATS/WebSocket). The single-project GET is Electron-only and returns it intact
+    so the detail UI can edit it.
+    """
+    redacted = dict(project_dict)
+    redacted.pop("auth_header", None)
+    return redacted
 
 
 @router.get("/projects")
@@ -62,7 +77,7 @@ async def list_projects():
 
     projects = []
     for r in rows:
-        p = _row_to_project(r)
+        p = _redact(_row_to_project(r))
         info = agent_map.get(r["id"], {})
         p["agentCount"] = info.get("agentCount", 0)
         p["agentRunningSeconds"] = info.get("agentRunningSeconds", 0)
@@ -99,7 +114,7 @@ async def create_project(body: ProjectCreate):
     await nats_service.publish("vex.project.events", {
         "event": "created",
         "project_id": project_id,
-        "project": project_data,
+        "project": _redact(project_data),
         "timestamp": now,
     })
 
@@ -129,6 +144,14 @@ async def update_project(project_id: str, body: ProjectUpdate):
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
+    # "default" / "" mean "use the Claude Code default" — stored as NULL.
+    if updates.get("model") in ("", "default"):
+        updates["model"] = None
+
+    # An empty auth header means "no auth" — stored as NULL so injection is skipped.
+    if "auth_header" in updates and not (updates["auth_header"] or "").strip():
+        updates["auth_header"] = None
+
     updates["updated_at"] = datetime.now(UTC).isoformat()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [project_id]
@@ -145,7 +168,7 @@ async def update_project(project_id: str, body: ProjectUpdate):
     await nats_service.publish("vex.project.events", {
         "event": "updated",
         "project_id": project_id,
-        "project": project_data,
+        "project": _redact(project_data),
         "timestamp": updates["updated_at"],
     })
 

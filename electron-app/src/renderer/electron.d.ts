@@ -32,6 +32,10 @@ declare global {
   interface Window {
     electronAPI: {
       getProjects: () => Promise<any[]>;
+      getModels: () => Promise<{
+        models: Array<{ value: string; displayName: string; description?: string }>;
+        source: string;
+      }>;
       getProject: (projectId: string) => Promise<any>;
       createProject: (name: string, path: string) => Promise<any>;
       updateProject: (projectId: string, data: Record<string, unknown>) => Promise<any>;
@@ -40,6 +44,8 @@ declare global {
       startDevServer: (projectId: string) => Promise<any>;
       stopDevServer: (projectId: string) => Promise<any>;
       getDevServerLogs: (projectId: string, offset: number) => Promise<any>;
+      killProjectPort: (projectId: string) => Promise<any>;
+      resolveDevPort: (projectId: string) => Promise<number | null>;
       openExternal: (url: string) => Promise<void>;
       getAgents: () => Promise<any[]>;
       getProjectAgents: (projectId: string) => Promise<any>;

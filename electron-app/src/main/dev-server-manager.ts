@@ -6,15 +6,21 @@
  * - Stop: kills the process group via SIGTERM
  * - Logs: buffered in-memory (up to 2000 lines)
  * - On Electron close: all spawned servers are killed
- * - On Electron restart: clean slate — everything is idle
+ * - On abnormal exit (crash / force-quit): servers are orphaned, then adopted
+ *   on the next launch via a persisted PID file (`~/.vex/dev-servers.json`) so
+ *   the user can still stop them.
  */
 
-import { ChildProcess, spawn } from "child_process";
+import { ChildProcess, spawn, spawnSync } from "child_process";
 import fs from "fs";
+import net from "net";
+import os from "os";
 import path from "path";
 import { getEnhancedPath, resolveExecutable } from "./system-path.js";
 
 const MAX_LOG_LINES = 2000;
+
+const PERSIST_FILE = path.join(os.homedir(), ".vex", "dev-servers.json");
 
 const PORT_IN_USE_PATTERNS = [
   "EADDRINUSE",
@@ -24,10 +30,26 @@ const PORT_IN_USE_PATTERNS = [
 ];
 
 interface DevServer {
-  process: ChildProcess;
+  process: ChildProcess | null; // null for recovered orphans (no live handle)
+  pid: number | null; // child.pid (fresh) or persisted pid (recovered)
   logLines: string[];
   url: string | null;
   portError: string | null;
+  recovered: boolean; // true => adopted from a previous session
+  port: number | null; // for the port-listening guard
+  cwd: string; // for the ps command-match guard
+  command: string; // e.g. "npm run dev"
+  startedAt: number; // epoch ms
+}
+
+/** Subset of DevServer persisted to disk so orphans survive an Electron restart. */
+interface PersistedServer {
+  pid: number | null;
+  port: number | null;
+  url: string | null;
+  cwd: string;
+  command: string;
+  startedAt: number;
 }
 
 export interface ProjectInfo {
@@ -36,6 +58,7 @@ export interface ProjectInfo {
   dev_command?: string;
   dev_port?: number;
   package_manager?: string;
+  framework?: string;
 }
 
 type StatusUpdater = (
@@ -88,11 +111,18 @@ export class DevServerManager {
 
     const server: DevServer = {
       process: child,
+      pid: child.pid ?? null,
       logLines: [],
       url: null,
       portError: null,
+      recovered: false,
+      port: project.dev_port ?? null,
+      cwd: project.path,
+      command: `${exe} ${args.join(" ")}`,
+      startedAt: Date.now(),
     };
     this.servers.set(project.id, server);
+    this.persist();
 
     this.appendLog(server, `[system] Started: ${exe} ${args.join(" ")} (pid ${child.pid}) in ${project.path}`);
 
@@ -104,7 +134,11 @@ export class DevServerManager {
         const detected = this.detectUrl(line);
         if (detected) {
           server.url = detected;
+          // Runtime URL is the source of truth — override any seeded guess.
+          const detectedPort = this.parsePort(detected);
+          if (detectedPort != null) server.port = detectedPort;
           this.updateProjectStatus(project.id, "running", detected);
+          this.persist();
         }
       }
 
@@ -133,6 +167,7 @@ export class DevServerManager {
       const portError = server.portError;
       if (this.servers.has(project.id)) {
         this.servers.delete(project.id);
+        this.persist();
         if (portError) {
           this.updateProjectStatus(project.id, "error");
         } else {
@@ -150,38 +185,88 @@ export class DevServerManager {
 
     this.appendLog(server, "[system] Stopping dev server...");
 
+    // Recovered orphans have no ChildProcess handle — kill by PID.
+    if (!server.process) {
+      return this.stopByPid(projectId, server);
+    }
+
     return new Promise((resolve) => {
+      const proc = server.process!;
       const forceKillTimer = setTimeout(() => {
         try {
-          server.process.kill("SIGKILL");
+          proc.kill("SIGKILL");
         } catch {
           // already dead
         }
         this.servers.delete(projectId);
+        this.persist();
         this.updateProjectStatus(projectId, "idle");
         resolve({ status: "stopped" });
       }, 5000);
 
-      server.process.once("exit", () => {
+      proc.once("exit", () => {
         clearTimeout(forceKillTimer);
         this.appendLog(server, "[system] Dev server stopped.");
         this.servers.delete(projectId);
+        this.persist();
         this.updateProjectStatus(projectId, "idle");
         resolve({ status: "stopped" });
       });
 
       try {
-        if (server.process.pid) {
-          process.kill(-server.process.pid, "SIGTERM");
+        if (proc.pid) {
+          process.kill(-proc.pid, "SIGTERM");
         }
       } catch {
         try {
-          server.process.kill("SIGTERM");
+          proc.kill("SIGTERM");
         } catch {
           // already dead
         }
       }
     });
+  }
+
+  /**
+   * Stop a recovered orphan by PID. There is no ChildProcess "exit" event to
+   * await, so we signal the process group and poll for death.
+   */
+  private async stopByPid(projectId: string, server: DevServer): Promise<{ status: string }> {
+    const finish = (): { status: string } => {
+      this.servers.delete(projectId);
+      this.persist();
+      this.updateProjectStatus(projectId, "idle");
+      return { status: "stopped" };
+    };
+
+    const pid = server.pid;
+    if (pid == null) return finish();
+
+    // Re-verify before killing to avoid killing a PID that was reused by an
+    // unrelated process since the orphan was adopted.
+    const adoptable = await this.isAdoptableOrphan({
+      pid,
+      port: server.port,
+      url: server.url,
+      cwd: server.cwd,
+      command: server.command,
+      startedAt: server.startedAt,
+    });
+    if (!adoptable) {
+      this.appendLog(server, "[system] Recovered process no longer matches — not killing.");
+      return finish();
+    }
+
+    this.killGroup(pid, "SIGTERM");
+    if (await this.waitForDeath(pid, 5000)) {
+      this.appendLog(server, "[system] Dev server stopped.");
+      return finish();
+    }
+
+    this.killGroup(pid, "SIGKILL");
+    await this.waitForDeath(pid, 1000);
+    this.appendLog(server, "[system] Dev server force-stopped.");
+    return finish();
   }
 
   getLogs(projectId: string, offset: number = 0): {
@@ -196,10 +281,26 @@ export class DevServerManager {
       return { lines: [], offset: 0, running: false, url: null, portError: null };
     }
 
+    // Liveness watchdog for recovered servers: they have no ChildProcess "exit"
+    // event, so detect external death on the next log poll.
+    if (server.recovered && server.pid != null && !this.isProcessAlive(server.pid)) {
+      this.servers.delete(projectId);
+      this.persist();
+      this.updateProjectStatus(projectId, "idle");
+      return {
+        lines: server.logLines.slice(offset),
+        offset: server.logLines.length,
+        running: false,
+        url: null,
+        portError: null,
+      };
+    }
+
+    const running = server.process ? server.process.exitCode === null : server.pid != null;
     return {
       lines: server.logLines.slice(offset),
       offset: server.logLines.length,
-      running: server.process.exitCode === null,
+      running,
       url: server.url,
       portError: server.portError,
     };
@@ -210,12 +311,291 @@ export class DevServerManager {
     await Promise.all(promises);
   }
 
+  /**
+   * Kill every process listening on `port` so a dev server can claim it. Used
+   * when a start fails because a foreign process (not tracked by VEX) holds the
+   * port. Best-effort via `lsof` (macOS/Linux); never kills Electron itself.
+   */
+  async killPort(port: number): Promise<{ status: string; killed: number[]; detail?: string }> {
+    const pids = this.findListeningPids(port).filter((pid) => pid !== process.pid);
+    if (pids.length === 0) {
+      return { status: "no_process", killed: [] };
+    }
+
+    for (const pid of pids) {
+      this.killGroup(pid, "SIGTERM");
+    }
+    for (const pid of pids) {
+      if (!(await this.waitForDeath(pid, 3000))) {
+        this.killGroup(pid, "SIGKILL");
+        await this.waitForDeath(pid, 1000);
+      }
+    }
+
+    const stillBound = await this.isPortListening(port);
+    return { status: stillBound ? "partial" : "killed", killed: pids };
+  }
+
+  private findListeningPids(port: number): number[] {
+    const res = spawnSync("lsof", ["-t", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], {
+      encoding: "utf8",
+    });
+    if (res.error || !res.stdout) return [];
+    return res.stdout
+      .split("\n")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n > 0);
+  }
+
+  /**
+   * Determine the port a project's dev server actually uses, so the "Free Port"
+   * action targets the right one instead of the stale stored `dev_port` (often
+   * a default 3000). Precedence: live runtime port > explicit flag in the start
+   * command > framework default > stored dev_port > 3000.
+   */
+  resolveDevPort(project: ProjectInfo): number | null {
+    const tracked = this.servers.get(project.id);
+    if (tracked) {
+      if (tracked.port != null) return tracked.port;
+      if (tracked.url) {
+        const p = this.parsePort(tracked.url);
+        if (p != null) return p;
+      }
+    }
+
+    const script = this.readDevScript(project.path) ?? project.dev_command ?? null;
+    if (script) {
+      const fromScript = this.parsePortFromCommand(script);
+      if (fromScript != null) return fromScript;
+    }
+
+    const fromFramework = this.frameworkDefaultPort(project.framework);
+    if (fromFramework != null) return fromFramework;
+
+    return project.dev_port ?? 3000;
+  }
+
+  private readDevScript(projectPath: string): string | null {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, "package.json"), "utf8"));
+      const scripts = pkg.scripts ?? {};
+      for (const key of ["dev", "start", "serve"]) {
+        if (typeof scripts[key] === "string") return scripts[key];
+      }
+    } catch {
+      // no package.json or parse error
+    }
+    return null;
+  }
+
+  private parsePortFromCommand(cmd: string): number | null {
+    // PORT=NNNN env-var prefix (e.g. "PORT=4500 node server.js")
+    const env = cmd.match(/\bPORT=(\d{2,5})\b/);
+    if (env) return this.validPort(parseInt(env[1], 10));
+    // --port NNNN | --port=NNNN | -p NNNN | -p=NNNN
+    const flag = cmd.match(/(?:--port|-p)[=\s]+(\d{2,5})\b/);
+    if (flag) return this.validPort(parseInt(flag[1], 10));
+    return null;
+  }
+
+  private frameworkDefaultPort(framework?: string | null): number | null {
+    switch ((framework ?? "").toLowerCase()) {
+      case "vite":
+      case "svelte": // SvelteKit dev runs on Vite
+        return 5173;
+      case "angular":
+        return 4200;
+      case "vue": // Vue CLI dev server
+        return 8080;
+      case "next":
+      case "nextjs":
+      case "next.js":
+      case "nuxt":
+      case "react": // CRA / react-scripts
+        return 3000;
+      default:
+        return null; // includes "static" (OS-assigned port)
+    }
+  }
+
+  private validPort(port: number): number | null {
+    return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+  }
+
+  /**
+   * Adopt dev servers orphaned by a previous session (crash / force-quit).
+   * Re-registers still-alive, verifiable orphans as "recovered" and marks their
+   * projects "running" so the existing Stop button can kill them.
+   *
+   * Must run AFTER resetAllProjectStatuses() (which forces every project idle)
+   * and requires the agent-orchestrator to be reachable (it PATCHes status).
+   */
+  async recoverOrphans(): Promise<void> {
+    const persisted = this.readPersisted();
+    const projectIds = Object.keys(persisted);
+    if (projectIds.length === 0) return;
+
+    for (const projectId of projectIds) {
+      const entry = persisted[projectId];
+      try {
+        if (!(await this.isAdoptableOrphan(entry))) continue;
+
+        this.servers.set(projectId, {
+          process: null,
+          pid: entry.pid,
+          logLines: ["[system] Recovered dev server from previous session — live logs unavailable"],
+          url: entry.url,
+          portError: null,
+          recovered: true,
+          port: entry.port,
+          cwd: entry.cwd,
+          command: entry.command,
+          startedAt: entry.startedAt,
+        });
+        await this.updateProjectStatus(projectId, "running", entry.url);
+      } catch (err) {
+        console.error(`Failed to recover dev server for ${projectId}: ${err}`);
+      }
+    }
+
+    // Rewrite the file with only the adopted survivors (drops dead/invalid entries).
+    this.persist();
+  }
+
   private appendLog(server: DevServer, line: string): void {
     server.logLines.push(line);
     if (server.logLines.length > MAX_LOG_LINES) {
       server.logLines.splice(0, server.logLines.length - MAX_LOG_LINES);
     }
   }
+
+  // --- Persistence ---------------------------------------------------------
+
+  private persist(): void {
+    try {
+      const data: Record<string, PersistedServer> = {};
+      for (const [id, s] of this.servers) {
+        if (s.pid == null) continue;
+        data[id] = {
+          pid: s.pid,
+          port: s.port,
+          url: s.url,
+          cwd: s.cwd,
+          command: s.command,
+          startedAt: s.startedAt,
+        };
+      }
+      fs.mkdirSync(path.dirname(PERSIST_FILE), { recursive: true });
+      const tmp = `${PERSIST_FILE}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, PERSIST_FILE);
+    } catch (err) {
+      console.error(`Failed to persist dev servers: ${err}`);
+    }
+  }
+
+  private readPersisted(): Record<string, PersistedServer> {
+    try {
+      if (!fs.existsSync(PERSIST_FILE)) return {};
+      const parsed = JSON.parse(fs.readFileSync(PERSIST_FILE, "utf8"));
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, PersistedServer>;
+      }
+    } catch {
+      // missing or corrupt — treat as empty
+    }
+    return {};
+  }
+
+  // --- Orphan-adoption safety ---------------------------------------------
+
+  /**
+   * True only if the PID is alive, its recorded port is still listening, and
+   * (best-effort) its command looks like a dev server. This is the guard that
+   * prevents killing a PID reused by an unrelated process after a reboot.
+   */
+  private async isAdoptableOrphan(entry: PersistedServer): Promise<boolean> {
+    if (entry.pid == null || !this.isProcessAlive(entry.pid)) return false;
+    if (entry.port == null || !(await this.isPortListening(entry.port))) return false;
+    return this.commandLooksLikeDevServer(entry.pid, entry.cwd);
+  }
+
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0); // signal 0 = existence check
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private isPortListening(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const socket = net.createConnection({ host: "127.0.0.1", port });
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve(result);
+      };
+      socket.setTimeout(1000);
+      socket.once("connect", () => finish(true));
+      socket.once("timeout", () => finish(false));
+      socket.once("error", () => finish(false));
+    });
+  }
+
+  /**
+   * Best-effort command check via `ps`. Returns true when the process command
+   * references the project cwd or looks like a JS dev server, and also true when
+   * `ps` is unavailable (Windows / failure) so we fall back to liveness+port.
+   */
+  private commandLooksLikeDevServer(pid: number, cwd: string): boolean {
+    const result = spawnSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+    });
+    if (result.error || result.status !== 0 || !result.stdout) return true;
+    const cmd = result.stdout.trim().toLowerCase();
+    if (!cmd) return true;
+    if (cmd.includes(cwd.toLowerCase())) return true;
+    return (
+      /\b(node|npm|pnpm|yarn|bun|deno|vite|next|nuxt|astro|remix|webpack|static-server)\b/.test(cmd) ||
+      /\brun\s+(dev|start|serve)\b/.test(cmd)
+    );
+  }
+
+  private killGroup(pid: number, signal: NodeJS.Signals): void {
+    try {
+      process.kill(-pid, signal); // negative pid = process group
+    } catch {
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // already dead
+      }
+    }
+  }
+
+  private waitForDeath(pid: number, timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const poll = () => {
+        if (!this.isProcessAlive(pid)) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+        setTimeout(poll, 250);
+      };
+      poll();
+    });
+  }
+
+  // --- Command detection ---------------------------------------------------
 
   private buildRunCommand(
     project: ProjectInfo
@@ -282,6 +662,13 @@ export class DevServerManager {
       }
     }
     return null;
+  }
+
+  private parsePort(url: string): number | null {
+    const match = url.match(/:(\d+)/);
+    if (!match) return null;
+    const port = parseInt(match[1], 10);
+    return port >= 1 && port <= 65535 ? port : null;
   }
 
   private detectPortConflict(line: string, port: number): string | null {

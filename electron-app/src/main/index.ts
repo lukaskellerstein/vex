@@ -26,7 +26,17 @@ try {
 let natsWs: typeof import("nats.ws") | null = null;
 const natsWsReady = import("nats.ws").then((mod) => { natsWs = mod; });
 
-Menu.setApplicationMenu(null);
+// macOS routes clipboard shortcuts (Cmd+V/C/X/A/Z) through the application
+// menu's Edit roles — with no menu, paste is dead in every input. The menu
+// lives in the system bar, so the custom window frame is unaffected. On
+// Windows/Linux the shortcuts work natively, so the in-window menu stays hidden.
+if (process.platform === "darwin") {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }])
+  );
+} else {
+  Menu.setApplicationMenu(null);
+}
 
 // --- CLI argument parsing ---
 // Usage: electron . --standalone --ao-port 8420 --nats-port 4222
@@ -253,6 +263,10 @@ ipcMain.handle("get-projects", async () => {
   return apiGet("/api/projects");
 });
 
+ipcMain.handle("get-models", async () => {
+  return apiGet("/api/models");
+});
+
 ipcMain.handle("select-folder", async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ["openDirectory"],
@@ -298,6 +312,34 @@ ipcMain.handle("stop-dev-server", async (_event, projectId: string) => {
 
 ipcMain.handle("get-dev-server-logs", async (_event, projectId: string, offset: number) => {
   return devServerManager.getLogs(projectId, offset);
+});
+
+function projectInfoFrom(project: Record<string, unknown>) {
+  return {
+    id: project.id as string,
+    path: project.path as string,
+    dev_command: project.dev_command as string | undefined,
+    dev_port: project.dev_port as number | undefined,
+    package_manager: project.package_manager as string | undefined,
+    framework: project.framework as string | undefined,
+  };
+}
+
+ipcMain.handle("resolve-dev-port", async (_event, projectId: string) => {
+  const project = (await apiGet(`/api/projects/${projectId}`)) as Record<string, unknown> | null;
+  if (!project) return null;
+  return devServerManager.resolveDevPort(projectInfoFrom(project));
+});
+
+ipcMain.handle("kill-project-port", async (_event, projectId: string) => {
+  const project = (await apiGet(`/api/projects/${projectId}`)) as Record<string, unknown> | null;
+  if (!project) return { status: "error", detail: "Project not found" };
+  const port = devServerManager.resolveDevPort(projectInfoFrom(project));
+  if (!port) return { status: "error", detail: "Could not determine a port to free" };
+  console.log(`[dev-server] Freeing port ${port} for project ${projectId}`);
+  const result = await devServerManager.killPort(port);
+  console.log(`[dev-server] killPort result:`, result);
+  return { ...result, port };
 });
 
 ipcMain.handle("open-external", async (_event, url: string) => {
@@ -641,11 +683,17 @@ app.on("ready", async () => {
     console.log(`[standalone] NATS: ${natsOk ? "reachable" : "NOT reachable"}`);
     const aoOk = await checkHttp(`http://localhost:${cliArgs.aoPort}/api/health`);
     console.log(`[standalone] AgentOrchestrator: ${aoOk ? "reachable" : "NOT reachable"}`);
-    if (aoOk) await resetAllProjectStatuses();
+    if (aoOk) {
+      await resetAllProjectStatuses();
+      // Must run after the reset (which forces every project idle) so adopted
+      // orphans stay "running".
+      await devServerManager.recoverOrphans();
+    }
   } else {
     try {
       await processManager.startAll();
       await resetAllProjectStatuses();
+      await devServerManager.recoverOrphans();
     } catch (err) {
       console.error("Failed to start managed processes:", err);
     }

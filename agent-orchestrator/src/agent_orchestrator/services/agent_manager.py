@@ -31,6 +31,8 @@ class AgentManagerService:
         project_id: str,
         project_path: str,
         adapter_type: str,
+        model: str | None = None,
+        auth_header: str | None = None,
     ) -> None:
         """Start an agent using the specified adapter."""
         adapter = self._adapters.get(adapter_type)
@@ -46,7 +48,10 @@ class AgentManagerService:
         await self._publish_status(agent_id, "starting")
 
         try:
-            process = await adapter.start(project_id, project_path, agent_id=agent_id)
+            process = await adapter.start(
+                project_id, project_path, agent_id=agent_id, model=model,
+                auth_header=auth_header,
+            )
             now = datetime.now(timezone.utc).isoformat()
             await db.execute(
                 "UPDATE agents SET status = ?, pid = ?, last_heartbeat = ? WHERE id = ?",
@@ -58,6 +63,8 @@ class AgentManagerService:
                 "adapter_type": adapter_type,
                 "project_id": project_id,
                 "project_path": project_path,
+                "model": model,
+                "auth_header": auth_header,
                 "pid": process.pid,
                 "last_heartbeat": now,
             }
@@ -141,8 +148,13 @@ class AgentManagerService:
                     adapter_type = info["adapter_type"]
                     project_id = info["project_id"]
                     project_path = info["project_path"]
+                    model = info.get("model")
+                    auth_header = info.get("auth_header")
                     self._running_agents.pop(agent_id, None)
-                    await self.start_agent(agent_id, project_id, project_path, adapter_type)
+                    await self.start_agent(
+                        agent_id, project_id, project_path, adapter_type,
+                        model=model, auth_header=auth_header,
+                    )
                 except Exception:
                     logger.exception("Failed to restart agent %s", agent_id)
 

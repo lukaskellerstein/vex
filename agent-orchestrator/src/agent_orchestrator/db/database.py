@@ -50,6 +50,8 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
             dev_port INTEGER DEFAULT 3000,
             package_manager TEXT,
             styling_approach TEXT,
+            model TEXT,
+            auth_header TEXT,
             status TEXT DEFAULT 'idle',
             dev_server_pid INTEGER,
             dev_server_url TEXT,
@@ -221,6 +223,8 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
         ("tasks", "batch_id", "ALTER TABLE tasks ADD COLUMN batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL"),
         ("agent_traces", "input_tokens", "ALTER TABLE agent_traces ADD COLUMN input_tokens INTEGER"),
         ("agent_traces", "output_tokens", "ALTER TABLE agent_traces ADD COLUMN output_tokens INTEGER"),
+        ("projects", "model", "ALTER TABLE projects ADD COLUMN model TEXT"),
+        ("projects", "auth_header", "ALTER TABLE projects ADD COLUMN auth_header TEXT"),
     ]
     for _table, _col, sql in migrations:
         try:

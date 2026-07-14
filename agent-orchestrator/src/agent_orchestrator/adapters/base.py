@@ -24,8 +24,20 @@ class AgentAdapter(ABC):
     capabilities: list[str]
 
     @abstractmethod
-    async def start(self, project_id: str, project_path: str, agent_id: str | None = None) -> AgentProcess:
-        """Start an agent process for the given project."""
+    async def start(
+        self,
+        project_id: str,
+        project_path: str,
+        agent_id: str | None = None,
+        model: str | None = None,
+        auth_header: str | None = None,
+    ) -> AgentProcess:
+        """Start an agent process for the given project.
+
+        model=None means the agent runs on the Claude Code default model.
+        auth_header, when set, is injected into the agent's Playwright browser so
+        it can reach an authenticated web app.
+        """
 
     @abstractmethod
     async def stop(self, agent_id: str) -> None:
@@ -47,6 +59,8 @@ class AgentAdapter(ABC):
         project_path: str,
         message: str,
         session_id: str,
+        model: str | None = None,
+        auth_header: str | None = None,
     ) -> None:
         """Resume a conversation with a finished agent."""
 

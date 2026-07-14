@@ -26,6 +26,8 @@ class ProjectUpdate(BaseModel):
     framework: str | None = None
     status: str | None = None
     dev_server_url: str | None = None
+    model: str | None = None
+    auth_header: str | None = None
 
 
 class Project(BaseModel):
@@ -37,6 +39,8 @@ class Project(BaseModel):
     dev_port: int | None = None
     package_manager: str | None = None
     styling_approach: str | None = None
+    model: str | None = None
+    auth_header: str | None = None
     status: ProjectStatus = ProjectStatus.IDLE
     dev_server_url: str | None = None
     created_at: datetime
