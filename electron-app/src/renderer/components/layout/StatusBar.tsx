@@ -13,6 +13,14 @@ export function StatusBar() {
     agentCount: 0,
     currentTask: null,
   });
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.electronAPI
+      .getAppInfo()
+      .then((info) => setVersion(info.version))
+      .catch(() => setVersion(null));
+  }, []);
 
   useEffect(() => {
     async function poll() {
@@ -133,9 +141,11 @@ export function StatusBar() {
           {connected ? <Wifi size={12} /> : <WifiOff size={12} />}
           <span>{connected ? "Connected" : "Disconnected"}</span>
         </span>
-        <span style={{ color: "var(--foreground-dim)", fontFamily: "var(--font-mono)" }}>
-          v0.1.0
-        </span>
+        {version && (
+          <span style={{ color: "var(--foreground-dim)", fontFamily: "var(--font-mono)" }}>
+            v{version}
+          </span>
+        )}
       </div>
     </footer>
   );

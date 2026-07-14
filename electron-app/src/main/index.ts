@@ -466,9 +466,22 @@ ipcMain.handle("clear-screenshots", async () => {
   return apiDelete("/api/storage/screenshots");
 });
 
+// In dev the app is launched as `electron dist/main/index.js`, so Electron runs
+// in default-app mode and app.getVersion() returns Electron's own version. Read
+// the version from package.json (next to the compiled main dir in both dev and
+// the packaged asar) so dev and production report the same Vex version.
+function getAppVersion(): string {
+  try {
+    const pkgPath = path.join(__dirname, "..", "..", "package.json");
+    return JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
+  } catch {
+    return app.getVersion();
+  }
+}
+
 ipcMain.handle("get-app-info", async () => {
   return {
-    version: app.getVersion(),
+    version: getAppVersion(),
     electron: process.versions.electron,
     node: process.versions.node,
     platform: process.platform,

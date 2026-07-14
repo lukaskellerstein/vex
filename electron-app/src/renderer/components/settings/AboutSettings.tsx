@@ -166,7 +166,7 @@ export function AboutSettings() {
       </div>
 
       {/* Info rows */}
-      <InfoRow label="Version" value={appInfo.version || 'v0.1.0'} mono />
+      <InfoRow label="Version" value={appInfo.version || '-'} mono />
       <InfoRow label="Electron" value={appInfo.electron || '-'} mono />
       <InfoRow label="Node.js" value={appInfo.node || '-'} mono />
       <InfoRow label="Platform" value={appInfo.platform || '-'} />
