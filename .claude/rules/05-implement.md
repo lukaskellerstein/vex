@@ -7,7 +7,6 @@ description: "Step 4: Implement — coding rules, dev environment, project struc
 Write clean code from the start. Follow these rules during implementation:
 
 - Do NOT commit via `git` unless explicitly instructed by the user
-- Do NOT start the dev environment — the user runs `./dev-setup.sh` manually
 - When creating diagrams or graphs, use `mermaid`
 - Write clean code from the start — don't plan to "clean it up later"
 - Refactor continuously — improve code structure immediately when you see issues
@@ -22,8 +21,39 @@ The project runs via `./dev-setup.sh` at the project root, which starts all thre
 2. **Agent Orchestrator** — FastAPI on port 8420 (`agent-orchestrator/`)
 3. **Electron app** — standalone mode with remote debugging on port 9222 (`electron-app/`)
 
-Do NOT run `./dev-setup.sh` yourself. If the dev environment is not running, tell the user:
-> "The dev environment is not running. Please start it with: `./dev-setup.sh`"
+Plus Vite on 5199, and Chrome on 9333 with `--with-chrome`.
+
+### Starting it — always via `dev-env.py`
+
+**Never invoke `./dev-setup.sh` directly.** It *evicts* rather than coexists: it kills
+whatever holds each of its six ports before claiming them, so launching it while an
+instance is up silently destroys that session — possibly another agent's.
+
+**Step 1 — check.** Always, before anything else:
+
+```bash
+python3 .claude/hooks/dev-env.py status
+```
+
+**Step 2a — already running?** Do NOT start, do NOT `--force`. Report what is running
+(the command prints ports, PIDs, and whether `dev-env.py` started it) and **ask the user
+whether restarting is safe**, calling out that it would kill the running instance. Only
+after they confirm, re-run `start --force`.
+
+**Step 2b — nothing running?** Start it yourself, no need to ask:
+
+```bash
+python3 .claude/hooks/dev-env.py start
+```
+
+This launches `dev-setup.sh --with-chrome` detached (log: `/tmp/vex-logs/dev-setup.log`),
+so both 9222 and 9333 come up and either Playwright MCP is usable. On macOS the Electron
+window is moved to its own yabai space labelled `vex` as soon as it appears, keeping the
+dev app off your current workspace. Without yabai this degrades to a no-op and the window
+just opens normally. Add `--no-chrome` to skip Chrome.
+
+**Stopping.** `python3 .claude/hooks/dev-env.py stop` signals the recorded process group.
+The `SessionEnd` hook also terminates the Electron app when the session ends.
 
 ## Electron App (`electron-app/`)
 

@@ -45,3 +45,5 @@ venv/
 
 # Test outputs
 test_output/
+# Playwright MCP session artifacts (console logs, snapshots)
+.playwright-mcp/
