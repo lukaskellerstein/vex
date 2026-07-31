@@ -1,0 +1,13 @@
+{
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": "none",
+  "executionEnvironments": [
+    {
+      "root": "agent-orchestrator",
+      "extraPaths": [
+        "agent-orchestrator/.venv/lib/python3.11/site-packages",
+        "agent-orchestrator/src"
+      ]
+    }
+  ]
+}

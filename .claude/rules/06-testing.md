@@ -17,29 +17,47 @@ Before testing, **write out your DoD checklist in the conversation** so the user
 
 ## 5b. MCP Servers & CDP Ports
 
-Two chrome-devtools MCP servers are configured in `.mcp.json`, each targeting a different CDP port:
+Two Playwright MCP servers are configured in `.mcp.json`, each attaching to a different CDP endpoint:
 
 | MCP Server | CDP Port | Target | Use For |
 |---|---|---|---|
-| `electron-chrome` | 9222 | Electron app | Electron UI changes (renderer pages, dialogs, IPC-driven UI) |
-| `extension-chrome` | 9333 | Chrome browser | Chrome Extension changes (content scripts, popup, extension pages) |
+| `electron-playwright` | 9222 | Electron app | Electron UI changes (renderer pages, dialogs, IPC-driven UI) |
+| `extension-playwright` | 9333 | Chrome browser | Chrome Extension changes (content scripts, popup, extension pages) |
 
-Both servers expose the same tools (`take_snapshot`, `take_screenshot`, `click`, `evaluate_script`, `fill`, `navigate_page`, etc.) — the only difference is which browser they connect to.
+Both servers expose the same tools — the only difference is which browser they attach to. Common ones:
+
+| Task | Tool |
+|---|---|
+| Navigate | `browser_navigate` |
+| Inspect the page | `browser_snapshot` (accessibility tree) |
+| Screenshot | `browser_take_screenshot` |
+| Click | `browser_click` |
+| Type into a field | `browser_type` / `browser_fill_form` |
+| Run JS | `browser_evaluate` |
+| Read console | `browser_console_messages` |
+| Read network | `browser_network_requests` |
 
 **How to choose:**
-- Changing Electron renderer code → use `electron-chrome` (prefix: `mcp__electron-chrome__`)
-- Changing Chrome Extension code → use `extension-chrome` (prefix: `mcp__extension-chrome__`)
+- Changing Electron renderer code → use `electron-playwright` (prefix: `mcp__electron-playwright__`)
+- Changing Chrome Extension code → use `extension-playwright` (prefix: `mcp__extension-playwright__`)
 - Changing backend code with UI impact → use whichever MCP matches the affected UI
+
+Both servers run in **attach mode** (`--cdp-endpoint`): they connect to a browser that `dev-setup.sh` already started and never launch one themselves. If the target port has nothing listening, the server fails to connect — start the dev environment first.
+
+**After restarting the dev environment**, the first MCP call fails with `Target page, context or browser has been closed` — the server is still holding the CDP connection to the browser that just died. It reconnects on its own; simply retry the same call once.
 
 ## 5c. Test
 
-**Electron UI changes** — use `electron-chrome` MCP (CDP port 9222):
-1. Ensure `dev-setup.sh` is running.
-2. Use `mcp__electron-chrome__*` tools to verify the change is visible and functional.
+**Electron UI changes** — use `electron-playwright` MCP (CDP port 9222):
+1. Ensure the dev environment is up — see [Starting it](05-implement.md) in Step 4: run
+   `python3 .claude/hooks/dev-env.py status`, then `start` if nothing is running, or ask
+   the user first if something already is.
+2. Use `mcp__electron-playwright__*` tools to verify the change is visible and functional.
 
-**Chrome Extension changes** — use `extension-chrome` MCP (CDP port 9333):
-1. Ensure `dev-setup.sh` is running (Chrome must be started with `--remote-debugging-port=9333`).
-2. Use `mcp__extension-chrome__*` tools to verify the change is visible and functional.
+**Chrome Extension changes** — use `extension-playwright` MCP (CDP port 9333):
+1. Same check as above. `dev-env.py start` includes `--with-chrome` by default, so 9333 is
+   up unless you passed `--no-chrome`.
+2. Use `mcp__extension-playwright__*` tools to verify the change is visible and functional.
 
 **Agent Orchestrator changes** — test via HTTP:
 1. Verify the AO is running: `curl http://localhost:8420/api/health`

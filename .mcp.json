@@ -1,19 +1,17 @@
 {
   "mcpServers": {
-    "electron-chrome": {
+    "electron-playwright": {
       "command": "npx",
       "args": [
-        "-y",
-        "chrome-devtools-mcp@latest",
-        "--browserUrl=http://localhost:9222"
+        "@playwright/mcp@latest",
+        "--cdp-endpoint=http://localhost:9222"
       ]
     },
-    "extension-chrome": {
+    "extension-playwright": {
       "command": "npx",
       "args": [
-        "-y",
-        "chrome-devtools-mcp@latest",
-        "--browserUrl=http://localhost:9333"
+        "@playwright/mcp@latest",
+        "--cdp-endpoint=http://localhost:9333"
       ]
     }
   }
