@@ -115,6 +115,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("activity-event", handler);
     return () => ipcRenderer.removeListener("activity-event", handler);
   },
+  onNatsReconnected: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("nats-reconnected", handler);
+    return () => ipcRenderer.removeListener("nats-reconnected", handler);
+  },
   // Window controls
   windowMinimize: () => ipcRenderer.invoke("window-minimize"),
   windowMaximize: () => ipcRenderer.invoke("window-maximize"),

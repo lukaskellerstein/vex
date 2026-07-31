@@ -66,10 +66,13 @@ export function BatchList({ projectId, onViewTrace, onViewAgent, onDeleteBatch, 
       debounceTimer = setTimeout(fetchBatches, 300);
     };
     const cleanupBatch = window.electronAPI.onBatchEvent(debouncedFetch);
+    // Events during a NATS disconnect are lost — refetch on reconnect
+    const cleanupReconnect = window.electronAPI.onNatsReconnected(debouncedFetch);
     return () => {
       cancelled = true;
       clearTimeout(debounceTimer);
       cleanupBatch();
+      cleanupReconnect();
     };
   }, [projectId]);
 

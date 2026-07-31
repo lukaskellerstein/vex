@@ -197,10 +197,13 @@ export function Projects() {
     };
     const cleanupProject = window.electronAPI.onProjectEvent(debouncedFetch);
     const cleanupBatch = window.electronAPI.onBatchEvent(debouncedFetch);
+    // Events during a NATS disconnect are lost — refetch on reconnect
+    const cleanupReconnect = window.electronAPI.onNatsReconnected(debouncedFetch);
     return () => {
       clearTimeout(debounceTimer);
       cleanupProject();
       cleanupBatch();
+      cleanupReconnect();
     };
   }, []);
 
