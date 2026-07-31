@@ -89,6 +89,7 @@ declare global {
       subscribeActivityEvents: () => Promise<{ ok: boolean; error?: string }>;
       unsubscribeActivityEvents: () => Promise<{ ok: boolean }>;
       onActivityEvent: (callback: (data: Record<string, unknown>) => void) => () => void;
+      onNatsReconnected: (callback: () => void) => () => void;
       // Window controls
       windowMinimize: () => Promise<void>;
       windowMaximize: () => Promise<void>;
