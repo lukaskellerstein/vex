@@ -1,15 +1,16 @@
-import React, { useState } from "react";
 import {
-  Send,
-  CheckCircle2,
-  XCircle,
-  Play,
+  AlertTriangle,
   Bot,
   BotOff,
-  AlertTriangle,
+  CheckCircle2,
+  Play,
+  Send,
   Server,
   ServerOff,
+  XCircle,
 } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
 
 export type TimelineEventType =
   | "batch_submitted"
@@ -135,10 +136,14 @@ interface ActivityEntryProps {
 
 export function ActivityEntry({ event }: ActivityEntryProps) {
   const [hovered, setHovered] = useState(false);
-  const config = getNodeConfig(event.type) ?? { color: "var(--foreground-dim)", icon: <Send size={14} strokeWidth={1.5} /> };
+  const config = getNodeConfig(event.type) ?? {
+    color: "var(--foreground-dim)",
+    icon: <Send size={14} strokeWidth={1.5} />,
+  };
   const failed = isFailedEvent(event.type);
   const eventTime = event.timestamp || event.created_at || "";
-  const hasMeta = event.batch_id || event.action_count !== undefined || event.cost_usd !== undefined;
+  const hasMeta =
+    event.batch_id || event.action_count !== undefined || event.cost_usd !== undefined;
 
   return (
     <div
@@ -270,12 +275,8 @@ export function ActivityEntry({ event }: ActivityEntryProps) {
             }}
           >
             {event.batch_id && <MetaTag mono>{event.batch_id}</MetaTag>}
-            {event.action_count !== undefined && (
-              <MetaTag>{event.action_count} actions</MetaTag>
-            )}
-            {event.cost_usd !== undefined && (
-              <MetaTag dimmed>${event.cost_usd.toFixed(2)}</MetaTag>
-            )}
+            {event.action_count !== undefined && <MetaTag>{event.action_count} actions</MetaTag>}
+            {event.cost_usd !== undefined && <MetaTag dimmed>${event.cost_usd.toFixed(2)}</MetaTag>}
           </div>
         )}
       </div>

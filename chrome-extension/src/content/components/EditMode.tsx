@@ -1,24 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
-import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { markdown } from "@codemirror/lang-markdown";
+import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { EditorState } from "@codemirror/state";
+import { placeholder as cmPlaceholder, EditorView, keymap } from "@codemirror/view";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AGENT_MANAGER_URL } from "../../shared/messages";
 import type { Action } from "../../shared/types";
 import type { NatsClient } from "../hooks/useNatsClient";
-import { AGENT_MANAGER_URL } from "../../shared/messages";
-import { generateSelector } from "../utils/selector";
+import { captureScreenshot } from "../hooks/useScreenshot";
+import { useUndo } from "../hooks/useUndo";
 import {
+  cloneElement,
   insertElement,
   insertElementHorizontal,
   removeElement,
-  cloneElement,
   reorderElement,
   wrapElement,
 } from "../utils/dom-ops";
-import { captureScreenshot } from "../hooks/useScreenshot";
-import { useUndo } from "../hooks/useUndo";
 import { clampToViewport } from "../utils/positioning";
+import { generateSelector } from "../utils/selector";
 
 const HOST_ID = "__web-selector-root";
 
@@ -31,7 +31,14 @@ const GENERATION_TIMEOUT_MS = 30_000;
 type GenerationStatus =
   | { state: "idle" }
   | { state: "loading" }
-  | { state: "timeout"; requestId: string; type: "section" | "image"; prompt: string; context: object; retryFn: () => void };
+  | {
+      state: "timeout";
+      requestId: string;
+      type: "section" | "image";
+      prompt: string;
+      context: object;
+      retryFn: () => void;
+    };
 
 interface EditModeProps {
   addAction: (action: Action) => void;
@@ -94,7 +101,12 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
   const insertEditorContainerRef = useRef<HTMLDivElement>(null);
   const insertEditorViewRef = useRef<EditorView | null>(null);
   const [insertPopupSize, setInsertPopupSize] = useState({ width: 300, height: 260 });
-  const insertDragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
+  const insertDragRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
 
   // Insert prompt CodeMirror editor — create/destroy when prompt tab is shown
   const insertSubmitRef = useRef<(() => void) | null>(null);
@@ -347,7 +359,10 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
         if (!br.nextSibling && !br.previousSibling) return;
         if (!br.nextSibling) br.remove();
       });
-      el.innerHTML = el.innerHTML.replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+      el.innerHTML = el.innerHTML
+        .replace(/&nbsp;/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 
       const afterText = el.innerText || "";
       const beforeText = editBeforeRef.current;
@@ -407,7 +422,8 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+        return;
 
       const el = hoveredRef.current;
       if (!el || isOwnElement(el)) return;
@@ -438,398 +454,413 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
   }, [popup, editing]);
 
   // Delete handler
-  const handleDelete = useCallback(async (el: Element) => {
-    const selector = generateSelector(el);
-    const screenshotBefore = await takeScreenshot(el, hostElement);
-    const deletedHTML = removeElement(el);
-    const screenshotAfter = await takeScreenshot(document.body, hostElement);
+  const handleDelete = useCallback(
+    async (el: Element) => {
+      const selector = generateSelector(el);
+      const screenshotBefore = await takeScreenshot(el, hostElement);
+      const deletedHTML = removeElement(el);
+      const screenshotAfter = await takeScreenshot(document.body, hostElement);
 
-    addAction({
-      type: "delete",
-      selector,
-      timestamp: new Date().toISOString(),
-      screenshotBefore,
-      screenshotAfter,
-      deletedOuterHTML: deletedHTML,
-    });
+      addAction({
+        type: "delete",
+        selector,
+        timestamp: new Date().toISOString(),
+        screenshotBefore,
+        screenshotAfter,
+        deletedOuterHTML: deletedHTML,
+      });
 
-    const parent = el.parentElement;
-    pushUndo(() => {
-      const temp = document.createElement("div");
-      temp.innerHTML = deletedHTML;
-      const restored = temp.firstElementChild;
-      if (restored && parent) {
-        parent.appendChild(restored);
-      }
-    });
+      const parent = el.parentElement;
+      pushUndo(() => {
+        const temp = document.createElement("div");
+        temp.innerHTML = deletedHTML;
+        const restored = temp.firstElementChild;
+        if (restored && parent) {
+          parent.appendChild(restored);
+        }
+      });
 
-    setHovered(null);
-    setHoverRect(null);
-    hoveredRef.current = null;
-  }, [addAction, hostElement, pushUndo]);
+      setHovered(null);
+      setHoverRect(null);
+      hoveredRef.current = null;
+    },
+    [addAction, hostElement, pushUndo],
+  );
 
   // Duplicate handler
-  const handleDuplicate = useCallback(async (el: Element) => {
-    const selector = generateSelector(el);
-    const screenshotBefore = await takeScreenshot(el, hostElement);
-    const clone = cloneElement(el);
-    const screenshotAfter = await takeScreenshot(clone, hostElement);
+  const handleDuplicate = useCallback(
+    async (el: Element) => {
+      const selector = generateSelector(el);
+      const screenshotBefore = await takeScreenshot(el, hostElement);
+      const clone = cloneElement(el);
+      const screenshotAfter = await takeScreenshot(clone, hostElement);
 
-    addAction({
-      type: "duplicate",
-      selector,
-      timestamp: new Date().toISOString(),
-      screenshotBefore,
-      screenshotAfter,
-      insertedAfter: selector,
-    });
+      addAction({
+        type: "duplicate",
+        selector,
+        timestamp: new Date().toISOString(),
+        screenshotBefore,
+        screenshotAfter,
+        insertedAfter: selector,
+      });
 
-    pushUndo(() => {
-      clone.remove();
-    });
-  }, [addAction, hostElement, pushUndo]);
+      pushUndo(() => {
+        clone.remove();
+      });
+    },
+    [addAction, hostElement, pushUndo],
+  );
 
   // Insert handler — supports all 4 visual directions
-  const handleInsert = useCallback(async (
-    visualPosition: VisualPosition,
-    reference: Element,
-    tag: string,
-    text: string,
-    prompt?: string,
-  ) => {
-    const refSelector = generateSelector(reference);
-    const screenshotBefore = await takeScreenshot(reference, hostElement);
+  const handleInsert = useCallback(
+    async (
+      visualPosition: VisualPosition,
+      reference: Element,
+      tag: string,
+      text: string,
+      prompt?: string,
+    ) => {
+      const refSelector = generateSelector(reference);
+      const screenshotBefore = await takeScreenshot(reference, hostElement);
 
-    let newEl: Element;
-    let wasWrapped = false;
-    let domPosition: "before" | "after";
+      let newEl: Element;
+      let wasWrapped = false;
+      let domPosition: "before" | "after";
 
-    if (visualPosition === "above" || visualPosition === "below") {
-      domPosition = visualPosition === "above" ? "before" : "after";
-      newEl = insertElement(domPosition, reference, tag, text, {});
-    } else {
-      domPosition = visualPosition === "left" ? "before" : "after";
-      const result = insertElementHorizontal(visualPosition, reference, tag, text, {});
-      newEl = result.newEl;
-      wasWrapped = result.wasWrapped;
-    }
+      if (visualPosition === "above" || visualPosition === "below") {
+        domPosition = visualPosition === "above" ? "before" : "after";
+        newEl = insertElement(domPosition, reference, tag, text, {});
+      } else {
+        domPosition = visualPosition === "left" ? "before" : "after";
+        const result = insertElementHorizontal(visualPosition, reference, tag, text, {});
+        newEl = result.newEl;
+        wasWrapped = result.wasWrapped;
+      }
 
-    const screenshotAfter = await takeScreenshot(newEl, hostElement);
+      const screenshotAfter = await takeScreenshot(newEl, hostElement);
 
-    addAction({
-      type: "insert",
-      selector: generateSelector(newEl),
-      timestamp: new Date().toISOString(),
-      screenshotBefore,
-      screenshotAfter,
-      position: domPosition,
-      visualPosition,
-      referenceSelector: refSelector,
-      content: { tag, text, attributes: {} },
-      wasWrapped,
-      ...(prompt ? { prompt } : {}),
-    });
-
-    if (wasWrapped) {
-      const wrapper = newEl.parentElement!;
-      pushUndo(() => {
-        const parent = wrapper.parentElement!;
-        parent.insertBefore(reference, wrapper);
-        wrapper.remove();
+      addAction({
+        type: "insert",
+        selector: generateSelector(newEl),
+        timestamp: new Date().toISOString(),
+        screenshotBefore,
+        screenshotAfter,
+        position: domPosition,
+        visualPosition,
+        referenceSelector: refSelector,
+        content: { tag, text, attributes: {} },
+        wasWrapped,
+        ...(prompt ? { prompt } : {}),
       });
-    } else {
-      pushUndo(() => {
-        newEl.remove();
-      });
-    }
 
-    setPopup(null);
-    setInsertTag("p");
-    setInsertText("");
-    setInsertPrompt("");
-  }, [addAction, hostElement, pushUndo]);
+      if (wasWrapped) {
+        const wrapper = newEl.parentElement!;
+        pushUndo(() => {
+          const parent = wrapper.parentElement!;
+          parent.insertBefore(reference, wrapper);
+          wrapper.remove();
+        });
+      } else {
+        pushUndo(() => {
+          newEl.remove();
+        });
+      }
+
+      setPopup(null);
+      setInsertTag("p");
+      setInsertText("");
+      setInsertPrompt("");
+    },
+    [addAction, hostElement, pushUndo],
+  );
 
   // Wrap handler
-  const handleWrap = useCallback(async (
-    target: Element,
-    tag: string,
-    classes: string[],
-  ) => {
-    const selector = generateSelector(target);
-    const screenshotBefore = await takeScreenshot(target, hostElement);
-    const wrapper = wrapElement(target, tag, classes);
-    const screenshotAfter = await takeScreenshot(wrapper, hostElement);
+  const handleWrap = useCallback(
+    async (target: Element, tag: string, classes: string[]) => {
+      const selector = generateSelector(target);
+      const screenshotBefore = await takeScreenshot(target, hostElement);
+      const wrapper = wrapElement(target, tag, classes);
+      const screenshotAfter = await takeScreenshot(wrapper, hostElement);
 
-    addAction({
-      type: "wrap",
-      selector,
-      timestamp: new Date().toISOString(),
-      screenshotBefore,
-      screenshotAfter,
-      wrapper: { tag, classList: classes },
-    });
+      addAction({
+        type: "wrap",
+        selector,
+        timestamp: new Date().toISOString(),
+        screenshotBefore,
+        screenshotAfter,
+        wrapper: { tag, classList: classes },
+      });
 
-    pushUndo(() => {
-      const parent = wrapper.parentElement;
-      if (parent) {
-        parent.insertBefore(target, wrapper);
-        wrapper.remove();
-      }
-    });
+      pushUndo(() => {
+        const parent = wrapper.parentElement;
+        if (parent) {
+          parent.insertBefore(target, wrapper);
+          wrapper.remove();
+        }
+      });
 
-    setPopup(null);
-  }, [addAction, hostElement, pushUndo]);
+      setPopup(null);
+    },
+    [addAction, hostElement, pushUndo],
+  );
 
   // Fire a generation request (shared by section + image flows)
-  const fireGenerationRequest = useCallback((
-    requestId: string,
-    type: "section" | "image",
-    prompt: string,
-    context: object,
-    onResult: (data: object) => void,
-    onTimeout: () => void,
-  ) => {
-    // 1. POST to Agent Manager
-    fetch(`${AGENT_MANAGER_URL}/api/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, type, prompt, context }),
-    }).catch(() => {
-      // Fire-and-forget; NATS is the primary channel
-    });
-
-    // 2. Publish via NATS
-    if (natsClient.connected) {
-      natsClient.publish(`vex.generate.request.${projectId}`, {
-        requestId,
-        projectId,
-        type,
-        prompt,
-        context,
+  const fireGenerationRequest = useCallback(
+    (
+      requestId: string,
+      type: "section" | "image",
+      prompt: string,
+      context: object,
+      onResult: (data: object) => void,
+      onTimeout: () => void,
+    ) => {
+      // 1. POST to Agent Manager
+      fetch(`${AGENT_MANAGER_URL}/api/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, type, prompt, context }),
+      }).catch(() => {
+        // Fire-and-forget; NATS is the primary channel
       });
-    }
 
-    // 3. Subscribe for result
-    cleanupGenSubscription();
-    const subId = natsClient.subscribe(
-      `vex.generate.result.${requestId}`,
-      (data) => {
+      // 2. Publish via NATS
+      if (natsClient.connected) {
+        natsClient.publish(`vex.generate.request.${projectId}`, {
+          requestId,
+          projectId,
+          type,
+          prompt,
+          context,
+        });
+      }
+
+      // 3. Subscribe for result
+      cleanupGenSubscription();
+      const subId = natsClient.subscribe(`vex.generate.result.${requestId}`, (data) => {
         clearGenTimer();
         cleanupGenSubscription();
         setGenStatus({ state: "idle" });
         onResult(data);
-      },
-    );
-    genSubIdRef.current = subId;
+      });
+      genSubIdRef.current = subId;
 
-    // 4. Start timeout
-    clearGenTimer();
-    setGenStatus({ state: "loading" });
-    genTimeoutRef.current = setTimeout(() => {
-      cleanupGenSubscription();
-      onTimeout();
-    }, GENERATION_TIMEOUT_MS);
-  }, [natsClient, projectId, clearGenTimer, cleanupGenSubscription]);
+      // 4. Start timeout
+      clearGenTimer();
+      setGenStatus({ state: "loading" });
+      genTimeoutRef.current = setTimeout(() => {
+        cleanupGenSubscription();
+        onTimeout();
+      }, GENERATION_TIMEOUT_MS);
+    },
+    [natsClient, projectId, clearGenTimer, cleanupGenSubscription],
+  );
 
   // Section generation handler
-  const handleGenerateSection = useCallback(async (
-    position: "before" | "after",
-    reference: Element,
-    prompt: string,
-    styleHint: string,
-  ) => {
-    const requestId = crypto.randomUUID();
-    const refSelector = generateSelector(reference);
-    const screenshotBefore = await takeScreenshot(reference, hostElement);
+  const handleGenerateSection = useCallback(
+    async (position: "before" | "after", reference: Element, prompt: string, styleHint: string) => {
+      const requestId = crypto.randomUUID();
+      const refSelector = generateSelector(reference);
+      const screenshotBefore = await takeScreenshot(reference, hostElement);
 
-    const surroundingHTML = reference.outerHTML.slice(0, 500);
-    const rect = reference.getBoundingClientRect();
-    const context = {
-      pageUrl: location.href,
-      surroundingHTML,
-      dimensions: { width: rect.width, height: rect.height },
-      position,
-      styleHint,
-    };
+      const surroundingHTML = reference.outerHTML.slice(0, 500);
+      const rect = reference.getBoundingClientRect();
+      const context = {
+        pageUrl: location.href,
+        surroundingHTML,
+        dimensions: { width: rect.width, height: rect.height },
+        position,
+        styleHint,
+      };
 
-    const doRequest = () => {
-      fireGenerationRequest(
-        requestId,
-        "section",
-        prompt,
-        context,
-        (data) => {
-          const generatedHTML = (data as { html?: string }).html ?? "";
-          if (generatedHTML) {
-            const temp = document.createElement("div");
-            temp.innerHTML = generatedHTML;
-            const fragment = document.createDocumentFragment();
-            while (temp.firstChild) fragment.appendChild(temp.firstChild);
-            if (position === "before") {
-              reference.parentElement?.insertBefore(fragment, reference);
-            } else {
-              reference.parentElement?.insertBefore(fragment, reference.nextSibling);
+      const doRequest = () => {
+        fireGenerationRequest(
+          requestId,
+          "section",
+          prompt,
+          context,
+          (data) => {
+            const generatedHTML = (data as { html?: string }).html ?? "";
+            if (generatedHTML) {
+              const temp = document.createElement("div");
+              temp.innerHTML = generatedHTML;
+              const fragment = document.createDocumentFragment();
+              while (temp.firstChild) fragment.appendChild(temp.firstChild);
+              if (position === "before") {
+                reference.parentElement?.insertBefore(fragment, reference);
+              } else {
+                reference.parentElement?.insertBefore(fragment, reference.nextSibling);
+              }
             }
-          }
 
-          addAction({
-            type: "generateSection",
-            selector: refSelector,
-            timestamp: new Date().toISOString(),
-            screenshotBefore,
-            screenshotAfter: screenshotBefore,
-            position,
-            referenceSelector: refSelector,
-            prompt,
-            styleHint,
-            generatedHTML,
-          });
-        },
-        () => {
-          setGenStatus({
-            state: "timeout",
-            requestId,
-            type: "section",
-            prompt,
-            context,
-            retryFn: doRequest,
-          });
-        },
-      );
-    };
+            addAction({
+              type: "generateSection",
+              selector: refSelector,
+              timestamp: new Date().toISOString(),
+              screenshotBefore,
+              screenshotAfter: screenshotBefore,
+              position,
+              referenceSelector: refSelector,
+              prompt,
+              styleHint,
+              generatedHTML,
+            });
+          },
+          () => {
+            setGenStatus({
+              state: "timeout",
+              requestId,
+              type: "section",
+              prompt,
+              context,
+              retryFn: doRequest,
+            });
+          },
+        );
+      };
 
-    doRequest();
-    setSectionPrompt("");
-    setSectionStyle("match existing");
-  }, [addAction, hostElement, fireGenerationRequest]);
+      doRequest();
+      setSectionPrompt("");
+      setSectionStyle("match existing");
+    },
+    [addAction, hostElement, fireGenerationRequest],
+  );
 
   // Image replace handlers
-  const handleImageUpload = useCallback((target: HTMLImageElement) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        const originalSrc = target.src;
-        const selector = generateSelector(target);
-        const screenshotBefore = await takeScreenshot(target, hostElement);
-        const dims = { width: target.naturalWidth, height: target.naturalHeight };
+  const handleImageUpload = useCallback(
+    (target: HTMLImageElement) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const dataUrl = reader.result as string;
+          const originalSrc = target.src;
+          const selector = generateSelector(target);
+          const screenshotBefore = await takeScreenshot(target, hostElement);
+          const dims = { width: target.naturalWidth, height: target.naturalHeight };
 
-        target.src = dataUrl;
-        const screenshotAfter = await takeScreenshot(target, hostElement);
-
-        addAction({
-          type: "replaceImage",
-          selector,
-          timestamp: new Date().toISOString(),
-          screenshotBefore,
-          screenshotAfter,
-          originalSrc,
-          method: "upload",
-          dimensions: dims,
-        });
-
-        pushUndo(() => {
-          target.src = originalSrc;
-        });
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
-    setPopup(null);
-  }, [addAction, hostElement, pushUndo]);
-
-  const handleImageUrl = useCallback(async (target: HTMLImageElement, url: string) => {
-    const originalSrc = target.src;
-    const selector = generateSelector(target);
-    const screenshotBefore = await takeScreenshot(target, hostElement);
-    const dims = { width: target.naturalWidth, height: target.naturalHeight };
-
-    target.src = url;
-    const screenshotAfter = await takeScreenshot(target, hostElement);
-
-    addAction({
-      type: "replaceImage",
-      selector,
-      timestamp: new Date().toISOString(),
-      screenshotBefore,
-      screenshotAfter,
-      originalSrc,
-      method: "url",
-      dimensions: dims,
-    });
-
-    pushUndo(() => {
-      target.src = originalSrc;
-    });
-
-    setPopup(null);
-    setImageUrl("");
-  }, [addAction, hostElement, pushUndo]);
-
-  const handleImageGenerate = useCallback(async (target: HTMLImageElement, prompt: string) => {
-    const requestId = crypto.randomUUID();
-    const originalSrc = target.src;
-    const selector = generateSelector(target);
-    const screenshotBefore = await takeScreenshot(target, hostElement);
-    const dims = { width: target.naturalWidth, height: target.naturalHeight };
-
-    const context = {
-      pageUrl: location.href,
-      surroundingHTML: target.parentElement?.innerHTML?.slice(0, 500) ?? "",
-      dimensions: dims,
-    };
-
-    const doRequest = () => {
-      fireGenerationRequest(
-        requestId,
-        "image",
-        prompt,
-        context,
-        (data) => {
-          const generatedUrl = (data as { url?: string }).url ?? "";
-          if (generatedUrl) {
-            target.src = generatedUrl;
-          }
+          target.src = dataUrl;
+          const screenshotAfter = await takeScreenshot(target, hostElement);
 
           addAction({
             type: "replaceImage",
             selector,
             timestamp: new Date().toISOString(),
             screenshotBefore,
-            screenshotAfter: screenshotBefore,
+            screenshotAfter,
             originalSrc,
-            method: "generate",
-            prompt,
+            method: "upload",
             dimensions: dims,
-            generatedUrl: generatedUrl || undefined,
           });
 
           pushUndo(() => {
             target.src = originalSrc;
           });
-        },
-        () => {
-          setGenStatus({
-            state: "timeout",
-            requestId,
-            type: "image",
-            prompt,
-            context,
-            retryFn: doRequest,
-          });
-        },
-      );
-    };
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+      setPopup(null);
+    },
+    [addAction, hostElement, pushUndo],
+  );
 
-    doRequest();
-    setPopup(null);
-    setImagePrompt("");
-  }, [addAction, hostElement, pushUndo, fireGenerationRequest]);
+  const handleImageUrl = useCallback(
+    async (target: HTMLImageElement, url: string) => {
+      const originalSrc = target.src;
+      const selector = generateSelector(target);
+      const screenshotBefore = await takeScreenshot(target, hostElement);
+      const dims = { width: target.naturalWidth, height: target.naturalHeight };
+
+      target.src = url;
+      const screenshotAfter = await takeScreenshot(target, hostElement);
+
+      addAction({
+        type: "replaceImage",
+        selector,
+        timestamp: new Date().toISOString(),
+        screenshotBefore,
+        screenshotAfter,
+        originalSrc,
+        method: "url",
+        dimensions: dims,
+      });
+
+      pushUndo(() => {
+        target.src = originalSrc;
+      });
+
+      setPopup(null);
+      setImageUrl("");
+    },
+    [addAction, hostElement, pushUndo],
+  );
+
+  const handleImageGenerate = useCallback(
+    async (target: HTMLImageElement, prompt: string) => {
+      const requestId = crypto.randomUUID();
+      const originalSrc = target.src;
+      const selector = generateSelector(target);
+      const screenshotBefore = await takeScreenshot(target, hostElement);
+      const dims = { width: target.naturalWidth, height: target.naturalHeight };
+
+      const context = {
+        pageUrl: location.href,
+        surroundingHTML: target.parentElement?.innerHTML?.slice(0, 500) ?? "",
+        dimensions: dims,
+      };
+
+      const doRequest = () => {
+        fireGenerationRequest(
+          requestId,
+          "image",
+          prompt,
+          context,
+          (data) => {
+            const generatedUrl = (data as { url?: string }).url ?? "";
+            if (generatedUrl) {
+              target.src = generatedUrl;
+            }
+
+            addAction({
+              type: "replaceImage",
+              selector,
+              timestamp: new Date().toISOString(),
+              screenshotBefore,
+              screenshotAfter: screenshotBefore,
+              originalSrc,
+              method: "generate",
+              prompt,
+              dimensions: dims,
+              generatedUrl: generatedUrl || undefined,
+            });
+
+            pushUndo(() => {
+              target.src = originalSrc;
+            });
+          },
+          () => {
+            setGenStatus({
+              state: "timeout",
+              requestId,
+              type: "image",
+              prompt,
+              context,
+              retryFn: doRequest,
+            });
+          },
+        );
+      };
+
+      doRequest();
+      setPopup(null);
+      setImagePrompt("");
+    },
+    [addAction, hostElement, pushUndo, fireGenerationRequest],
+  );
 
   // Drag handlers
   const onDragStart = useCallback((e: React.DragEvent, el: Element) => {
@@ -843,48 +874,51 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
     e.dataTransfer.dropEffect = "move";
   }, []);
 
-  const onDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    const source = dragSourceRef.current;
-    if (!source) return;
-    (source as HTMLElement).style.opacity = "";
+  const onDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      const source = dragSourceRef.current;
+      if (!source) return;
+      (source as HTMLElement).style.opacity = "";
 
-    const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
-    if (!dropTarget || !source.parentElement || isOwnElement(dropTarget)) return;
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+      if (!dropTarget || !source.parentElement || isOwnElement(dropTarget)) return;
 
-    const parent = source.parentElement;
-    const siblings = Array.from(parent.children);
-    const fromIndex = siblings.indexOf(source);
-    const toIndex = siblings.indexOf(dropTarget);
+      const parent = source.parentElement;
+      const siblings = Array.from(parent.children);
+      const fromIndex = siblings.indexOf(source);
+      const toIndex = siblings.indexOf(dropTarget);
 
-    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
 
-    const parentSelector = generateSelector(parent);
-    const selector = generateSelector(source);
-    const screenshotBefore = await takeScreenshot(parent, hostElement);
+      const parentSelector = generateSelector(parent);
+      const selector = generateSelector(source);
+      const screenshotBefore = await takeScreenshot(parent, hostElement);
 
-    reorderElement(parent, fromIndex, toIndex);
+      reorderElement(parent, fromIndex, toIndex);
 
-    const screenshotAfter = await takeScreenshot(parent, hostElement);
+      const screenshotAfter = await takeScreenshot(parent, hostElement);
 
-    addAction({
-      type: "move",
-      selector,
-      timestamp: new Date().toISOString(),
-      screenshotBefore,
-      screenshotAfter,
-      parentSelector,
-      fromIndex,
-      toIndex,
-    });
+      addAction({
+        type: "move",
+        selector,
+        timestamp: new Date().toISOString(),
+        screenshotBefore,
+        screenshotAfter,
+        parentSelector,
+        fromIndex,
+        toIndex,
+      });
 
-    pushUndo(() => {
-      reorderElement(parent, toIndex, fromIndex);
-    });
+      pushUndo(() => {
+        reorderElement(parent, toIndex, fromIndex);
+      });
 
-    dragSourceRef.current = null;
-    setDragOverIndex(null);
-  }, [addAction, hostElement, pushUndo]);
+      dragSourceRef.current = null;
+      setDragOverIndex(null);
+    },
+    [addAction, hostElement, pushUndo],
+  );
 
   const onDragEnd = useCallback(() => {
     if (dragSourceRef.current) {
@@ -949,7 +983,10 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       let current: Element | null = dropTarget;
       while (current && current !== parent) {
         const idx = siblings.indexOf(current);
-        if (idx !== -1) { toIndex = idx; break; }
+        if (idx !== -1) {
+          toIndex = idx;
+          break;
+        }
         current = current.parentElement;
       }
 
@@ -1026,12 +1063,13 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const ref = popup.reference;
       const rect = ref.getBoundingClientRect();
       const vp = popup.visualPosition;
-      const rawTop = vp === "above" ? rect.top - 10
-        : vp === "below" ? rect.bottom + 10
-        : rect.top;
-      const rawLeft = vp === "left" ? rect.left - insertPopupSize.width - 10
-        : vp === "right" ? rect.right + 10
-        : rect.left;
+      const rawTop = vp === "above" ? rect.top - 10 : vp === "below" ? rect.bottom + 10 : rect.top;
+      const rawLeft =
+        vp === "left"
+          ? rect.left - insertPopupSize.width - 10
+          : vp === "right"
+            ? rect.right + 10
+            : rect.left;
       // Account for padding (12px * 2) + border (1px * 2) so buttons aren't clipped
       const outerW = insertPopupSize.width + 26;
       const outerH = insertPopupSize.height + 26;
@@ -1065,12 +1103,23 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const handleInsertResize = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        insertDragRef.current = { startX: e.clientX, startY: e.clientY, startW: insertPopupSize.width, startH: insertPopupSize.height };
+        insertDragRef.current = {
+          startX: e.clientX,
+          startY: e.clientY,
+          startW: insertPopupSize.width,
+          startH: insertPopupSize.height,
+        };
         const onMove = (ev: MouseEvent) => {
           if (!insertDragRef.current) return;
           setInsertPopupSize({
-            width: Math.max(260, insertDragRef.current.startW + (ev.clientX - insertDragRef.current.startX)),
-            height: Math.max(200, insertDragRef.current.startH + (ev.clientY - insertDragRef.current.startY)),
+            width: Math.max(
+              260,
+              insertDragRef.current.startW + (ev.clientX - insertDragRef.current.startX),
+            ),
+            height: Math.max(
+              200,
+              insertDragRef.current.startH + (ev.clientY - insertDragRef.current.startY),
+            ),
           });
         };
         const onUp = () => {
@@ -1098,9 +1147,22 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
         >
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Insert {vp}</div>
           {/* Tab toggle */}
-          <div style={{ display: "flex", gap: 2, background: "#313244", borderRadius: 4, padding: 2, marginBottom: 8 }}>
-            <button style={tabStyle(insertTab === "prompt")} onClick={() => setInsertTab("prompt")}>Prompt</button>
-            <button style={tabStyle(insertTab === "manual")} onClick={() => setInsertTab("manual")}>Manual</button>
+          <div
+            style={{
+              display: "flex",
+              gap: 2,
+              background: "#313244",
+              borderRadius: 4,
+              padding: 2,
+              marginBottom: 8,
+            }}
+          >
+            <button style={tabStyle(insertTab === "prompt")} onClick={() => setInsertTab("prompt")}>
+              Prompt
+            </button>
+            <button style={tabStyle(insertTab === "manual")} onClick={() => setInsertTab("manual")}>
+              Manual
+            </button>
           </div>
 
           {insertTab === "manual" ? (
@@ -1110,7 +1172,11 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
                 onChange={(e) => setInsertTag(e.target.value)}
                 style={selectStyle}
               >
-                {INSERT_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+                {INSERT_TAGS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
               <input
                 type="text"
@@ -1125,16 +1191,30 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
                 style={{ ...inputStyle, marginTop: 6 }}
               />
               <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
-                <button onClick={() => handleInsert(vp, ref, insertTag, insertText)} style={btnPrimaryStyle}>Insert</button>
+                <button onClick={() => setPopup(null)} style={btnCancelStyle}>
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleInsert(vp, ref, insertTag, insertText)}
+                  style={btnPrimaryStyle}
+                >
+                  Insert
+                </button>
               </div>
             </>
           ) : (
             <>
-              <div ref={insertEditorContainerRef} style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }} />
+              <div
+                ref={insertEditorContainerRef}
+                style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
+              />
               <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-                <button onClick={handlePromptCancel} style={btnCancelStyle}>Cancel</button>
-                <button onClick={handlePromptSubmit} style={btnPrimaryStyle}>Insert</button>
+                <button onClick={handlePromptCancel} style={btnCancelStyle}>
+                  Cancel
+                </button>
+                <button onClick={handlePromptSubmit} style={btnPrimaryStyle}>
+                  Insert
+                </button>
               </div>
             </>
           )}
@@ -1153,7 +1233,12 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
               }}
             >
               <svg width="10" height="10" viewBox="0 0 10 10">
-                <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="#6c7086" strokeWidth="1.2" strokeLinecap="round" />
+                <path
+                  d="M9 1L1 9M9 5L5 9M9 9L9 9"
+                  stroke="#6c7086"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
               </svg>
             </div>
           )}
@@ -1165,14 +1250,17 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const rect = popup.target.getBoundingClientRect();
       const wrapPos = clampToViewport(rect.top - 10, rect.left, 240, 160);
       return (
-        <div style={{ ...popupStyle, left: wrapPos.left, top: wrapPos.top, minWidth: 240 }} className="cs-edit-popup">
+        <div
+          style={{ ...popupStyle, left: wrapPos.left, top: wrapPos.top, minWidth: 240 }}
+          className="cs-edit-popup"
+        >
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Wrap element</div>
-          <select
-            value={wrapTag}
-            onChange={(e) => setWrapTag(e.target.value)}
-            style={selectStyle}
-          >
-            {WRAP_TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
+          <select value={wrapTag} onChange={(e) => setWrapTag(e.target.value)} style={selectStyle}>
+            {WRAP_TAGS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
           <input
             type="text"
@@ -1180,15 +1268,25 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
             value={wrapClasses}
             onChange={(e) => setWrapClasses(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleWrap(popup.target, wrapTag, wrapClasses.split(/\s+/).filter(Boolean));
+              if (e.key === "Enter")
+                handleWrap(popup.target, wrapTag, wrapClasses.split(/\s+/).filter(Boolean));
               if (e.key === "Escape") setPopup(null);
             }}
             autoFocus
             style={{ ...inputStyle, marginTop: 6 }}
           />
           <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
-            <button onClick={() => handleWrap(popup.target, wrapTag, wrapClasses.split(/\s+/).filter(Boolean))} style={btnPrimaryStyle}>Wrap</button>
+            <button onClick={() => setPopup(null)} style={btnCancelStyle}>
+              Cancel
+            </button>
+            <button
+              onClick={() =>
+                handleWrap(popup.target, wrapTag, wrapClasses.split(/\s+/).filter(Boolean))
+              }
+              style={btnPrimaryStyle}
+            >
+              Wrap
+            </button>
           </div>
         </div>
       );
@@ -1200,10 +1298,15 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const sectionPos = clampToViewport(rawSectionTop, rect.left, 320, 200);
       const isGenerating = genStatus.state === "loading";
       return (
-        <div style={{ ...popupStyle, left: sectionPos.left, top: sectionPos.top, minWidth: 320 }} className="cs-edit-popup">
+        <div
+          style={{ ...popupStyle, left: sectionPos.left, top: sectionPos.top, minWidth: 320 }}
+          className="cs-edit-popup"
+        >
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Generate Section</div>
           {isGenerating ? (
-            <div style={{ padding: "12px 0", textAlign: "center", color: "#a6adc8" }}>Generating...</div>
+            <div style={{ padding: "12px 0", textAlign: "center", color: "#a6adc8" }}>
+              Generating...
+            </div>
           ) : (
             <>
               <textarea
@@ -1218,12 +1321,25 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
                 onChange={(e) => setSectionStyle(e.target.value)}
                 style={{ ...selectStyle, marginTop: 6 }}
               >
-                {STYLE_HINTS.map((h) => <option key={h} value={h}>{h}</option>)}
+                {STYLE_HINTS.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
               </select>
               <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
+                <button onClick={() => setPopup(null)} style={btnCancelStyle}>
+                  Cancel
+                </button>
                 <button
-                  onClick={() => handleGenerateSection(popup.position, popup.reference, sectionPrompt, sectionStyle)}
+                  onClick={() =>
+                    handleGenerateSection(
+                      popup.position,
+                      popup.reference,
+                      sectionPrompt,
+                      sectionStyle,
+                    )
+                  }
                   disabled={!sectionPrompt.trim()}
                   style={btnPrimaryStyle}
                 >
@@ -1240,14 +1356,40 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const rect = popup.target.getBoundingClientRect();
       const imgReplacePos = clampToViewport(rect.top - 10, rect.left, 200, 180);
       return (
-        <div style={{ ...popupStyle, left: imgReplacePos.left, top: imgReplacePos.top, minWidth: 200 }} className="cs-edit-popup">
+        <div
+          style={{ ...popupStyle, left: imgReplacePos.left, top: imgReplacePos.top, minWidth: 200 }}
+          className="cs-edit-popup"
+        >
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Replace Image</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <button onClick={() => handleImageUpload(popup.target)} style={btnOptionStyle}>Upload File</button>
-            <button onClick={() => { setPopup({ kind: "imageUrl", target: popup.target }); setImageUrl(""); }} style={btnOptionStyle}>Paste URL</button>
-            <button onClick={() => { setPopup({ kind: "imageGenerate", target: popup.target }); setImagePrompt(""); }} style={btnOptionStyle}>Generate</button>
+            <button onClick={() => handleImageUpload(popup.target)} style={btnOptionStyle}>
+              Upload File
+            </button>
+            <button
+              onClick={() => {
+                setPopup({ kind: "imageUrl", target: popup.target });
+                setImageUrl("");
+              }}
+              style={btnOptionStyle}
+            >
+              Paste URL
+            </button>
+            <button
+              onClick={() => {
+                setPopup({ kind: "imageGenerate", target: popup.target });
+                setImagePrompt("");
+              }}
+              style={btnOptionStyle}
+            >
+              Generate
+            </button>
           </div>
-          <button onClick={() => setPopup(null)} style={{ ...btnCancelStyle, marginTop: 8, width: "100%" }}>Cancel</button>
+          <button
+            onClick={() => setPopup(null)}
+            style={{ ...btnCancelStyle, marginTop: 8, width: "100%" }}
+          >
+            Cancel
+          </button>
         </div>
       );
     }
@@ -1256,7 +1398,10 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const rect = popup.target.getBoundingClientRect();
       const imgUrlPos = clampToViewport(rect.top - 10, rect.left, 280, 120);
       return (
-        <div style={{ ...popupStyle, left: imgUrlPos.left, top: imgUrlPos.top, minWidth: 280 }} className="cs-edit-popup">
+        <div
+          style={{ ...popupStyle, left: imgUrlPos.left, top: imgUrlPos.top, minWidth: 280 }}
+          className="cs-edit-popup"
+        >
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Image URL</div>
           <input
             type="text"
@@ -1264,15 +1409,24 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && imageUrl.trim()) handleImageUrl(popup.target, imageUrl.trim());
+              if (e.key === "Enter" && imageUrl.trim())
+                handleImageUrl(popup.target, imageUrl.trim());
               if (e.key === "Escape") setPopup(null);
             }}
             autoFocus
             style={inputStyle}
           />
           <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
-            <button onClick={() => handleImageUrl(popup.target, imageUrl.trim())} disabled={!imageUrl.trim()} style={btnPrimaryStyle}>Apply</button>
+            <button onClick={() => setPopup(null)} style={btnCancelStyle}>
+              Cancel
+            </button>
+            <button
+              onClick={() => handleImageUrl(popup.target, imageUrl.trim())}
+              disabled={!imageUrl.trim()}
+              style={btnPrimaryStyle}
+            >
+              Apply
+            </button>
           </div>
         </div>
       );
@@ -1283,10 +1437,15 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       const imgGenPos = clampToViewport(rect.top - 10, rect.left, 280, 140);
       const isGenerating = genStatus.state === "loading";
       return (
-        <div style={{ ...popupStyle, left: imgGenPos.left, top: imgGenPos.top, minWidth: 280 }} className="cs-edit-popup">
+        <div
+          style={{ ...popupStyle, left: imgGenPos.left, top: imgGenPos.top, minWidth: 280 }}
+          className="cs-edit-popup"
+        >
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Generate Image</div>
           {isGenerating ? (
-            <div style={{ padding: "12px 0", textAlign: "center", color: "#a6adc8" }}>Generating...</div>
+            <div style={{ padding: "12px 0", textAlign: "center", color: "#a6adc8" }}>
+              Generating...
+            </div>
           ) : (
             <>
               <input
@@ -1295,15 +1454,24 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
                 value={imagePrompt}
                 onChange={(e) => setImagePrompt(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && imagePrompt.trim()) handleImageGenerate(popup.target, imagePrompt.trim());
+                  if (e.key === "Enter" && imagePrompt.trim())
+                    handleImageGenerate(popup.target, imagePrompt.trim());
                   if (e.key === "Escape") setPopup(null);
                 }}
                 autoFocus
                 style={inputStyle}
               />
               <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setPopup(null)} style={btnCancelStyle}>Cancel</button>
-                <button onClick={() => handleImageGenerate(popup.target, imagePrompt.trim())} disabled={!imagePrompt.trim()} style={btnPrimaryStyle}>Generate</button>
+                <button onClick={() => setPopup(null)} style={btnCancelStyle}>
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleImageGenerate(popup.target, imagePrompt.trim())}
+                  disabled={!imagePrompt.trim()}
+                  style={btnPrimaryStyle}
+                >
+                  Generate
+                </button>
               </div>
             </>
           )}
@@ -1319,162 +1487,195 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
       {/* Hover highlight — pointer-events: none so elementFromPoint always sees page elements.
            Buttons use pointer-events: auto + expanded ::before hit areas (CSS) + onMouseEnter lock
            so they stay reachable without blocking child-element selection. */}
-      {hoverRect && hovered && !popup && !editing && (() => {
-        // Clamp insert buttons / label / delete so they stay visible at viewport edges
-        const BTN = 22;  // button diameter
-        const HALF = BTN / 2; // 11px
-        const vpW = window.innerWidth;
-        const vpH = window.innerHeight;
-        // How far outside the highlight each button sits (CSS default: -12px)
-        const OFF = 12;
+      {hoverRect &&
+        hovered &&
+        !popup &&
+        !editing &&
+        (() => {
+          // Clamp insert buttons / label / delete so they stay visible at viewport edges
+          const BTN = 22; // button diameter
+          const HALF = BTN / 2; // 11px
+          const vpW = window.innerWidth;
+          const vpH = window.innerHeight;
+          // How far outside the highlight each button sits (CSS default: -12px)
+          const OFF = 12;
 
-        // Left button: default left: -12px → viewport x = hoverRect.x - 12
-        // If that's < 0, push it inward
-        const leftBtnLeft = Math.max(-OFF, -hoverRect.x + 2);
-        // Right button: default right: -12px → viewport x = hoverRect.x + hoverRect.width + 12 - 22
-        // If right edge goes past viewport, pull inward
-        const rightBtnOverflow = (hoverRect.x + hoverRect.width + OFF) - vpW;
-        const rightBtnRight = rightBtnOverflow > 0 ? -OFF + rightBtnOverflow + 2 : -OFF;
-        // Top button: default top: -12px
-        const topBtnTop = Math.max(-OFF, -hoverRect.y + 2);
-        // Bottom button: default bottom: -12px
-        const bottomBtnOverflow = (hoverRect.y + hoverRect.height + OFF) - vpH;
-        const bottomBtnBottom = bottomBtnOverflow > 0 ? -OFF + bottomBtnOverflow + 2 : -OFF;
-        // Label: default top: -20px — if element near top, flip inside
-        const labelFlip = hoverRect.y < 22;
-        // Delete button: default top: -10px, right: -10px
-        const delTop = Math.max(-10, -hoverRect.y + 2);
-        const delRightOverflow = (hoverRect.x + hoverRect.width + 10) - vpW;
-        const delRight = delRightOverflow > 0 ? -10 + delRightOverflow + 2 : -10;
+          // Left button: default left: -12px → viewport x = hoverRect.x - 12
+          // If that's < 0, push it inward
+          const leftBtnLeft = Math.max(-OFF, -hoverRect.x + 2);
+          // Right button: default right: -12px → viewport x = hoverRect.x + hoverRect.width + 12 - 22
+          // If right edge goes past viewport, pull inward
+          const rightBtnOverflow = hoverRect.x + hoverRect.width + OFF - vpW;
+          const rightBtnRight = rightBtnOverflow > 0 ? -OFF + rightBtnOverflow + 2 : -OFF;
+          // Top button: default top: -12px
+          const topBtnTop = Math.max(-OFF, -hoverRect.y + 2);
+          // Bottom button: default bottom: -12px
+          const bottomBtnOverflow = hoverRect.y + hoverRect.height + OFF - vpH;
+          const bottomBtnBottom = bottomBtnOverflow > 0 ? -OFF + bottomBtnOverflow + 2 : -OFF;
+          // Label: default top: -20px — if element near top, flip inside
+          const labelFlip = hoverRect.y < 22;
+          // Delete button: default top: -10px, right: -10px
+          const delTop = Math.max(-10, -hoverRect.y + 2);
+          const delRightOverflow = hoverRect.x + hoverRect.width + 10 - vpW;
+          const delRight = delRightOverflow > 0 ? -10 + delRightOverflow + 2 : -10;
 
-        return (
-        <div
-          className="cs-edit-highlight"
-          style={{
-            position: "fixed",
-            left: hoverRect.x,
-            top: hoverRect.y,
-            width: hoverRect.width,
-            height: hoverRect.height,
-            border: "2px dashed #3b82f6",
-            cursor: "crosshair",
-            pointerEvents: "none",
-            borderRadius: 2,
-            boxSizing: "border-box",
-          }}
-        >
-          {/* Label */}
-          <span
-            className="cs-edit-label"
-            style={labelFlip ? { top: "auto", bottom: -20, borderRadius: "0 0 3px 3px" } : undefined}
-          >
-            {hovered.tagName.toLowerCase()}
-            {hovered.id ? `#${hovered.id}` : ""}
-            {hovered.classList.length > 0 ? `.${hovered.classList[0]}` : ""}
-          </span>
+          return (
+            <div
+              className="cs-edit-highlight"
+              style={{
+                position: "fixed",
+                left: hoverRect.x,
+                top: hoverRect.y,
+                width: hoverRect.width,
+                height: hoverRect.height,
+                border: "2px dashed #3b82f6",
+                cursor: "crosshair",
+                pointerEvents: "none",
+                borderRadius: 2,
+                boxSizing: "border-box",
+              }}
+            >
+              {/* Label */}
+              <span
+                className="cs-edit-label"
+                style={
+                  labelFlip ? { top: "auto", bottom: -20, borderRadius: "0 0 3px 3px" } : undefined
+                }
+              >
+                {hovered.tagName.toLowerCase()}
+                {hovered.id ? `#${hovered.id}` : ""}
+                {hovered.classList.length > 0 ? `.${hovered.classList[0]}` : ""}
+              </span>
 
-          {/* Delete button */}
-          <button
-            className="cs-edit-delete-btn"
-            style={{ pointerEvents: "auto", top: delTop, right: delRight }}
-            onMouseEnter={() => { overHighlightRef.current = true; }}
-            onMouseLeave={() => { overHighlightRef.current = false; }}
-            onClick={(e) => { e.stopPropagation(); handleDelete(hovered); }}
-            title="Delete element"
-          >
-            x
-          </button>
-
-          {/* "+" insertion handles — all 4 directions on every element */}
-          <button
-            className="cs-edit-insert-btn cs-edit-insert-top"
-            style={{ pointerEvents: "auto", top: topBtnTop }}
-            onMouseEnter={() => { overHighlightRef.current = true; }}
-            onMouseLeave={() => { overHighlightRef.current = false; }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setInsertTag("p");
-              setInsertText("");
-              setInsertPrompt("");
-              setInsertTab("prompt");
-              setPopup({ kind: "insert", visualPosition: "above", reference: hovered });
-            }}
-            title="Insert above"
-          >
-            +
-          </button>
-          <button
-            className="cs-edit-insert-btn cs-edit-insert-bottom"
-            style={{ pointerEvents: "auto", bottom: bottomBtnBottom }}
-            onMouseEnter={() => { overHighlightRef.current = true; }}
-            onMouseLeave={() => { overHighlightRef.current = false; }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setInsertTag("p");
-              setInsertText("");
-              setInsertPrompt("");
-              setInsertTab("prompt");
-              setPopup({ kind: "insert", visualPosition: "below", reference: hovered });
-            }}
-            title="Insert below"
-          >
-            +
-          </button>
-          <button
-            className="cs-edit-insert-btn cs-edit-insert-left"
-            style={{ pointerEvents: "auto", left: leftBtnLeft }}
-            onMouseEnter={() => { overHighlightRef.current = true; }}
-            onMouseLeave={() => { overHighlightRef.current = false; }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setInsertTag("p");
-              setInsertText("");
-              setInsertPrompt("");
-              setInsertTab("prompt");
-              setPopup({ kind: "insert", visualPosition: "left", reference: hovered });
-            }}
-            title="Insert left"
-          >
-            +
-          </button>
-          <button
-            className="cs-edit-insert-btn cs-edit-insert-right"
-            style={{ pointerEvents: "auto", right: rightBtnRight }}
-            onMouseEnter={() => { overHighlightRef.current = true; }}
-            onMouseLeave={() => { overHighlightRef.current = false; }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setInsertTag("p");
-              setInsertText("");
-              setInsertPrompt("");
-              setInsertTab("prompt");
-              setPopup({ kind: "insert", visualPosition: "right", reference: hovered });
-            }}
-            title="Insert right"
-          >
-            +
-          </button>
-
-          {/* Image overlay buttons */}
-          {hovered.tagName === "IMG" && (
-            <div className="cs-edit-img-overlay" style={{ pointerEvents: "auto" }}>
+              {/* Delete button */}
               <button
-                className="cs-edit-img-btn"
-                onMouseEnter={() => { overHighlightRef.current = true; }}
-                onMouseLeave={() => { overHighlightRef.current = false; }}
+                className="cs-edit-delete-btn"
+                style={{ pointerEvents: "auto", top: delTop, right: delRight }}
+                onMouseEnter={() => {
+                  overHighlightRef.current = true;
+                }}
+                onMouseLeave={() => {
+                  overHighlightRef.current = false;
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setPopup({ kind: "imageReplace", target: hovered as HTMLImageElement });
+                  handleDelete(hovered);
                 }}
-                title="Replace image"
+                title="Delete element"
               >
-                Replace
+                x
               </button>
+
+              {/* "+" insertion handles — all 4 directions on every element */}
+              <button
+                className="cs-edit-insert-btn cs-edit-insert-top"
+                style={{ pointerEvents: "auto", top: topBtnTop }}
+                onMouseEnter={() => {
+                  overHighlightRef.current = true;
+                }}
+                onMouseLeave={() => {
+                  overHighlightRef.current = false;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInsertTag("p");
+                  setInsertText("");
+                  setInsertPrompt("");
+                  setInsertTab("prompt");
+                  setPopup({ kind: "insert", visualPosition: "above", reference: hovered });
+                }}
+                title="Insert above"
+              >
+                +
+              </button>
+              <button
+                className="cs-edit-insert-btn cs-edit-insert-bottom"
+                style={{ pointerEvents: "auto", bottom: bottomBtnBottom }}
+                onMouseEnter={() => {
+                  overHighlightRef.current = true;
+                }}
+                onMouseLeave={() => {
+                  overHighlightRef.current = false;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInsertTag("p");
+                  setInsertText("");
+                  setInsertPrompt("");
+                  setInsertTab("prompt");
+                  setPopup({ kind: "insert", visualPosition: "below", reference: hovered });
+                }}
+                title="Insert below"
+              >
+                +
+              </button>
+              <button
+                className="cs-edit-insert-btn cs-edit-insert-left"
+                style={{ pointerEvents: "auto", left: leftBtnLeft }}
+                onMouseEnter={() => {
+                  overHighlightRef.current = true;
+                }}
+                onMouseLeave={() => {
+                  overHighlightRef.current = false;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInsertTag("p");
+                  setInsertText("");
+                  setInsertPrompt("");
+                  setInsertTab("prompt");
+                  setPopup({ kind: "insert", visualPosition: "left", reference: hovered });
+                }}
+                title="Insert left"
+              >
+                +
+              </button>
+              <button
+                className="cs-edit-insert-btn cs-edit-insert-right"
+                style={{ pointerEvents: "auto", right: rightBtnRight }}
+                onMouseEnter={() => {
+                  overHighlightRef.current = true;
+                }}
+                onMouseLeave={() => {
+                  overHighlightRef.current = false;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInsertTag("p");
+                  setInsertText("");
+                  setInsertPrompt("");
+                  setInsertTab("prompt");
+                  setPopup({ kind: "insert", visualPosition: "right", reference: hovered });
+                }}
+                title="Insert right"
+              >
+                +
+              </button>
+
+              {/* Image overlay buttons */}
+              {hovered.tagName === "IMG" && (
+                <div className="cs-edit-img-overlay" style={{ pointerEvents: "auto" }}>
+                  <button
+                    className="cs-edit-img-btn"
+                    onMouseEnter={() => {
+                      overHighlightRef.current = true;
+                    }}
+                    onMouseLeave={() => {
+                      overHighlightRef.current = false;
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPopup({ kind: "imageReplace", target: hovered as HTMLImageElement });
+                    }}
+                    title="Replace image"
+                  >
+                    Replace
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* Popups */}
       {renderPopup()}

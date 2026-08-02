@@ -3,11 +3,10 @@
 import asyncio
 import logging
 import shlex
-from typing import AsyncIterator
-
-from agent_orchestrator.utils.ids import generate_agent_id
+from collections.abc import AsyncIterator
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
+from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,10 @@ class CLIWrapperAdapter(AgentAdapter):
         }
         logger.info(
             "Registered cli-wrapper agent %s (cmd=%s) for project %s at %s",
-            agent_id, self._cli_command, project_id, project_path,
+            agent_id,
+            self._cli_command,
+            project_id,
+            project_path,
         )
         return AgentProcess(agent_id=agent_id, pid=None)
 
@@ -52,7 +54,7 @@ class CLIWrapperAdapter(AgentAdapter):
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
             logger.info("Killed cli-wrapper agent %s", agent_id)
         self._agent_config.pop(agent_id, None)
@@ -89,12 +91,15 @@ class CLIWrapperAdapter(AgentAdapter):
         if proc.returncode != 0:
             logger.error(
                 "Agent %s exited with code %d: %s",
-                agent_id, proc.returncode, stderr.decode(errors="replace"),
+                agent_id,
+                proc.returncode,
+                stderr.decode(errors="replace"),
             )
         else:
             logger.info(
                 "Agent %s completed task: %s",
-                agent_id, stdout.decode(errors="replace")[:500],
+                agent_id,
+                stdout.decode(errors="replace")[:500],
             )
 
     async def get_status(self, agent_id: str) -> str:

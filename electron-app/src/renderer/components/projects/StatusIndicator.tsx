@@ -44,9 +44,7 @@ export function StatusIndicator({ status, showLabel = true }: StatusIndicatorPro
         )}
       </span>
       {showLabel && (
-        <span style={{ fontSize: "11px", color: "var(--foreground-muted)" }}>
-          {config.label}
-        </span>
+        <span style={{ fontSize: "11px", color: "var(--foreground-muted)" }}>{config.label}</span>
       )}
     </span>
   );

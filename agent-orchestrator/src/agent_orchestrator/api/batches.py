@@ -42,9 +42,7 @@ def _action_row_to_data(row) -> dict:
     return data
 
 
-@router.post(
-    "/projects/{project_id}/batches", status_code=status.HTTP_201_CREATED
-)
+@router.post("/projects/{project_id}/batches", status_code=status.HTTP_201_CREATED)
 async def submit_batch(project_id: str, body: BatchSubmission):
     db = await get_db()
 
@@ -83,8 +81,15 @@ async def submit_batch(project_id: str, body: BatchSubmission):
                screenshot_before_path, screenshot_after_path, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                action_id, batch_id, idx, action.type, action.selector,
-                data_json, screenshot_before_path, screenshot_after_path, now,
+                action_id,
+                batch_id,
+                idx,
+                action.type,
+                action.selector,
+                data_json,
+                screenshot_before_path,
+                screenshot_after_path,
+                now,
             ),
         )
 
@@ -94,12 +99,15 @@ async def submit_batch(project_id: str, body: BatchSubmission):
     task = asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
     batch_processor.register_batch_task(batch_id, task)
 
-    await nats_service.publish("vex.batch.events", {
-        "event": "submitted",
-        "project_id": project_id,
-        "batch_id": batch_id,
-        "timestamp": now,
-    })
+    await nats_service.publish(
+        "vex.batch.events",
+        {
+            "event": "submitted",
+            "project_id": project_id,
+            "batch_id": batch_id,
+            "timestamp": now,
+        },
+    )
 
     cursor = await db.execute("SELECT * FROM batches WHERE id = ?", (batch_id,))
     row = await cursor.fetchone()
@@ -227,34 +235,38 @@ async def get_batch_trace(batch_id: str):
         steps = []
         for s in step_rows:
             metadata = json.loads(s["metadata"]) if s["metadata"] else None
-            steps.append({
-                "id": s["id"],
-                "sequence_index": s["sequence_index"],
-                "type": s["type"],
-                "content": s["content"],
-                "metadata": metadata,
-                "duration_ms": s["duration_ms"],
-                "token_count": s["token_count"],
-                "created_at": s["created_at"],
-            })
+            steps.append(
+                {
+                    "id": s["id"],
+                    "sequence_index": s["sequence_index"],
+                    "type": s["type"],
+                    "content": s["content"],
+                    "metadata": metadata,
+                    "duration_ms": s["duration_ms"],
+                    "token_count": s["token_count"],
+                    "created_at": s["created_at"],
+                }
+            )
 
-        traces.append({
-            "id": row["id"],
-            "batch_id": row["batch_id"],
-            "agent_id": row["agent_id"],
-            "agent_name": row["agent_name"],
-            "agent_model": row["agent_model"],
-            "prompt": task_row["prompt"] if task_row else None,
-            "status": row["status"],
-            "total_duration_ms": row["total_duration_ms"],
-            "total_cost_usd": row["total_cost_usd"],
-            "total_tokens": row["total_tokens"],
-            "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
-            "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
-            "steps": steps,
-            "created_at": row["created_at"],
-            "completed_at": row["completed_at"],
-        })
+        traces.append(
+            {
+                "id": row["id"],
+                "batch_id": row["batch_id"],
+                "agent_id": row["agent_id"],
+                "agent_name": row["agent_name"],
+                "agent_model": row["agent_model"],
+                "prompt": task_row["prompt"] if task_row else None,
+                "status": row["status"],
+                "total_duration_ms": row["total_duration_ms"],
+                "total_cost_usd": row["total_cost_usd"],
+                "total_tokens": row["total_tokens"],
+                "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
+                "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
+                "steps": steps,
+                "created_at": row["created_at"],
+                "completed_at": row["completed_at"],
+            }
+        )
 
     return {"traces": traces}
 
@@ -304,14 +316,16 @@ async def get_active_cursors(page_url: str):
             # Use same format as Electron UI: agent-{agentId[:8]}
             agent_name = f"agent-{agent_id}"
 
-            all_agents.append({
-                "agentId": agent_id,
-                "agentName": agent_name,
-                "selector": action["selector"],
-                "colorIndex": idx,
-                "batchId": batch_id,
-                "status": agent_status if agent_status else "running",
-            })
+            all_agents.append(
+                {
+                    "agentId": agent_id,
+                    "agentName": agent_name,
+                    "selector": action["selector"],
+                    "colorIndex": idx,
+                    "batchId": batch_id,
+                    "status": agent_status if agent_status else "running",
+                }
+            )
 
     return {"agents": all_agents}
 
@@ -358,13 +372,15 @@ async def get_batch_cursors(batch_id: str):
         agent_name = traces[idx]["agent_name"] if idx < len(traces) else f"agent-{idx}"
         agent_status = traces[idx]["status"] if idx < len(traces) else "unknown"
 
-        agents.append({
-            "agentId": agent_id or f"unknown-{idx}",
-            "agentName": agent_name,
-            "selector": action["selector"],
-            "colorIndex": idx,
-            "status": agent_status,
-        })
+        agents.append(
+            {
+                "agentId": agent_id or f"unknown-{idx}",
+                "agentName": agent_name,
+                "selector": action["selector"],
+                "colorIndex": idx,
+                "status": agent_status,
+            }
+        )
 
     return {
         "batchId": batch_id,
@@ -448,12 +464,16 @@ async def delete_batch(project_id: str, batch_id: str):
 
     # Find agents spawned for this batch (via tasks table)
     agent_cursor = await db.execute(
-        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id = ?", (batch_id,),
+        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id = ?",
+        (batch_id,),
     )
     agent_ids = [row["agent_id"] for row in await agent_cursor.fetchall()]
 
     # Delete trace_steps and agent_traces for this batch
-    await db.execute("DELETE FROM trace_steps WHERE trace_id IN (SELECT id FROM agent_traces WHERE batch_id = ?)", (batch_id,))
+    await db.execute(
+        "DELETE FROM trace_steps WHERE trace_id IN (SELECT id FROM agent_traces WHERE batch_id = ?)",
+        (batch_id,),
+    )
     await db.execute("DELETE FROM agent_traces WHERE batch_id = ?", (batch_id,))
 
     # Delete tasks linked to this batch
@@ -462,7 +482,9 @@ async def delete_batch(project_id: str, batch_id: str):
     # Delete activity events for agents spawned by this batch
     if agent_ids:
         placeholders = ",".join("?" * len(agent_ids))
-        await db.execute(f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})", agent_ids)
+        await db.execute(
+            f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})", agent_ids
+        )
 
     # Delete the agents themselves
     if agent_ids:

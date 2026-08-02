@@ -15,8 +15,8 @@
  *   - port:    port to bind (defaults to 0 → OS picks a free port)
  */
 
-import http from "http";
 import fs from "fs";
+import http from "http";
 import path from "path";
 
 const LIVERELOAD_PATH = "/__livereload";
@@ -78,7 +78,9 @@ function injectLiveReload(html: Buffer): Buffer {
   const text = html.toString("utf-8");
   const idx = text.toLowerCase().lastIndexOf("</body>");
   const injected =
-    idx === -1 ? text + LIVERELOAD_SNIPPET : text.slice(0, idx) + LIVERELOAD_SNIPPET + text.slice(idx);
+    idx === -1
+      ? text + LIVERELOAD_SNIPPET
+      : text.slice(0, idx) + LIVERELOAD_SNIPPET + text.slice(idx);
   return Buffer.from(injected, "utf-8");
 }
 

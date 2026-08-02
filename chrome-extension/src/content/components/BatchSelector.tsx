@@ -77,7 +77,11 @@ export function BatchSelector({ onBatchAgents }: BatchSelectorProps) {
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return;
-      const data = (await res.json()) as { batchId: string; pageUrl: string; agents: CursorAgent[] };
+      const data = (await res.json()) as {
+        batchId: string;
+        pageUrl: string;
+        agents: CursorAgent[];
+      };
       setSelectedId(batchId);
       onBatchAgents(data.agents);
       setOpen(false);
@@ -134,7 +138,9 @@ export function BatchSelector({ onBatchAgents }: BatchSelectorProps) {
               <span className={`vex-batch-dot ${statusDot(b.status)}`} />
               <span className="vex-batch-item-info">
                 <span className="vex-batch-item-time">{formatTime(b.submitted_at)}</span>
-                <span className="vex-batch-item-actions">{b.action_count} action{b.action_count !== 1 ? "s" : ""}</span>
+                <span className="vex-batch-item-actions">
+                  {b.action_count} action{b.action_count !== 1 ? "s" : ""}
+                </span>
               </span>
               {selectedId === b.id && <span className="vex-batch-item-check">&#x2713;</span>}
             </button>

@@ -104,7 +104,7 @@
 1. **Framework**: Check for config files (next.config.*, nuxt.config.*, svelte.config.*, angular.json, vite.config.*). Fall back to package.json dependencies.
 2. **Dev command**: Parse package.json scripts for "dev", "start", "serve" keys.
 3. **Package manager**: Check lock files (pnpm-lock.yaml → pnpm, yarn.lock → yarn, bun.lockb → bun, package-lock.json → npm).
-4. **Styling**: Scan for tailwind.config.*, .scss files, styled-components in deps, *.module.css files.
+4. **Styling**: Scan for tailwind.config.*, .scss files, styled-components in deps,*.module.css files.
 5. **Port**: Parse dev command or framework config for port number, default 3000.
 
 **Rationale**: Simple file existence checks + JSON parsing covers 90%+ of standard web projects. No need for AST analysis or running the project. Detection results are editable by the developer.

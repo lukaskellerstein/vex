@@ -33,9 +33,7 @@ def sync_marketplace(name: str, url: str, branch: str = "main") -> Path:
         if result.returncode == 0:
             logger.info("Updated '%s': %s", name, result.stdout.strip())
         else:
-            logger.warning(
-                "Pull failed for '%s' (using existing): %s", name, result.stderr.strip()
-            )
+            logger.warning("Pull failed for '%s' (using existing): %s", name, result.stderr.strip())
     else:
         logger.info("Cloning marketplace '%s' from %s", name, url)
         result = subprocess.run(
@@ -106,9 +104,7 @@ def _discover_plugins(marketplace_name: str, marketplace_path: Path) -> None:
                 )
 
     _resolved[marketplace_name] = plugins
-    logger.info(
-        "Marketplace '%s': %d plugin(s) discovered", marketplace_name, len(plugins)
-    )
+    logger.info("Marketplace '%s': %d plugin(s) discovered", marketplace_name, len(plugins))
 
 
 def sync_all(config: dict) -> None:
@@ -135,9 +131,7 @@ def resolve_plugin_ref(ref: str) -> Path | None:
     plugin_name, marketplace_name = ref.rsplit("@", 1)
     marketplace_plugins = _resolved.get(marketplace_name)
     if marketplace_plugins is None:
-        logger.warning(
-            "Marketplace '%s' not synced (ref: %s)", marketplace_name, ref
-        )
+        logger.warning("Marketplace '%s' not synced (ref: %s)", marketplace_name, ref)
         return None
 
     path = marketplace_plugins.get(plugin_name)

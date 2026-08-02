@@ -38,11 +38,7 @@ export function useUndo() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.key !== "z") return;
       const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
         return;
       }
       e.preventDefault();

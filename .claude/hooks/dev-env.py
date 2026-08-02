@@ -49,9 +49,7 @@ POLL_INTERVAL = 1.0
 def port_pids(port: int) -> list[int]:
     """PIDs listening on a TCP port; empty when the port is free."""
     try:
-        out = subprocess.run(
-            ["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=5
-        )
+        out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=5)
     except Exception:
         return []
     return [int(p) for p in out.stdout.split() if p.strip().isdigit()]
@@ -145,8 +143,14 @@ def add_placement_rules(space: int) -> bool:
     for label, app in PLACEMENT_RULES:
         added = wm.run(
             [
-                "yabai", "-m", "rule", "--add", "--one-shot",
-                f"label={label}", f"app={app}", f"space={space}",
+                "yabai",
+                "-m",
+                "rule",
+                "--add",
+                "--one-shot",
+                f"label={label}",
+                f"app={app}",
+                f"space={space}",
             ]
         )
         ok = ok and added is not None
@@ -293,9 +297,7 @@ def main() -> int:
     start.add_argument(
         "--no-chrome", action="store_true", help="skip Chrome (no extension testing)"
     )
-    start.add_argument(
-        "--force", action="store_true", help="start even though ports are occupied"
-    )
+    start.add_argument("--force", action="store_true", help="start even though ports are occupied")
     sub.add_parser("stop", help="stop the instance started by dev-env.py")
 
     args = parser.parse_args()

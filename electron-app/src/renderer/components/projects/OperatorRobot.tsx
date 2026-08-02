@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
 import { Bot } from "lucide-react";
+import React, { useMemo } from "react";
 
 interface OperatorRobotProps {
   size?: number;

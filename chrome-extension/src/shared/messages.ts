@@ -13,9 +13,7 @@ export interface CaptureTabErrorResponse {
   error: string;
 }
 
-export type CaptureTabResponse =
-  | CaptureTabSuccessResponse
-  | CaptureTabErrorResponse;
+export type CaptureTabResponse = CaptureTabSuccessResponse | CaptureTabErrorResponse;
 
 // Popup -> Content Script
 export interface PingRequest {

@@ -4,9 +4,9 @@
  */
 
 import { spawn } from "child_process";
+import type { BrowserWindow } from "electron";
 import fs from "fs";
 import path from "path";
-import { BrowserWindow } from "electron";
 
 interface InstallResult {
   success: true;
@@ -33,7 +33,7 @@ function detectPackageManager(projectPath: string): string {
 
 export async function installDependencies(
   projectPath: string,
-  win: BrowserWindow | null
+  win: BrowserWindow | null,
 ): Promise<InstallResult | InstallError> {
   const pkgJsonPath = path.join(projectPath, "package.json");
   if (!fs.existsSync(pkgJsonPath)) {
@@ -63,11 +63,20 @@ export async function installDependencies(
 
     child.on("error", (err) => {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        resolve({ success: false, error: `Installation failed. Make sure ${pm} is installed on your computer.` });
+        resolve({
+          success: false,
+          error: `Installation failed. Make sure ${pm} is installed on your computer.`,
+        });
       } else if ((err as NodeJS.ErrnoException).code === "ENOSPC") {
-        resolve({ success: false, error: "Not enough disk space. Free up some space and try again." });
+        resolve({
+          success: false,
+          error: "Not enough disk space. Free up some space and try again.",
+        });
       } else {
-        resolve({ success: false, error: "Installation failed. Make sure Node.js is installed on your computer." });
+        resolve({
+          success: false,
+          error: "Installation failed. Make sure Node.js is installed on your computer.",
+        });
       }
     });
 
@@ -76,7 +85,10 @@ export async function installDependencies(
         sendProgress(win, 100, "Dependencies installed.");
         resolve({ success: true, packageManager: pm });
       } else {
-        resolve({ success: false, error: "Installation failed. Make sure Node.js is installed on your computer." });
+        resolve({
+          success: false,
+          error: "Installation failed. Make sure Node.js is installed on your computer.",
+        });
       }
     });
   });

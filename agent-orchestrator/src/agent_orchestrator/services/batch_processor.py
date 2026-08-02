@@ -6,10 +6,10 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from agent_orchestrator.db.database import get_db
-from agent_orchestrator.services.agent_manager import AgentManagerService
-from agent_orchestrator.services import nats_service
 from agent_orchestrator.adapters.claude_code_sdk import _VEX_SESSION_NS
+from agent_orchestrator.db.database import get_db
+from agent_orchestrator.services import nats_service
+from agent_orchestrator.services.agent_manager import AgentManagerService
 from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
@@ -69,11 +69,14 @@ async def stop_batch(batch_id: str) -> bool:
         f"vex.batch.{batch_id}.status",
         {"batch_id": batch_id, "status": "cancelled", "timestamp": now_ts},
     )
-    await nats_service.publish("vex.batch.events", {
-        "event": "cancelled",
-        "batch_id": batch_id,
-        "timestamp": now_ts,
-    })
+    await nats_service.publish(
+        "vex.batch.events",
+        {
+            "event": "cancelled",
+            "batch_id": batch_id,
+            "timestamp": now_ts,
+        },
+    )
 
     logger.info("Batch %s: stop requested", batch_id)
     return True
@@ -174,8 +177,14 @@ async def continue_agent(agent_id: str, message: str) -> None:
 
             # Persist trace (batch_id=None for continuations)
             await _persist_trace(
-                db, None, agent_id, agent["name"],
-                session, cost_usd, duration_ms, completed_at,
+                db,
+                None,
+                agent_id,
+                agent["name"],
+                session,
+                cost_usd,
+                duration_ms,
+                completed_at,
                 agent_model=project["model"],
             )
 
@@ -216,8 +225,13 @@ async def continue_agent(agent_id: str, message: str) -> None:
         await db.commit()
 
         await _persist_error_trace(
-            db, None, agent_id, agent["name"],
-            "failed", str(Exception), completed_at,
+            db,
+            None,
+            agent_id,
+            agent["name"],
+            "failed",
+            str(Exception),
+            completed_at,
             agent_model=project["model"],
         )
 
@@ -267,24 +281,35 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     await db.execute(
         """INSERT INTO activity_events (id, type, project_id, project_name, summary, created_at)
            VALUES (?, ?, ?, ?, ?, ?)""",
-        (event_id, "batch_processing", project_id, project["name"],
-         f"Batch {batch_id[:8]} started processing {len(actions)} action(s)",
-         datetime.now(UTC).isoformat()),
+        (
+            event_id,
+            "batch_processing",
+            project_id,
+            project["name"],
+            f"Batch {batch_id[:8]} started processing {len(actions)} action(s)",
+            datetime.now(UTC).isoformat(),
+        ),
     )
     await db.commit()
 
-    await nats_service.publish("vex.activity.events", {
-        "event": "batch_processing",
-        "project_id": project_id,
-        "batch_id": batch_id,
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
-    await nats_service.publish("vex.batch.events", {
-        "event": "processing",
-        "project_id": project_id,
-        "batch_id": batch_id,
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
+    await nats_service.publish(
+        "vex.activity.events",
+        {
+            "event": "batch_processing",
+            "project_id": project_id,
+            "batch_id": batch_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
+    await nats_service.publish(
+        "vex.batch.events",
+        {
+            "event": "processing",
+            "project_id": project_id,
+            "batch_id": batch_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
 
     logger.info("Batch %s: processing %d actions", batch_id, len(actions))
 
@@ -299,12 +324,14 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     # Publish cursor init via NATS so Chrome extension can show cursors
     cursor_agents = []
     for idx, action in enumerate(actions):
-        cursor_agents.append({
-            "agentId": agent_ids[idx],
-            "agentName": f"agent-{agent_ids[idx]}",
-            "selector": action["selector"],
-            "colorIndex": idx,
-        })
+        cursor_agents.append(
+            {
+                "agentId": agent_ids[idx],
+                "agentName": f"agent-{agent_ids[idx]}",
+                "selector": action["selector"],
+                "colorIndex": idx,
+            }
+        )
     cursor_payload = {
         "type": "cursor_init",
         "batchId": batch_id,
@@ -312,7 +339,12 @@ async def process_batch(project_id: str, batch_id: str) -> None:
         "agents": cursor_agents,
     }
     cursor_subject = f"vex.batch.{batch_id}.cursors"
-    logger.info("Publishing cursor init on %s: %d agents, pageUrl=%s", cursor_subject, len(cursor_agents), page_url)
+    logger.info(
+        "Publishing cursor init on %s: %d agents, pageUrl=%s",
+        cursor_subject,
+        len(cursor_agents),
+        page_url,
+    )
     await nats_service.publish(cursor_subject, cursor_payload)
 
     # Track agent IDs for cancellation support
@@ -322,9 +354,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
     # Spawn one agent per action in parallel
     tasks = []
     for idx, action in enumerate(actions):
-        tasks.append(
-            _process_action(project, batch_id, action, idx, agent_ids[idx])
-        )
+        tasks.append(_process_action(project, batch_id, action, idx, agent_ids[idx]))
 
     try:
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -332,8 +362,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
         # Determine batch outcome
         any_cancelled = any(isinstance(r, asyncio.CancelledError) for r in results)
         any_failed = any(
-            (isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError))
-            or r is False
+            (isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError)) or r is False
             for r in results
         )
 
@@ -349,7 +378,8 @@ async def process_batch(project_id: str, batch_id: str) -> None:
 
         # Compute batch duration from submitted_at → now
         batch_cursor = await db.execute(
-            "SELECT submitted_at FROM batches WHERE id = ?", (batch_id,),
+            "SELECT submitted_at FROM batches WHERE id = ?",
+            (batch_id,),
         )
         batch_row = await batch_cursor.fetchone()
         batch_duration_ms = None
@@ -375,7 +405,9 @@ async def process_batch(project_id: str, batch_id: str) -> None:
         event_id = uuid.uuid4().hex
         succeeded = sum(1 for r in results if r is True)
         failed_count = len(results) - succeeded
-        summary = f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
+        summary = (
+            f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
+        )
         if failed_count > 0:
             summary += f", {failed_count} failed/cancelled"
         await db.execute(
@@ -390,18 +422,24 @@ async def process_batch(project_id: str, batch_id: str) -> None:
             f"vex.batch.{batch_id}.status",
             {"batch_id": batch_id, "status": batch_status, "timestamp": now},
         )
-        await nats_service.publish("vex.batch.events", {
-            "event": batch_status,
-            "project_id": project_id,
-            "batch_id": batch_id,
-            "timestamp": now,
-        })
-        await nats_service.publish("vex.activity.events", {
-            "event": f"batch_{batch_status}",
-            "project_id": project_id,
-            "batch_id": batch_id,
-            "timestamp": now,
-        })
+        await nats_service.publish(
+            "vex.batch.events",
+            {
+                "event": batch_status,
+                "project_id": project_id,
+                "batch_id": batch_id,
+                "timestamp": now,
+            },
+        )
+        await nats_service.publish(
+            "vex.activity.events",
+            {
+                "event": f"batch_{batch_status}",
+                "project_id": project_id,
+                "batch_id": batch_id,
+                "timestamp": now,
+            },
+        )
         logger.info("Batch %s: %s", batch_id, batch_status)
 
     except asyncio.CancelledError:
@@ -417,12 +455,15 @@ async def process_batch(project_id: str, batch_id: str) -> None:
             f"vex.batch.{batch_id}.status",
             {"batch_id": batch_id, "status": "cancelled", "timestamp": now},
         )
-        await nats_service.publish("vex.batch.events", {
-            "event": "cancelled",
-            "project_id": project_id,
-            "batch_id": batch_id,
-            "timestamp": now,
-        })
+        await nats_service.publish(
+            "vex.batch.events",
+            {
+                "event": "cancelled",
+                "project_id": project_id,
+                "batch_id": batch_id,
+                "timestamp": now,
+            },
+        )
         logger.info("Batch %s: cancelled via task cancellation", batch_id)
 
     finally:
@@ -450,11 +491,22 @@ async def _process_action(
         await db.execute(
             """INSERT INTO agents (id, name, type, tier, capabilities, status, project_id, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (agent_id, agent_name, "claude-code-sdk", 1, capabilities_json, "created", project["id"], now),
+            (
+                agent_id,
+                agent_name,
+                "claude-code-sdk",
+                1,
+                capabilities_json,
+                "created",
+                project["id"],
+                now,
+            ),
         )
 
         # Create task row linked to batch
-        action_data = json.loads(action["data"]) if isinstance(action["data"], str) else action["data"]
+        action_data = (
+            json.loads(action["data"]) if isinstance(action["data"], str) else action["data"]
+        )
         screenshot_before = action["screenshot_before_path"]
         screenshot_after = action["screenshot_after_path"]
         prompt = _build_prompt(project, action, action_data, screenshot_before, screenshot_after)
@@ -462,7 +514,17 @@ async def _process_action(
         await db.execute(
             """INSERT INTO tasks (id, project_id, agent_id, batch_id, type, status, prompt, created_at, assigned_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (task_id, project["id"], agent_id, batch_id, "code-edit", "in_progress", prompt, now, now),
+            (
+                task_id,
+                project["id"],
+                agent_id,
+                batch_id,
+                "code-edit",
+                "in_progress",
+                prompt,
+                now,
+                now,
+            ),
         )
         await db.commit()
 
@@ -488,7 +550,9 @@ async def _process_action(
                 "project_path": project["path"],
                 "framework": project["framework"],
                 "styling_approach": project["styling_approach"],
-                "actions": [_action_to_dict(action, action_data, screenshot_before, screenshot_after)],
+                "actions": [
+                    _action_to_dict(action, action_data, screenshot_before, screenshot_after)
+                ],
             },
         }
 
@@ -510,8 +574,15 @@ async def _process_action(
         # Persist trace
         completed_at = datetime.now(UTC).isoformat()
         await _persist_trace(
-            db, batch_id, agent_id, agent_name, session, cost_usd, duration_ms,
-            completed_at, agent_model=project["model"],
+            db,
+            batch_id,
+            agent_id,
+            agent_name,
+            session,
+            cost_usd,
+            duration_ms,
+            completed_at,
+            agent_model=project["model"],
         )
 
         if was_cancelled:
@@ -524,7 +595,9 @@ async def _process_action(
                 (agent_id,),
             )
             await db.commit()
-            logger.info("Action %d in batch %s cancelled for agent %s", action_idx, batch_id, agent_id)
+            logger.info(
+                "Action %d in batch %s cancelled for agent %s", action_idx, batch_id, agent_id
+            )
             return False
         else:
             await db.execute(
@@ -540,18 +613,29 @@ async def _process_action(
             await db.execute(
                 """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (uuid.uuid4().hex, "task_completed", project["id"], project["name"], agent_id, agent_name,
-                 f"Agent {agent_name} completed action: {action['type']} on {action['selector']}",
-                 datetime.now(UTC).isoformat()),
+                (
+                    uuid.uuid4().hex,
+                    "task_completed",
+                    project["id"],
+                    project["name"],
+                    agent_id,
+                    agent_name,
+                    f"Agent {agent_name} completed action: {action['type']} on {action['selector']}",
+                    datetime.now(UTC).isoformat(),
+                ),
             )
             await db.commit()
 
-            logger.info("Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id)
+            logger.info(
+                "Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id
+            )
             return True
 
     except asyncio.CancelledError:
         # Task was cancelled via asyncio (backstop from stop_batch)
-        logger.info("Action %d in batch %s cancelled (asyncio) for agent %s", action_idx, batch_id, agent_id)
+        logger.info(
+            "Action %d in batch %s cancelled (asyncio) for agent %s", action_idx, batch_id, agent_id
+        )
         db = await get_db()
         completed_at = datetime.now(UTC).isoformat()
         await db.execute(
@@ -564,8 +648,14 @@ async def _process_action(
         )
         try:
             await _persist_error_trace(
-                db, batch_id, agent_id, agent_name, "cancelled", "Cancelled by user",
-                completed_at, agent_model=project["model"],
+                db,
+                batch_id,
+                agent_id,
+                agent_name,
+                "cancelled",
+                "Cancelled by user",
+                completed_at,
+                agent_model=project["model"],
             )
         except Exception:
             logger.exception("Failed to persist cancel trace for agent %s", agent_id)
@@ -589,8 +679,14 @@ async def _process_action(
         )
         try:
             await _persist_error_trace(
-                db, batch_id, agent_id, agent_name, "failed", error_msg,
-                completed_at, agent_model=project["model"],
+                db,
+                batch_id,
+                agent_id,
+                agent_name,
+                "failed",
+                error_msg,
+                completed_at,
+                agent_model=project["model"],
             )
         except Exception:
             logger.exception("Failed to persist error trace for agent %s", agent_id)
@@ -598,9 +694,16 @@ async def _process_action(
         await db.execute(
             """INSERT INTO activity_events (id, type, project_id, project_name, agent_id, agent_name, summary, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uuid.uuid4().hex, "task_failed", project["id"], project["name"], agent_id, agent_name,
-             f"Agent {agent_name} failed action: {action['type']} on {action['selector']}: {error_msg[:200]}",
-             datetime.now(UTC).isoformat()),
+            (
+                uuid.uuid4().hex,
+                "task_failed",
+                project["id"],
+                project["name"],
+                agent_id,
+                agent_name,
+                f"Agent {agent_name} failed action: {action['type']} on {action['selector']}: {error_msg[:200]}",
+                datetime.now(UTC).isoformat(),
+            ),
         )
         await db.commit()
         return False
@@ -645,9 +748,19 @@ async def _persist_trace(
            created_at, completed_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            trace_id, batch_id, agent_id, agent_name, agent_model or "default",
-            "completed", duration_ms, cost_usd, total_tokens, input_tokens, output_tokens,
-            now, completed_at,
+            trace_id,
+            batch_id,
+            agent_id,
+            agent_name,
+            agent_model or "default",
+            "completed",
+            duration_ms,
+            cost_usd,
+            total_tokens,
+            input_tokens,
+            output_tokens,
+            now,
+            completed_at,
         ),
     )
 
@@ -662,9 +775,15 @@ async def _persist_trace(
                duration_ms, token_count, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                step_id, trace_id, idx, step.get("type", "unknown"),
-                step.get("content", "")[:10000], metadata,
-                step.get("duration_ms"), step.get("token_count"), step.get("timestamp", now),
+                step_id,
+                trace_id,
+                idx,
+                step.get("type", "unknown"),
+                step.get("content", "")[:10000],
+                metadata,
+                step.get("duration_ms"),
+                step.get("token_count"),
+                step.get("timestamp", now),
             ),
         )
 
@@ -690,9 +809,17 @@ async def _persist_error_trace(
            total_duration_ms, total_cost_usd, total_tokens, created_at, completed_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            trace_id, batch_id, agent_id, agent_name,
+            trace_id,
+            batch_id,
+            agent_id,
+            agent_name,
             agent_model or "default",
-            status, None, None, 0, now, completed_at,
+            status,
+            None,
+            None,
+            0,
+            now,
+            completed_at,
         ),
     )
 
@@ -732,7 +859,9 @@ def get_logs(agent_id: str) -> list[str]:
 
 
 def _build_prompt(
-    project, action, action_data: dict,
+    project,
+    action,
+    action_data: dict,
     screenshot_before: str | None = None,
     screenshot_after: str | None = None,
 ) -> str:
@@ -752,7 +881,9 @@ def _build_prompt(
 
     # Detect prompt-driven actions
     is_prompt_driven = bool(generation_prompt) and action_type in (
-        "insert", "replaceImage", "generateSection",
+        "insert",
+        "replaceImage",
+        "generateSection",
     )
 
     parts = [
@@ -776,13 +907,15 @@ def _build_prompt(
 
     if is_prompt_driven:
         # ── Prompt-driven: user's creative intent is the task ──
-        parts.extend([
-            "## Task",
-            f"{generation_prompt}",
-            "",
-            "## Where to apply",
-            f"**Action**: [{action_type}] at `{selector}`",
-        ])
+        parts.extend(
+            [
+                "## Task",
+                f"{generation_prompt}",
+                "",
+                "## Where to apply",
+                f"**Action**: [{action_type}] at `{selector}`",
+            ]
+        )
         if action_type == "insert":
             pos = action_data.get("position", "after")
             visual_pos = action_data.get("visual_position", "")
@@ -817,12 +950,14 @@ def _build_prompt(
 
     else:
         # ── Delta-driven: structural change is the task ──
-        parts.extend([
-            "## Task",
-            "Apply the following visual edit:",
-            "",
-            f"**Action**: [{action_type}] `{selector}`",
-        ])
+        parts.extend(
+            [
+                "## Task",
+                "Apply the following visual edit:",
+                "",
+                f"**Action**: [{action_type}] `{selector}`",
+            ]
+        )
         if instruction:
             parts.append(f"**Instruction**: {instruction}")
         _append_action_details(parts, action_type, action_data)
@@ -852,14 +987,20 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
             parts.append("**Style changes**:")
             for change in data["changes"]:
                 prop = change.get("property", "")
-                parts.append(f"  - `{prop}`: `{change.get('before', '')}` → `{change.get('after', '')}`")
+                parts.append(
+                    f"  - `{prop}`: `{change.get('before', '')}` → `{change.get('after', '')}`"
+                )
         if data.get("hover_changes"):
             parts.append("**Hover state changes**:")
             for hc in data["hover_changes"]:
-                parts.append(f"  - `{hc.get('property', '')}`: `{hc.get('value', '')}` — {hc.get('description', '')}")
+                parts.append(
+                    f"  - `{hc.get('property', '')}`: `{hc.get('value', '')}` — {hc.get('description', '')}"
+                )
         if data.get("transition"):
             t = data["transition"]
-            parts.append(f"**Transition**: duration={t.get('duration', 'none')}, easing={t.get('easing', 'none')}")
+            parts.append(
+                f"**Transition**: duration={t.get('duration', 'none')}, easing={t.get('easing', 'none')}"
+            )
 
     elif action_type == "resize":
         if data.get("deltas"):
@@ -884,7 +1025,9 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
         if ref:
             parts.append(f"**Reference element**: `{ref}`")
         if content:
-            parts.append(f"**Content**: tag=`{content.get('tag', 'div')}`, text=`{content.get('text', '')}`")
+            parts.append(
+                f"**Content**: tag=`{content.get('tag', 'div')}`, text=`{content.get('text', '')}`"
+            )
             if content.get("attributes"):
                 parts.append(f"**Attributes**: {json.dumps(content['attributes'])}")
         if data.get("prompt"):
@@ -915,7 +1058,9 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
         if wrapper:
             tag = wrapper.get("tag", "div")
             classes = " ".join(wrapper.get("class_list", wrapper.get("classList", [])))
-            parts.append(f"**Wrapper**: `<{tag}" + (f' class="{classes}"' if classes else "") + ">`")
+            parts.append(
+                f"**Wrapper**: `<{tag}" + (f' class="{classes}"' if classes else "") + ">`"
+            )
 
     elif action_type == "replaceImage":
         if data.get("original_src"):
@@ -956,10 +1101,17 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
 
 def _append_element_context(parts: list[str], data: dict) -> None:
     """Append element context info when available (primarily from select actions)."""
-    has_context = any(data.get(k) for k in (
-        "tag_name", "react_component", "react_source_file",
-        "accessibility_path", "computed_styles", "class_list",
-    ))
+    has_context = any(
+        data.get(k)
+        for k in (
+            "tag_name",
+            "react_component",
+            "react_source_file",
+            "accessibility_path",
+            "computed_styles",
+            "class_list",
+        )
+    )
     if not has_context:
         return
 
@@ -975,7 +1127,7 @@ def _append_element_context(parts: list[str], data: dict) -> None:
     if data.get("tag_name"):
         tag_info = f"`<{data['tag_name']}"
         if data.get("class_list"):
-            tag_info += f" class=\"{' '.join(data['class_list'])}\""
+            tag_info += f' class="{" ".join(data["class_list"])}"'
         tag_info += ">`"
         parts.append(f"**Element**: {tag_info}")
     if data.get("parent_tag"):
@@ -986,15 +1138,21 @@ def _append_element_context(parts: list[str], data: dict) -> None:
     if data.get("computed_styles"):
         # Include a compact summary of key styles
         styles = data["computed_styles"]
-        style_lines = [f"  - `{k}`: `{v}`" for k, v in styles.items() if v and v != "none" and v != "normal" and v != "0px"]
+        style_lines = [
+            f"  - `{k}`: `{v}`"
+            for k, v in styles.items()
+            if v and v != "none" and v != "normal" and v != "0px"
+        ]
         if style_lines:
             parts.append("**Current styles**:")
             parts.extend(style_lines[:15])  # Cap at 15 to avoid bloat
 
 
 def _append_screenshots(
-    parts: list[str], action_type: str,
-    screenshot_before: str | None, screenshot_after: str | None,
+    parts: list[str],
+    action_type: str,
+    screenshot_before: str | None,
+    screenshot_after: str | None,
 ) -> None:
     """Append screenshot references with context-appropriate labels."""
     if not screenshot_before and not screenshot_after:
@@ -1018,7 +1176,8 @@ def _append_screenshots(
 
 
 def _action_to_dict(
-    action, action_data: dict,
+    action,
+    action_data: dict,
     screenshot_before: str | None = None,
     screenshot_after: str | None = None,
 ) -> dict:
@@ -1029,18 +1188,47 @@ def _action_to_dict(
         "instruction": action_data.get("instruction", ""),
     }
     # Propagate type-specific fields
-    for key in ("before", "after", "changes", "deltas", "dimensions",
-                "before_styles", "after_styles", "position", "content",
-                "deleted_outer_html", "wrapper", "data",
-                "reference_selector", "visual_position", "inserted_after",
-                "parent_selector", "from_index", "to_index",
-                "original_src", "method", "prompt", "generated_url",
-                "style_hint", "generated_html",
-                "from_selector", "to_selector", "copied_properties",
-                "hover_changes", "transition",
-                "url", "tag_name", "class_list", "text_content",
-                "computed_styles", "parent_tag", "child_count",
-                "accessibility_path", "react_component", "react_source_file"):
+    for key in (
+        "before",
+        "after",
+        "changes",
+        "deltas",
+        "dimensions",
+        "before_styles",
+        "after_styles",
+        "position",
+        "content",
+        "deleted_outer_html",
+        "wrapper",
+        "data",
+        "reference_selector",
+        "visual_position",
+        "inserted_after",
+        "parent_selector",
+        "from_index",
+        "to_index",
+        "original_src",
+        "method",
+        "prompt",
+        "generated_url",
+        "style_hint",
+        "generated_html",
+        "from_selector",
+        "to_selector",
+        "copied_properties",
+        "hover_changes",
+        "transition",
+        "url",
+        "tag_name",
+        "class_list",
+        "text_content",
+        "computed_styles",
+        "parent_tag",
+        "child_count",
+        "accessibility_path",
+        "react_component",
+        "react_source_file",
+    ):
         if action_data.get(key) is not None:
             result[key] = action_data[key]
     # Propagate screenshot paths

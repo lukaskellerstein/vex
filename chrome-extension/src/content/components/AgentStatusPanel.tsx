@@ -1,6 +1,6 @@
 import type { FC } from "react";
-import { AGENT_MANAGER_URL } from "../../shared/messages";
 import { useState } from "react";
+import { AGENT_MANAGER_URL } from "../../shared/messages";
 
 interface PanelAgent {
   agentId: string;
@@ -38,10 +38,7 @@ export const AgentStatusPanel: FC<AgentStatusPanelProps> = ({ agents, onContinue
           return (
             <div key={agent.agentId} className="vex-status-panel-item">
               <div className="vex-status-panel-row">
-                <span
-                  className="vex-status-panel-badge"
-                  data-status={agent.status}
-                >
+                <span className="vex-status-panel-badge" data-status={agent.status}>
                   {agent.status === "running" ? "●" : agent.status === "completed" ? "✓" : "✕"}
                 </span>
                 <span className="vex-status-panel-name">{agent.agentName}</span>
@@ -72,7 +69,10 @@ export const AgentStatusPanel: FC<AgentStatusPanelProps> = ({ agents, onContinue
                   <div style={{ display: "flex", gap: "4px", justifyContent: "flex-end" }}>
                     <button
                       className="vex-cursor-reply-cancel"
-                      onClick={() => { setActiveInput(null); setMessage(""); }}
+                      onClick={() => {
+                        setActiveInput(null);
+                        setMessage("");
+                      }}
                     >
                       Cancel
                     </button>

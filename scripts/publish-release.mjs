@@ -19,7 +19,7 @@
  * Requires: gh CLI authenticated (`gh auth login`).
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,8 +32,7 @@ const dryRun = process.argv.includes("--dry-run");
 
 const log = (msg) => console.log(`[publish-release] ${msg}`);
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
-const run = (cmd, args, cwd) =>
-  execFileSync(cmd, args, { cwd, stdio: "inherit" });
+const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: "inherit" });
 
 // --- Versions ---
 const electronVersion = readJson(join(electronDir, "package.json")).version;
@@ -70,7 +69,8 @@ if (existsSync(extZip)) assets.push(extZip);
 
 if (dmgs.length === 0)
   throw new Error(`No Vex-${electronVersion}-*.dmg in ${dmgDir} — run without --skip-build.`);
-if (!existsSync(extZip)) throw new Error(`No extension zip at ${extZip} — run without --skip-build.`);
+if (!existsSync(extZip))
+  throw new Error(`No extension zip at ${extZip} — run without --skip-build.`);
 
 log(`Tag: ${tag}`);
 log(`Assets:\n  ${assets.map((a) => a.split("/").pop()).join("\n  ")}`);
@@ -114,7 +114,11 @@ if (exists) {
   run("gh", ["release", "upload", tag, ...assets, "--clobber"], root);
 } else {
   log(`Creating release ${tag}...`);
-  run("gh", ["release", "create", tag, ...assets, "--title", `Vex ${electronVersion}`, "--notes", notes], root);
+  run(
+    "gh",
+    ["release", "create", tag, ...assets, "--title", `Vex ${electronVersion}`, "--notes", notes],
+    root,
+  );
 }
 
 log(`Done. https://github.com/lukaskellerstein/vex/releases/tag/${tag}`);

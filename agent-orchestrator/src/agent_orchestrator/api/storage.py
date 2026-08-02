@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Response, status
 from fastapi.responses import FileResponse
 
-from agent_orchestrator.db.database import DB_PATH, DATA_DIR
+from agent_orchestrator.db.database import DATA_DIR, DB_PATH
 
 router = APIRouter(tags=["storage"])
 

@@ -49,6 +49,7 @@ nats-server -p 4222 --websocket_port 4223 --websocket_no_tls
 ```
 
 Or use the nats-server config file:
+
 ```
 listen: 0.0.0.0:4222
 websocket {

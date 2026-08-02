@@ -125,7 +125,9 @@ async def test_project_auth_header_persistence_and_redaction(temp_db, tmp_path, 
     # Empty / whitespace-only clears the header to NULL (injection skipped).
     assert (await update_project(project_id, ProjectUpdate(auth_header="")))["auth_header"] is None
     await update_project(project_id, ProjectUpdate(auth_header=header))
-    assert (await update_project(project_id, ProjectUpdate(auth_header="   ")))["auth_header"] is None
+    assert (await update_project(project_id, ProjectUpdate(auth_header="   ")))[
+        "auth_header"
+    ] is None
 
 
 def test_parse_headers():
@@ -139,7 +141,9 @@ def test_parse_headers():
     # A value may itself contain colons (e.g. a URL).
     assert _parse_headers("X-Origin: http://host:8080") == {"X-Origin": "http://host:8080"}
     # A bare token (no colon, e.g. a pasted JWT) is wrapped as a Bearer header.
-    assert _parse_headers("eyJhbGci.payload.sig") == {"Authorization": "Bearer eyJhbGci.payload.sig"}
+    assert _parse_headers("eyJhbGci.payload.sig") == {
+        "Authorization": "Bearer eyJhbGci.payload.sig"
+    }
     # A leading "Bearer " is not doubled.
     assert _parse_headers("Bearer eyJabc") == {"Authorization": "Bearer eyJabc"}
 

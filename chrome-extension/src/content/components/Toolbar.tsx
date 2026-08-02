@@ -18,9 +18,11 @@ export function Toolbar({ mode, onModeChange, onClose }: ToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 12 });
   const [centered, setCentered] = useState(false);
-  const dragState = useRef<{ dragging: boolean; offsetX: number; offsetY: number }>(
-    { dragging: false, offsetX: 0, offsetY: 0 },
-  );
+  const dragState = useRef<{ dragging: boolean; offsetX: number; offsetY: number }>({
+    dragging: false,
+    offsetX: 0,
+    offsetY: 0,
+  });
 
   useEffect(() => {
     if (!centered && toolbarRef.current) {
@@ -30,29 +32,50 @@ export function Toolbar({ mode, onModeChange, onClose }: ToolbarProps) {
     }
   }, [centered]);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    const tag = (e.target as HTMLElement).tagName;
-    if (["BUTTON", "SELECT", "INPUT", "TEXTAREA", "IMG"].includes(tag)) return;
-    dragState.current = { dragging: true, offsetX: e.clientX - position.x, offsetY: e.clientY - position.y };
-    e.preventDefault();
-  }, [position]);
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (["BUTTON", "SELECT", "INPUT", "TEXTAREA", "IMG"].includes(tag)) return;
+      dragState.current = {
+        dragging: true,
+        offsetX: e.clientX - position.x,
+        offsetY: e.clientY - position.y,
+      };
+      e.preventDefault();
+    },
+    [position],
+  );
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragState.current.dragging) return;
-      setPosition({ x: e.clientX - dragState.current.offsetX, y: e.clientY - dragState.current.offsetY });
+      setPosition({
+        x: e.clientX - dragState.current.offsetX,
+        y: e.clientY - dragState.current.offsetY,
+      });
     };
-    const onUp = () => { dragState.current.dragging = false; };
+    const onUp = () => {
+      dragState.current.dragging = false;
+    };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
   }, []);
 
   return (
     <div
       ref={toolbarRef}
       className="cs-toolbar"
-      style={{ position: "fixed", top: position.y, left: position.x, zIndex: 2147483647, pointerEvents: "auto" }}
+      style={{
+        position: "fixed",
+        top: position.y,
+        left: position.x,
+        zIndex: 2147483647,
+        pointerEvents: "auto",
+      }}
       onMouseDown={onMouseDown}
     >
       <div className="cs-toolbar-modes">
@@ -70,8 +93,18 @@ export function Toolbar({ mode, onModeChange, onClose }: ToolbarProps) {
         ))}
         <div className="cs-toolbar-divider" />
         <button className="cs-toolbar-btn cs-toolbar-close-btn" onClick={onClose} title="Close VEX">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>

@@ -13,7 +13,11 @@ interface ProjectSelectorProps {
   onProjectsLoaded?: (projects: Project[]) => void;
 }
 
-export function ProjectSelector({ selectedProjectId, onProjectChange, onProjectsLoaded }: ProjectSelectorProps) {
+export function ProjectSelector({
+  selectedProjectId,
+  onProjectChange,
+  onProjectsLoaded,
+}: ProjectSelectorProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,9 +67,13 @@ export function ProjectSelector({ selectedProjectId, onProjectChange, onProjects
         value={selectedProjectId ?? ""}
         onChange={(e) => onProjectChange(e.target.value)}
       >
-        <option value="" disabled>Select project...</option>
+        <option value="" disabled>
+          Select project...
+        </option>
         {projects.map((p) => (
-          <option key={p.id} value={p.id}>{p.name}</option>
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
         ))}
       </select>
     </div>

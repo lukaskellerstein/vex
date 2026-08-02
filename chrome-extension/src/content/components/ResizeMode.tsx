@@ -1,24 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action, ResizeAction } from "../../shared/types";
-import { generateSelector } from "../utils/selector";
-import { computeDeltas, isSmallChange } from "../utils/delta";
 import { captureScreenshot } from "../hooks/useScreenshot";
 import { registerVisualRevert } from "../hooks/useUndo";
+import { computeDeltas, isSmallChange } from "../utils/delta";
+import { generateSelector } from "../utils/selector";
 
 interface ResizeModeProps {
   addAction: (action: Action) => void;
   hostElement: HTMLElement;
 }
 
-type HandlePosition =
-  | "nw"
-  | "n"
-  | "ne"
-  | "e"
-  | "se"
-  | "s"
-  | "sw"
-  | "w";
+type HandlePosition = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 interface HandleInfo {
   position: HandlePosition;
@@ -244,25 +236,18 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!dragRef.current || !selectedEl) return;
-      const { handle, startX, startY, startWidth, startHeight } =
-        dragRef.current;
+      const { handle, startX, startY, startWidth, startHeight } = dragRef.current;
 
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
       if (handle.xFactor !== 0) {
-        const newWidth = Math.max(
-          20,
-          startWidth + dx * handle.xFactor,
-        );
+        const newWidth = Math.max(20, startWidth + dx * handle.xFactor);
         selectedEl.style.width = `${newWidth}px`;
       }
 
       if (handle.yFactor !== 0) {
-        const newHeight = Math.max(
-          20,
-          startHeight + dy * handle.yFactor,
-        );
+        const newHeight = Math.max(20, startHeight + dy * handle.yFactor);
         selectedEl.style.height = `${newHeight}px`;
       }
 
@@ -375,29 +360,28 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
   const handleSize = 8;
   const half = handleSize / 2;
 
-  const handlePositions: Record<HandlePosition, { top: number; left: number }> =
-    {
-      nw: { top: rect.top - half, left: rect.left - half },
-      n: {
-        top: rect.top - half,
-        left: rect.left + rect.width / 2 - half,
-      },
-      ne: { top: rect.top - half, left: rect.right - half },
-      e: {
-        top: rect.top + rect.height / 2 - half,
-        left: rect.right - half,
-      },
-      se: { top: rect.bottom - half, left: rect.right - half },
-      s: {
-        top: rect.bottom - half,
-        left: rect.left + rect.width / 2 - half,
-      },
-      sw: { top: rect.bottom - half, left: rect.left - half },
-      w: {
-        top: rect.top + rect.height / 2 - half,
-        left: rect.left - half,
-      },
-    };
+  const handlePositions: Record<HandlePosition, { top: number; left: number }> = {
+    nw: { top: rect.top - half, left: rect.left - half },
+    n: {
+      top: rect.top - half,
+      left: rect.left + rect.width / 2 - half,
+    },
+    ne: { top: rect.top - half, left: rect.right - half },
+    e: {
+      top: rect.top + rect.height / 2 - half,
+      left: rect.right - half,
+    },
+    se: { top: rect.bottom - half, left: rect.right - half },
+    s: {
+      top: rect.bottom - half,
+      left: rect.left + rect.width / 2 - half,
+    },
+    sw: { top: rect.bottom - half, left: rect.left - half },
+    w: {
+      top: rect.top + rect.height / 2 - half,
+      left: rect.left - half,
+    },
+  };
 
   const pad = boxValues?.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const mar = boxValues?.margin ?? { top: 0, right: 0, bottom: 0, left: 0 };
@@ -548,16 +532,11 @@ export function ResizeMode({ addAction, hostElement }: ResizeModeProps) {
             pointerEvents: "auto",
           }}
         >
-          <span className="cs-resize-confirm-text">
-            Small change detected
-          </span>
+          <span className="cs-resize-confirm-text">Small change detected</span>
           <button className="cs-btn cs-resize-keep" onClick={handleKeep}>
             Keep
           </button>
-          <button
-            className="cs-btn cs-resize-discard"
-            onClick={handleDiscard}
-          >
+          <button className="cs-btn cs-resize-discard" onClick={handleDiscard}>
             Discard
           </button>
         </div>

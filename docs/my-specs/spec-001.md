@@ -13,9 +13,7 @@ Vex has four components:
 3. **NATS** — the real-time message bus connecting all components (embedded locally, cluster service on k8s)
 4. **Chrome Extension** — the interactive visual editor the developer uses in the browser
 
-
 ---
-
 
 ## 2. Design Principle: Framework Agnosticism
 
@@ -29,9 +27,7 @@ The chain is: **extension sees pixels → records intent → agent understands c
 
 The only place Vex touches framework detection is in **dev server management** — it needs to know that `npm run dev` starts a Next.js app on port 3000, or that `python manage.py runserver` starts Django on 8000. But that's process lifecycle, not code understanding. The auto-detected `project.framework` and `project.stylingApproach` values are passed to the agent as **optional context hints** in the batch metadata, saving the agent from re-scanning the codebase every time. But if Vex guesses wrong or can't detect anything, the agent figures it out on its own by reading the code.
 
-
 ---
-
 
 ## 3. Architecture
 
@@ -105,9 +101,7 @@ Storage: SQLite locally (single file at `~/.vex/vex.db`), PostgreSQL on k8s.
 
 Screenshots and large binary data are stored as files in `~/.vex/data/{projectId}/` and referenced by path in the database.
 
-
 ---
-
 
 ## 4. Electron App
 
@@ -162,16 +156,14 @@ Auto-detected values are shown in the UI and editable. Stored in the project rec
 
 When a project is "started" in the Electron UI:
 1. Run `project.devCommand` (e.g., `npm run dev`) in the project directory as a child process
-2. Monitor stdout for the "ready" URL (regex patterns for common frameworks: "ready on http://localhost:3000", "Local: http://localhost:5173", etc.)
+2. Monitor stdout for the "ready" URL (regex patterns for common frameworks: "ready on <http://localhost:3000>", "Local: <http://localhost:5173>", etc.)
 3. Once detected, store the URL and publish `vex.project.{projectId}.status` with `{ status: "running", url: "http://localhost:3000" }`
 4. The Chrome extension receives this and can auto-navigate or show the URL
 5. On stop: send SIGTERM to the dev server process, wait 5s, SIGKILL if still alive
 
 Dev server stdout/stderr is streamed to the UI via NATS (`vex.project.{projectId}.log`).
 
-
 ---
-
 
 ## 5. AgentManager
 
@@ -267,9 +259,7 @@ When a generation request arrives (section generation, image generation), AgentM
 
 For now, Claude Code handles everything. The routing layer exists so future agents can be added without changing the extension or protocol.
 
-
 ---
-
 
 ## 6. Chrome Extension
 
@@ -337,9 +327,7 @@ Handles extension icon click (toggle content script) and `captureTab` requests (
 
 Select Mode: one screenshot per selection (after), element highlighted in amber. Edit/Resize/Style modes: two screenshots per action (before + after). Base64 JPEG at quality 0.75. Coordinates multiplied by `devicePixelRatio`.
 
-
 ---
-
 
 ## 7. Data Shapes
 
@@ -359,6 +347,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ### 7.2 Action types
 
 **type: "select"** — annotated selection with instruction
+
 ```json
 { "type": "select", "selector": ".hero > button.cta",
   "instruction": "add a gradient background from indigo to purple",
@@ -372,6 +361,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "insert"** — DOM insertion
+
 ```json
 { "type": "insert", "position": "after|before|firstChild|lastChild",
   "referenceSelector": ".hero > h1",
@@ -380,6 +370,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "editText"** — text content change
+
 ```json
 { "type": "editText", "selector": ".hero > h1",
   "before": "Welcome to Our Site", "after": "Build Something Amazing",
@@ -387,6 +378,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "delete"** — element removal
+
 ```json
 { "type": "delete", "selector": ".hero > .legacy-badge",
   "deletedOuterHTML": "<span class=\"legacy-badge\">Beta</span>",
@@ -394,6 +386,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "duplicate"** — clone element
+
 ```json
 { "type": "duplicate", "selector": ".features > .feature-card:nth-of-type(2)",
   "insertedAfter": ".features > .feature-card:nth-of-type(2)",
@@ -401,6 +394,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "move"** — reorder siblings
+
 ```json
 { "type": "move", "selector": ".nav-links > a:nth-of-type(3)",
   "parentSelector": ".nav-links", "fromIndex": 2, "toIndex": 0,
@@ -408,6 +402,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "wrap"** — wrap in new element
+
 ```json
 { "type": "wrap", "selector": ".hero > img",
   "wrapper": { "tag": "div", "classList": ["image-wrapper"] },
@@ -415,6 +410,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "resize"** — visual resize with semantic deltas
+
 ```json
 { "type": "resize", "selector": ".hero > .cta-btn",
   "beforeStyles": { "width": "200px", "height": "48px", "padding": "12px 24px" },
@@ -427,6 +423,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "styleChange"** — CSS property changes including hover effects
+
 ```json
 { "type": "styleChange", "selector": ".card-title",
   "changes": [
@@ -443,6 +440,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "replaceImage"** — image replacement
+
 ```json
 { "type": "replaceImage", "selector": ".hero > img.hero-illustration",
   "originalSrc": "https://mysite.com/images/old-hero.png",
@@ -454,6 +452,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "generateSection"** — AI-generated section
+
 ```json
 { "type": "generateSection", "position": "after",
   "referenceSelector": "section.hero",
@@ -464,6 +463,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ```
 
 **type: "copyStyle"** — style copy between elements
+
 ```json
 { "type": "copyStyle", "fromSelector": ".card-title", "toSelector": ".sidebar-title",
   "copiedProperties": { "fontSize": "24px", "fontWeight": "700", "color": "rgb(15, 23, 42)", "lineHeight": "1.2" },
@@ -487,6 +487,7 @@ Select Mode: one screenshot per selection (after), element highlighted in amber.
 ### 7.4 Generation request (NATS message)
 
 Published to `vex.generate.request.{projectId}`:
+
 ```json
 { "requestId": "gen-uuid",
   "projectId": "project-uuid",
@@ -499,6 +500,7 @@ Published to `vex.generate.request.{projectId}`:
 ### 7.5 Generation result (NATS message)
 
 Published to `vex.generate.result.{requestId}`:
+
 ```json
 { "requestId": "gen-uuid",
   "status": "completed | failed",
@@ -515,9 +517,7 @@ color, backgroundColor, fontSize, fontFamily, fontWeight, padding (and per-side)
 
 Try `#id` first. If no ID, try `tag.class1.class2` and check uniqueness with `querySelectorAll`. If not unique, walk up the DOM building a path with `tag:nth-of-type(n)` segments, stopping at the first ancestor with an ID.
 
-
 ---
-
 
 ## 8. Generation Flow (Bidirectional Communication)
 
@@ -561,9 +561,7 @@ For section generation: page URL, surrounding HTML (truncated: the parent contai
 
 For image generation: original image src, current dimensions, alt text, surrounding context.
 
-
 ---
-
 
 ## 9. Agent Integration
 
@@ -642,6 +640,7 @@ The core insight: **the agent pulls work from Vex, not the other way around.** V
 **Method A — Vex plugin for Claude Code:**
 
 The user installs a Claude Code plugin:
+
 ```bash
 claude plugin install vex-agent
 ```
@@ -685,6 +684,7 @@ Vex exposes an MCP server (started by AgentManager) that any MCP-compatible tool
 | `vex_heartbeat` | Keepalive signal |
 
 The user adds the Vex MCP server to their agent's config:
+
 ```json
 {
   "mcpServers": {
@@ -789,9 +789,7 @@ The tier system makes it easy to add specialized agents:
 | Any CLI agent | 2 | `code-edit` | User configures CLI path |
 | Any HTTP-capable agent | 3 | varies | Via raw REST instructions |
 
-
 ---
-
 
 ## 10. Competitive Landscape
 
@@ -804,9 +802,7 @@ This combination is novel. Existing tools cover parts:
 
 **What makes Vex novel:** Chrome extension on any real website + multi-modal editing (select, DOM, resize, style, generation) + structured operations with semantic deltas + NATS-based bidirectional bridge + managed agent orchestration + project-aware dev server lifecycle + architecture that scales from desktop to k8s.
 
-
 ---
-
 
 ## 11. Edge Cases and Considerations
 

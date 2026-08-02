@@ -21,7 +21,7 @@ The existing `projects` table in SQLite already has all needed fields. No schema
 | styling_approach | TEXT | tailwind, styled-components, css-modules, scss |
 | status | TEXT | idle, starting, running, stopping, error |
 | dev_server_pid | INTEGER | **Unused** — retained for schema compat, always NULL |
-| dev_server_url | TEXT | Set by Electron when URL detected, e.g., "http://localhost:3000" |
+| dev_server_url | TEXT | Set by Electron when URL detected, e.g., "<http://localhost:3000>" |
 | created_at | TEXT | ISO 8601 |
 | updated_at | TEXT | ISO 8601 |
 

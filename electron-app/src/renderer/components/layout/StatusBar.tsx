@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
 import { Wifi, WifiOff } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 
 interface StatusState {
   nats: "connected" | "disconnected" | "unknown";
@@ -114,9 +115,7 @@ export function StatusBar() {
           NATS {connected ? "Connected" : "Disconnected"}
         </span>
         <span style={{ color: "var(--foreground-dim)" }}>·</span>
-        <span style={{ color: "var(--foreground-muted)" }}>
-          Agents: {status.agentCount}
-        </span>
+        <span style={{ color: "var(--foreground-muted)" }}>Agents: {status.agentCount}</span>
       </div>
 
       {/* Center: current task */}

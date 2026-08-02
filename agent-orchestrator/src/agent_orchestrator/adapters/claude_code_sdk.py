@@ -6,14 +6,12 @@ import json
 import logging
 import os
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import AsyncIterator
 
-from agent_orchestrator.utils.ids import generate_agent_id
-
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
     AssistantMessage,
     HookContext,
@@ -32,9 +30,10 @@ from claude_agent_sdk.types import (
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
 from agent_orchestrator.db import database
-from agent_orchestrator.services import nats_service
 from agent_orchestrator.services import marketplace as marketplace_service
+from agent_orchestrator.services import nats_service
 from agent_orchestrator.services.agent_logger import AgentFileLogger
+from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
 
@@ -324,8 +323,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
 
             # Log intended config (what we asked for)
             intended_plugins = [
-                p.get("path", "")
-                for p in (session.options.plugins if session.options else [])
+                p.get("path", "") for p in (session.options.plugins if session.options else [])
             ]
             intended_model = (session.options.model if session.options else None) or "default"
             print(
@@ -377,7 +375,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             resume_opts["session_id"] = session_id
             logger.warning(
                 "No session file found for %s — starting fresh session for agent %s",
-                session_id, agent_id,
+                session_id,
+                agent_id,
             )
 
         options = ClaudeAgentOptions(
@@ -441,7 +440,10 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             session.current_task_id = None
 
     async def _stream_response(
-        self, session: SDKAgentSession, task_id: str, prompt: str | None = None,
+        self,
+        session: SDKAgentSession,
+        task_id: str,
+        prompt: str | None = None,
     ) -> None:
         """Stream SDK response messages, publish steps to NATS, handle completion."""
         agent_id = session.agent_id
@@ -493,9 +495,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             profile,
                             intended_plugins,
                             session.file_logger,
-                            intended_model=(
-                                session.options.model if session.options else None
-                            ),
+                            intended_model=(session.options.model if session.options else None),
                         )
                     continue
 
@@ -506,9 +506,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             log_line = f"[thinking] {block.thinking[:200]}"
                             session.log_buffer.append(log_line)
                             if session.file_logger:
-                                session.file_logger.event(
-                                    "thinking", block.thinking[:2000]
-                                )
+                                session.file_logger.event("thinking", block.thinking[:2000])
                             self._mark_previous_steps_past(session)
                             step_data = {
                                 "type": "thinking",
@@ -567,9 +565,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             session.log_buffer.append(log_line)
                             if session.file_logger:
                                 input_preview = (
-                                    json.dumps(block.input)[:2000]
-                                    if block.input
-                                    else ""
+                                    json.dumps(block.input)[:2000] if block.input else ""
                                 )
                                 session.file_logger.event(
                                     "tool_call",
@@ -612,9 +608,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             )
                             step_index += 1
                             if block.name == "Bash" and block.input:
-                                bash_step = self._emit_bash_step(
-                                    session, block.input, now_ts
-                                )
+                                bash_step = self._emit_bash_step(session, block.input, now_ts)
                                 if bash_step:
                                     await nats_service.publish(
                                         f"vex.agent.{agent_id}.step",
@@ -622,9 +616,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                     )
                                     step_index += 1
                             if block.name == "Write" and block.input:
-                                write_step = self._emit_write_step(
-                                    session, block.input, now_ts
-                                )
+                                write_step = self._emit_write_step(session, block.input, now_ts)
                                 if write_step:
                                     await nats_service.publish(
                                         f"vex.agent.{agent_id}.step",
@@ -632,9 +624,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                     )
                                     step_index += 1
                             if block.name == "Edit" and block.input:
-                                diff_step = self._emit_diff_step(
-                                    session, block.input, now_ts
-                                )
+                                diff_step = self._emit_diff_step(session, block.input, now_ts)
                                 if diff_step:
                                     await nats_service.publish(
                                         f"vex.agent.{agent_id}.step",
@@ -771,9 +761,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     log_line = f"[progress] {getattr(message, 'progress', '')}"
                     session.log_buffer.append(log_line)
                     if session.file_logger:
-                        session.file_logger.event(
-                            "progress", getattr(message, "progress", "")
-                        )
+                        session.file_logger.event("progress", getattr(message, "progress", ""))
                     now_ts = datetime.now(UTC).isoformat()
                     self._mark_previous_steps_past(session)
                     step_data = {
@@ -795,9 +783,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     usage = getattr(message, "usage", None) or {}
                     input_tokens = usage.get("input_tokens", 0) if isinstance(usage, dict) else 0
                     output_tokens = usage.get("output_tokens", 0) if isinstance(usage, dict) else 0
-                    result_text = (
-                        f"Completed in {duration_ms}ms" if duration_ms else "Completed"
-                    )
+                    result_text = f"Completed in {duration_ms}ms" if duration_ms else "Completed"
                     now_ts = datetime.now(UTC).isoformat()
                     self._mark_previous_steps_past(session)
                     step_data = {
@@ -1039,17 +1025,14 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                         for p in loaded_plugins
                     ],
                     "skills": [
-                        (s.get("name", s) if isinstance(s, dict) else str(s))
-                        for s in loaded_skills
+                        (s.get("name", s) if isinstance(s, dict) else str(s)) for s in loaded_skills
                     ],
                     "agents": [
-                        (a.get("name", a) if isinstance(a, dict) else str(a))
-                        for a in loaded_agents
+                        (a.get("name", a) if isinstance(a, dict) else str(a)) for a in loaded_agents
                     ],
                     "tools_count": len(loaded_tools),
                     "mcp_servers": [
-                        (m.get("name", "?") if isinstance(m, dict) else str(m))
-                        for m in loaded_mcp
+                        (m.get("name", "?") if isinstance(m, dict) else str(m)) for m in loaded_mcp
                     ],
                 },
             },
@@ -1063,9 +1046,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 step["status"] = "past"
 
     @staticmethod
-    def _emit_bash_step(
-        session: SDKAgentSession, tool_input: dict, timestamp: str
-    ) -> dict | None:
+    def _emit_bash_step(session: SDKAgentSession, tool_input: dict, timestamp: str) -> dict | None:
         """Emit a bash_command step from a Bash tool call."""
         command = tool_input.get("command", "")
         if not command:
@@ -1081,9 +1062,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         return step_data
 
     @staticmethod
-    def _emit_write_step(
-        session: SDKAgentSession, tool_input: dict, timestamp: str
-    ) -> dict | None:
+    def _emit_write_step(session: SDKAgentSession, tool_input: dict, timestamp: str) -> dict | None:
         """Emit a write_file step from a Write tool call."""
         file_path = tool_input.get("file_path", "")
         file_content = tool_input.get("content", "")
@@ -1100,9 +1079,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         return step_data
 
     @staticmethod
-    def _emit_diff_step(
-        session: SDKAgentSession, tool_input: dict, timestamp: str
-    ) -> dict | None:
+    def _emit_diff_step(session: SDKAgentSession, tool_input: dict, timestamp: str) -> dict | None:
         """Emit a diff step from an Edit tool call's old_string/new_string."""
         file_path = tool_input.get("file_path", "")
         old_string = tool_input.get("old_string", "")
@@ -1160,7 +1137,8 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
     @staticmethod
     def _find_session_file(project_path: str, session_id: str) -> Path | None:
         """Return the session JSONL path if it exists, else None."""
-        from claude_agent_sdk._internal.sessions import _sanitize_path, _get_projects_dir
+        from claude_agent_sdk._internal.sessions import _get_projects_dir, _sanitize_path
+
         projects_dir = Path(_get_projects_dir())
         sanitized = _sanitize_path(project_path)
         session_file = projects_dir / sanitized / f"{session_id}.jsonl"
@@ -1307,9 +1285,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 payload["subagent_type"] = hook_input.get("agent_type", "")
 
             if tool_name == "Skill":
-                payload["skill_name"] = hook_input.get("tool_input", {}).get(
-                    "skill", ""
-                )
+                payload["skill_name"] = hook_input.get("tool_input", {}).get("skill", "")
             elif tool_name == "Agent":
                 payload["subagent_description"] = hook_input.get("tool_input", {}).get(
                     "description", ""
@@ -1322,9 +1298,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             "SubagentStart": [HookMatcher(matcher=".*", hooks=[_on_subagent_start])],
             "SubagentStop": [HookMatcher(matcher=".*", hooks=[_on_subagent_stop])],
             "PreToolUse": [HookMatcher(matcher=".*", hooks=[_on_pre_tool_use])],
-            "PostToolUse": [
-                HookMatcher(matcher="Skill|Agent|mcp__.*", hooks=[_on_post_tool_use])
-            ],
+            "PostToolUse": [HookMatcher(matcher="Skill|Agent|mcp__.*", hooks=[_on_post_tool_use])],
         }
 
     def _format_prompt(self, task: dict) -> str:
@@ -1370,8 +1344,5 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 "Try breaking it into smaller batches."
             )
         if "not found" in msg or "ModuleNotFoundError" in msg:
-            return (
-                "Claude Agent SDK not available. "
-                "Install it: cd agent-orchestrator && uv sync"
-            )
+            return "Claude Agent SDK not available. Install it: cd agent-orchestrator && uv sync"
         return f"Agent error: {error}"

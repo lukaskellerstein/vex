@@ -1,12 +1,12 @@
 import React, { useEffect } from "react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/layout/AppShell";
-import { Projects } from "./pages/Projects";
-import { ProjectDetail } from "./pages/ProjectDetail";
-import { AgentTrace } from "./pages/AgentTrace";
 import { Activity } from "./pages/Activity";
-import { Settings } from "./pages/Settings";
+import { AgentTrace } from "./pages/AgentTrace";
 import { AgentTraceDemo } from "./pages/AgentTraceDemo";
+import { ProjectDetail } from "./pages/ProjectDetail";
+import { Projects } from "./pages/Projects";
+import { Settings } from "./pages/Settings";
 
 export function App() {
   useEffect(() => {

@@ -10,6 +10,7 @@
 List all agents for a specific project, ordered by creation time (most recent first).
 
 **Response** `200 OK`:
+
 ```json
 {
   "agents": [
@@ -39,6 +40,7 @@ List all agents for a specific project, ordered by creation time (most recent fi
 List all tasks for a specific batch.
 
 **Response** `200 OK`:
+
 ```json
 {
   "tasks": [
@@ -63,6 +65,7 @@ List all tasks for a specific batch.
 Get structured execution steps for a specific agent.
 
 **Response** `200 OK`:
+
 ```json
 {
   "agent_id": "abc123",
@@ -94,6 +97,7 @@ Get structured execution steps for a specific agent.
 ```
 
 **Response when agent not found or no steps** `200 OK`:
+
 ```json
 {
   "agent_id": "abc123",

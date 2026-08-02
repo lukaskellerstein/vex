@@ -49,9 +49,11 @@ If a developer runs their project in their own terminal on any port, agents stil
 ## Feature: Add Project from GitHub
 
 ### Problem
+
 Currently, adding a project requires the user to have already cloned the repo. This presumes technical knowledge (git, terminal). The target user shouldn't need that.
 
 ### Solution
+
 Add "Add from GitHub" option alongside the existing "Add from folder":
 
 1. **Add from GitHub** (primary)
@@ -66,6 +68,7 @@ Add "Add from GitHub" option alongside the existing "Add from folder":
    - For developers who already have the project locally
 
 ### UI Flow
+
 ```
 [Add Project]
   ├── From GitHub URL  →  paste URL  →  cloning...  →  installing...  →  ready
@@ -73,6 +76,7 @@ Add "Add from GitHub" option alongside the existing "Add from folder":
 ```
 
 ### Implementation Notes
+
 - Clone via `git clone <url>` in Electron main process (not AO)
 - Store in `~/.vex/projects/` (create dir if not exists)
 - Run `npm install` / `yarn install` / `pnpm install` based on detected lock file
@@ -82,9 +86,11 @@ Add "Add from GitHub" option alongside the existing "Add from folder":
 ## Files Modified (Dev Server Refactor)
 
 ### New
+
 - `electron-app/src/main/dev-server-manager.ts` — spawn/kill/logs/URL detection
 
 ### Modified
+
 - `electron-app/src/main/index.ts` — IPC handlers use DevServerManager instead of AO API
 - `electron-app/src/main/preload.ts` — no changes needed (IPC interface unchanged)
 - `electron-app/src/renderer/pages/ProjectDetail.tsx` — port display, stop tooltip
@@ -93,6 +99,7 @@ Add "Add from GitHub" option alongside the existing "Add from folder":
 - `agent-orchestrator/src/agent_orchestrator/main.py` — removed dev_server_manager from lifespan
 
 ### Deleted
+
 - `agent-orchestrator/src/agent_orchestrator/services/dev_server_manager.py`
 
 ## Current Status

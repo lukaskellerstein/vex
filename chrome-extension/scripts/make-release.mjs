@@ -12,7 +12,7 @@
  * building. Run this whenever you cut a new extension version.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, cpSync, mkdirSync, existsSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 

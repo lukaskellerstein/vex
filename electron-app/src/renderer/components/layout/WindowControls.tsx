@@ -30,12 +30,39 @@ export function WindowControls() {
           >
             {maximized ? (
               <svg width="10" height="10" viewBox="0 0 12 12">
-                <rect x="2" y="0" width="10" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                <rect x="0" y="2" width="10" height="10" rx="1" fill="var(--surface)" stroke="currentColor" strokeWidth="1.5" />
+                <rect
+                  x="2"
+                  y="0"
+                  width="10"
+                  height="10"
+                  rx="1"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <rect
+                  x="0"
+                  y="2"
+                  width="10"
+                  height="10"
+                  rx="1"
+                  fill="var(--surface)"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
               </svg>
             ) : (
               <svg width="10" height="10" viewBox="0 0 12 12">
-                <rect x="0.75" y="0.75" width="10.5" height="10.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                <rect
+                  x="0.75"
+                  y="0.75"
+                  width="10.5"
+                  height="10.5"
+                  rx="1"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
               </svg>
             )}
           </button>
@@ -45,7 +72,12 @@ export function WindowControls() {
             aria-label="Close"
           >
             <svg width="10" height="10" viewBox="0 0 12 12">
-              <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path
+                d="M1 1L11 11M11 1L1 11"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
           </button>
         </div>

@@ -1,8 +1,8 @@
+import { ArrowLeft, Bot } from "lucide-react";
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot } from "lucide-react";
-import { AgentStepList } from "../components/project-detail/AgentStepList";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
+import { AgentStepList } from "../components/project-detail/AgentStepList";
 
 const DEMO_STEPS: AgentStep[] = [
   {
@@ -53,7 +53,8 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-5",
     sequence_index: 5,
     type: "skill_invoke",
-    content: "image A futuristic gradient hero background, dark purple to deep blue, subtle geometric patterns, 16:9 aspect ratio",
+    content:
+      "image A futuristic gradient hero background, dark purple to deep blue, subtle geometric patterns, 16:9 aspect ratio",
     metadata: { skill_name: "image-generation" },
     duration_ms: null,
     token_count: null,
@@ -75,7 +76,7 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-7",
     sequence_index: 7,
     type: "skill_invoke",
-    content: "speech \"Welcome to the future of web development\" --voice warm --style professional",
+    content: 'speech "Welcome to the future of web development" --voice warm --style professional',
     metadata: { skill_name: "speech-generation" },
     duration_ms: null,
     token_count: null,
@@ -97,7 +98,8 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-9",
     sequence_index: 9,
     type: "subagent_spawn",
-    content: "Analyze the existing CSS variables and design tokens in the project to ensure the new hero section matches the design system.",
+    content:
+      "Analyze the existing CSS variables and design tokens in the project to ensure the new hero section matches the design system.",
     metadata: { subagent_name: "Explore", subagent_id: "sub-explore-001" },
     duration_ms: null,
     token_count: null,
@@ -120,7 +122,8 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-11",
     sequence_index: 11,
     type: "subagent_spawn",
-    content: "Review accessibility of the hero section: check color contrast ratios, ARIA labels, and keyboard navigation.",
+    content:
+      "Review accessibility of the hero section: check color contrast ratios, ARIA labels, and keyboard navigation.",
     metadata: { subagent_name: "Plan", subagent_id: "sub-plan-002" },
     duration_ms: null,
     token_count: null,
@@ -143,7 +146,8 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-13",
     sequence_index: 13,
     type: "tool_call",
-    content: '{"file_path":"src/components/HeroSection.tsx","old_string":"background: var(--color-bg)","new_string":"background: url(\'/media/hero-bg.png\') center/cover no-repeat, var(--color-bg-dark)"}',
+    content:
+      '{"file_path":"src/components/HeroSection.tsx","old_string":"background: var(--color-bg)","new_string":"background: url(\'/media/hero-bg.png\') center/cover no-repeat, var(--color-bg-dark)"}',
     metadata: { tool_name: "Edit" },
     duration_ms: 120,
     token_count: null,
@@ -166,7 +170,8 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-15",
     sequence_index: 15,
     type: "subagent_spawn",
-    content: "Create a short promotional video combining the hero background with the voiceover and background music for the landing page.",
+    content:
+      "Create a short promotional video combining the hero background with the voiceover and background music for the landing page.",
     metadata: { subagent_name: "media-director", subagent_id: "sub-media-003" },
     duration_ms: null,
     token_count: null,
@@ -209,7 +214,8 @@ const DEMO_STEPS: AgentStep[] = [
     id: "d-19",
     sequence_index: 19,
     type: "completed",
-    content: "Completed in 55000ms — hero section updated with generated background, voiceover, and promo video.",
+    content:
+      "Completed in 55000ms — hero section updated with generated background, voiceover, and promo video.",
     metadata: null,
     duration_ms: 55000,
     token_count: 6200,

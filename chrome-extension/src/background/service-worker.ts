@@ -3,9 +3,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.tabs
       .captureVisibleTab(sender.tab!.windowId, { format: "png" })
       .then((dataUrl) => sendResponse({ dataUrl }))
-      .catch((err) =>
-        sendResponse({ error: err.message || "Cannot capture this page" }),
-      );
+      .catch((err) => sendResponse({ error: err.message || "Cannot capture this page" }));
     return true;
   }
 

@@ -7,6 +7,7 @@
 List all subagents for a given parent agent.
 
 **Response**: `200 OK`
+
 ```json
 [
   {
@@ -39,6 +40,7 @@ Parse and return the transcript for a specific subagent as an array of trace ste
 - `subagent_id`: The `id` from `subagent_metadata` table (NOT the SDK's internal subagent_id)
 
 **Response**: `200 OK`
+
 ```json
 {
   "subagent": {
@@ -92,6 +94,7 @@ Parse and return the transcript for a specific subagent as an array of trace ste
 **Response**: `404 Not Found` — subagent does not exist.
 
 **Response**: `422 Unprocessable Entity` — transcript file missing or unreadable.
+
 ```json
 {
   "detail": "Transcript file not found at /path/to/file.jsonl"

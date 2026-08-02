@@ -1,27 +1,28 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowLeft,
+  Ban,
+  Bot,
+  CheckCircle,
   Clock,
   DollarSign,
+  GitFork,
   Hash,
   Layers,
-  CheckCircle,
-  XCircle,
   Loader2,
-  Bot,
-  Square,
-  Ban,
-  Wrench,
-  Plug,
-  Sparkles,
-  GitFork,
-  AlertTriangle,
-  Send,
   MessageCircle,
+  Plug,
+  Send,
+  Sparkles,
+  Square,
+  Wrench,
+  XCircle,
 } from "lucide-react";
-import { AgentStepList } from "../components/project-detail/AgentStepList";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
+import { AgentStepList } from "../components/project-detail/AgentStepList";
 import { AgentWorkingAnimation } from "../components/project-detail/AgentWorkingAnimation";
 import { SubagentList } from "../components/project-detail/SubagentList";
 import { hookEventToStep } from "../utils/hook-steps";
@@ -69,7 +70,10 @@ function mergeTraces(traces: TraceData[]): TraceData {
         token_count: null,
         created_at: t.created_at,
       };
-      return { ...t, steps: [promptStep, ...t.steps.map((s, i) => ({ ...s, sequence_index: i + 1 }))] };
+      return {
+        ...t,
+        steps: [promptStep, ...t.steps.map((s, i) => ({ ...s, sequence_index: i + 1 }))],
+      };
     }
     return t;
   }
@@ -149,7 +153,14 @@ function formatTokens(n: number | null): string {
 
 const STATUS_CONFIG: Record<
   string,
-  { icon: typeof CheckCircle; iconColor: string; label: string; bg: string; fg: string; border: string }
+  {
+    icon: typeof CheckCircle;
+    iconColor: string;
+    label: string;
+    bg: string;
+    fg: string;
+    border: string;
+  }
 > = {
   completed: {
     icon: CheckCircle,
@@ -219,7 +230,15 @@ const STATUS_CONFIG: Record<
 
 /** Convert a live step from NATS/steps API into the AgentStep shape used by the UI. */
 function liveStepToAgentStep(step: Record<string, unknown>, index: number): AgentStep {
-  const knownKeys = new Set(["type", "content", "timestamp", "status", "index", "duration_ms", "token_count"]);
+  const knownKeys = new Set([
+    "type",
+    "content",
+    "timestamp",
+    "status",
+    "index",
+    "duration_ms",
+    "token_count",
+  ]);
   const meta: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(step)) {
     if (!knownKeys.has(k) && v != null) meta[k] = v;
@@ -239,13 +258,20 @@ function liveStepToAgentStep(step: Record<string, unknown>, index: number): Agen
 /* ─── Component ──────────────────────────────────── */
 
 export function AgentTrace() {
-  const { id: projectId, traceId, agentId, subagentId } = useParams<{ id: string; traceId: string; agentId: string; subagentId: string }>();
+  const {
+    id: projectId,
+    traceId,
+    agentId,
+    subagentId,
+  } = useParams<{ id: string; traceId: string; agentId: string; subagentId: string }>();
   const navigate = useNavigate();
   const isSubagentMode = !!subagentId;
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([]);
   const [livePrompt, setLivePrompt] = useState<string | null>(null);
-  const [agentStatus, setAgentStatus] = useState<"running" | "completed" | "failed" | "stopped" | "cancelled" | "error" | null>(null);
+  const [agentStatus, setAgentStatus] = useState<
+    "running" | "completed" | "failed" | "stopped" | "cancelled" | "error" | null
+  >(null);
   const [idCopied, setIdCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -281,81 +307,102 @@ export function AgentTrace() {
   }, [traceId, agentId]);
 
   // Subscribe to NATS for live steps
-  const subscribeToAgent = useCallback(async (aid: string) => {
-    // First, try to load any steps already accumulated
-    try {
-      const stepsData = await window.electronAPI.getAgentSteps(aid);
-      if (stepsData?.prompt) {
-        setLivePrompt(stepsData.prompt);
-      }
-      if (stepsData?.steps?.length > 0) {
-        setLiveSteps(stepsData.steps.map((s: Record<string, unknown>, i: number) => liveStepToAgentStep(s, i)));
-      }
-      if (stepsData?.status && stepsData.status !== "running") {
-        // Agent already finished — fetch persisted trace
-        const persisted = await fetchPersistedTrace();
-        if (persisted) {
-          setTrace(persisted);
-          setAgentStatus(persisted.status);
-          setLoading(false);
-          return;
+  const subscribeToAgent = useCallback(
+    async (aid: string) => {
+      // First, try to load any steps already accumulated
+      try {
+        const stepsData = await window.electronAPI.getAgentSteps(aid);
+        if (stepsData?.prompt) {
+          setLivePrompt(stepsData.prompt);
         }
-        // Terminal or unknown status with no trace — show error instead of infinite spinner
-        const terminalStatuses = ["completed", "failed", "stopped", "cancelled", "error", "unknown"];
-        if (terminalStatuses.includes(stepsData.status)) {
-          setError(
-            stepsData.status === "unknown"
-              ? "This agent has no execution trace. It may have been interrupted by a server restart."
-              : `Agent ${stepsData.status}, but no detailed trace is available.`
+        if (stepsData?.steps?.length > 0) {
+          setLiveSteps(
+            stepsData.steps.map((s: Record<string, unknown>, i: number) =>
+              liveStepToAgentStep(s, i),
+            ),
           );
-          setLoading(false);
-          return;
         }
+        if (stepsData?.status && stepsData.status !== "running") {
+          // Agent already finished — fetch persisted trace
+          const persisted = await fetchPersistedTrace();
+          if (persisted) {
+            setTrace(persisted);
+            setAgentStatus(persisted.status);
+            setLoading(false);
+            return;
+          }
+          // Terminal or unknown status with no trace — show error instead of infinite spinner
+          const terminalStatuses = [
+            "completed",
+            "failed",
+            "stopped",
+            "cancelled",
+            "error",
+            "unknown",
+          ];
+          if (terminalStatuses.includes(stepsData.status)) {
+            setError(
+              stepsData.status === "unknown"
+                ? "This agent has no execution trace. It may have been interrupted by a server restart."
+                : `Agent ${stepsData.status}, but no detailed trace is available.`,
+            );
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        /* steps endpoint might 404 if agent hasn't started */
       }
-    } catch { /* steps endpoint might 404 if agent hasn't started */ }
 
-    setAgentStatus("running");
-    setLoading(false);
+      setAgentStatus("running");
+      setLoading(false);
 
-    // Subscribe via NATS
-    await window.electronAPI.subscribeAgentSteps(aid);
+      // Subscribe via NATS
+      await window.electronAPI.subscribeAgentSteps(aid);
 
-    const removeStepListener = window.electronAPI.onAgentStep((data) => {
-      if (data.agentId !== aid) return;
-      const idx = typeof data.index === "number" ? data.index : -1;
-      const step = liveStepToAgentStep(data, idx >= 0 ? idx : Date.now());
-      setLiveSteps((prev) => {
-        // Deduplicate by index
-        if (idx >= 0) {
-          const existing = prev.findIndex((s) => s.sequence_index === idx);
-          if (existing >= 0) return prev;
-        }
-        return [...prev, step];
+      const removeStepListener = window.electronAPI.onAgentStep((data) => {
+        if (data.agentId !== aid) return;
+        const idx = typeof data.index === "number" ? data.index : -1;
+        const step = liveStepToAgentStep(data, idx >= 0 ? idx : Date.now());
+        setLiveSteps((prev) => {
+          // Deduplicate by index
+          if (idx >= 0) {
+            const existing = prev.findIndex((s) => s.sequence_index === idx);
+            if (existing >= 0) return prev;
+          }
+          return [...prev, step];
+        });
       });
-    });
 
-    const removeStatusListener = window.electronAPI.onAgentStatus((data) => {
-      if (data.agentId !== aid) return;
-      const status = data.status as "completed" | "failed" | "stopped" | "cancelled";
-      if (status === "completed" || status === "failed" || status === "stopped" || status === "cancelled") {
-        setAgentStatus(status);
-      }
-    });
+      const removeStatusListener = window.electronAPI.onAgentStatus((data) => {
+        if (data.agentId !== aid) return;
+        const status = data.status as "completed" | "failed" | "stopped" | "cancelled";
+        if (
+          status === "completed" ||
+          status === "failed" ||
+          status === "stopped" ||
+          status === "cancelled"
+        ) {
+          setAgentStatus(status);
+        }
+      });
 
-    const removeHookListener = window.electronAPI.onAgentHook((data) => {
-      if (data.agentId !== aid) return;
-      const hookStep = hookEventToStep(data);
-      if (!hookStep) return;
-      setLiveSteps((prev) => [...prev, hookStep]);
-    });
+      const removeHookListener = window.electronAPI.onAgentHook((data) => {
+        if (data.agentId !== aid) return;
+        const hookStep = hookEventToStep(data);
+        if (!hookStep) return;
+        setLiveSteps((prev) => [...prev, hookStep]);
+      });
 
-    cleanupRef.current = () => {
-      removeStepListener();
-      removeStatusListener();
-      removeHookListener();
-      window.electronAPI.unsubscribeAgentSteps(aid);
-    };
-  }, [fetchPersistedTrace]);
+      cleanupRef.current = () => {
+        removeStepListener();
+        removeStatusListener();
+        removeHookListener();
+        window.electronAPI.unsubscribeAgentSteps(aid);
+      };
+    },
+    [fetchPersistedTrace],
+  );
 
   // When status changes to completed/failed, fetch the full persisted trace
   useEffect(() => {
@@ -375,7 +422,10 @@ export function AgentTrace() {
       continuingLocallyRef.current = false;
     }, 1500);
 
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [agentStatus, trace, liveSteps.length, fetchPersistedTrace]);
 
   // Main mount effect (skip in subagent mode — handled by separate effect)
@@ -405,13 +455,18 @@ export function AgentTrace() {
                 // Agent resumed — stop polling and subscribe to live steps.
                 // If handleContinue already set up the subscription (local
                 // continuation), skip — it preserved the previous steps.
-                if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+                if (pollTimer) {
+                  clearInterval(pollTimer);
+                  pollTimer = null;
+                }
                 if (continuingLocallyRef.current) return;
                 setAgentStatus("running");
                 setLiveSteps([]);
                 await subscribeToAgent(agentId);
               }
-            } catch { /* agent endpoint not available */ }
+            } catch {
+              /* agent endpoint not available */
+            }
           }, 3000);
         }
         return;
@@ -447,11 +502,15 @@ export function AgentTrace() {
       try {
         const data = await window.electronAPI.getAgentSubagents(agentId!);
         if (!cancelled && Array.isArray(data)) setSubagents(data);
-      } catch { /* agent might not exist yet */ }
+      } catch {
+        /* agent might not exist yet */
+      }
     }
 
     fetchSubagents();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [agentId, isSubagentMode]);
 
   // Real-time subagent updates from NATS hook events (US3)
@@ -484,8 +543,8 @@ export function AgentTrace() {
                   completed_at: (data.timestamp as string) ?? new Date().toISOString(),
                   transcript_path: (data.transcript_path as string) ?? null,
                 }
-              : s
-          )
+              : s,
+          ),
         );
       }
     });
@@ -558,17 +617,21 @@ export function AgentTrace() {
     }
 
     fetchTranscript();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isSubagentMode, agentId, subagentId]);
 
   // Determine what to display (must be before early returns to keep hook order stable)
   // agentStatus "running" overrides trace status (agent resumed via continuation)
-  const displayStatus = (agentStatus === "running" ? "running" : null) ?? trace?.status ?? agentStatus ?? "running";
+  const displayStatus =
+    (agentStatus === "running" ? "running" : null) ?? trace?.status ?? agentStatus ?? "running";
   // When continuing, append live steps after existing trace steps
   const displaySteps = useMemo(() => {
-    const baseSteps = trace?.steps && liveSteps.length > 0
-      ? [...trace.steps, ...liveSteps]
-      : trace?.steps ?? liveSteps;
+    const baseSteps =
+      trace?.steps && liveSteps.length > 0
+        ? [...trace.steps, ...liveSteps]
+        : (trace?.steps ?? liveSteps);
 
     // If no trace (running agent) and we have a live prompt, prepend it as a prompt step
     if (!trace && livePrompt && baseSteps[0]?.type !== "user_message") {
@@ -648,17 +711,22 @@ export function AgentTrace() {
           try {
             const parsed = JSON.parse(step.content ?? "");
             if (parsed?.skill) skills.add(parsed.skill);
-          } catch { /* content might not be JSON */ }
+          } catch {
+            /* content might not be JSON */
+          }
         } else if (toolName === "Agent") {
           try {
             const parsed = JSON.parse(step.content ?? "");
             const name = parsed?.description || parsed?.subagent_type || "agent";
             subagents.add(name);
-          } catch { /* content might not be JSON */ }
+          } catch {
+            /* content might not be JSON */
+          }
         }
         tools.add(toolName);
       } else if (step.type === "subagent_spawn") {
-        const name = (step.metadata?.subagent_name as string) || (step.metadata?.subagent_id as string);
+        const name =
+          (step.metadata?.subagent_name as string) || (step.metadata?.subagent_id as string);
         if (name) subagents.add(name);
       } else if (step.type === "skill_invoke") {
         const name = step.metadata?.skill_name as string;
@@ -972,25 +1040,58 @@ export function AgentTrace() {
             flexWrap: "wrap",
           }}
         >
-          <MetricItem icon={<Clock size={12} />} label="duration" value={formatDuration(trace?.total_duration_ms ?? elapsedMs)} />
+          <MetricItem
+            icon={<Clock size={12} />}
+            label="duration"
+            value={formatDuration(trace?.total_duration_ms ?? elapsedMs)}
+          />
           <Separator />
-          <MetricItem icon={<DollarSign size={12} />} label="cost" value={formatCost(trace?.total_cost_usd ?? stats.liveCostUsd)} />
+          <MetricItem
+            icon={<DollarSign size={12} />}
+            label="cost"
+            value={formatCost(trace?.total_cost_usd ?? stats.liveCostUsd)}
+          />
           <Separator />
-          <MetricItem icon={<Hash size={12} />} label="in" value={formatTokens(stats.inputTokens)} />
+          <MetricItem
+            icon={<Hash size={12} />}
+            label="in"
+            value={formatTokens(stats.inputTokens)}
+          />
           <Separator />
-          <MetricItem icon={<Hash size={12} />} label="out" value={formatTokens(stats.outputTokens)} />
+          <MetricItem
+            icon={<Hash size={12} />}
+            label="out"
+            value={formatTokens(stats.outputTokens)}
+          />
           <Separator />
-          <MetricItem icon={<Layers size={12} />} label="steps" value={String(displaySteps.length)} />
+          <MetricItem
+            icon={<Layers size={12} />}
+            label="steps"
+            value={String(displaySteps.length)}
+          />
           <Separator />
           <MetricItem icon={<Wrench size={12} />} label="tools" value={String(stats.toolCount)} />
           <Separator />
           <MetricItem icon={<Plug size={12} />} label="mcp" value={String(stats.mcpCount)} />
           <Separator />
-          <MetricItem icon={<GitFork size={12} />} label="subagents" value={String(stats.subagentCount)} />
+          <MetricItem
+            icon={<GitFork size={12} />}
+            label="subagents"
+            value={String(stats.subagentCount)}
+          />
           <Separator />
-          <MetricItem icon={<Sparkles size={12} />} label="skills" value={String(stats.skillCount)} />
+          <MetricItem
+            icon={<Sparkles size={12} />}
+            label="skills"
+            value={String(stats.skillCount)}
+          />
           <Separator />
-          <MetricItem icon={<AlertTriangle size={12} />} label="errors" value={String(stats.errorCount)} highlight={stats.errorCount > 0 ? "error" : undefined} />
+          <MetricItem
+            icon={<AlertTriangle size={12} />}
+            label="errors"
+            value={String(stats.errorCount)}
+            highlight={stats.errorCount > 0 ? "error" : undefined}
+          />
         </div>
 
         {/* Breadcrumb for subagent mode */}
@@ -1042,10 +1143,14 @@ export function AgentTrace() {
         <AgentStepList
           steps={displaySteps}
           status={displayStatus}
-          onAgentClick={!isSubagentMode ? (agentType) => {
-            const sub = subagents.find((s) => s.subagent_type === agentType);
-            if (sub) navigate(`/project/${projectId}/agent/${agentId}/subagent/${sub.id}`);
-          } : undefined}
+          onAgentClick={
+            !isSubagentMode
+              ? (agentType) => {
+                  const sub = subagents.find((s) => s.subagent_type === agentType);
+                  if (sub) navigate(`/project/${projectId}/agent/${agentId}/subagent/${sub.id}`);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -1112,12 +1217,14 @@ export function AgentTrace() {
                 gap: "6px",
                 padding: "10px 16px",
                 borderRadius: "var(--radius)",
-                background: isSending || !followUpMessage.trim()
-                  ? "var(--surface-elevated)"
-                  : "var(--primary)",
-                color: isSending || !followUpMessage.trim()
-                  ? "var(--foreground-dim)"
-                  : "var(--primary-foreground)",
+                background:
+                  isSending || !followUpMessage.trim()
+                    ? "var(--surface-elevated)"
+                    : "var(--primary)",
+                color:
+                  isSending || !followUpMessage.trim()
+                    ? "var(--foreground-dim)"
+                    : "var(--primary-foreground)",
                 border: "none",
                 cursor: isSending || !followUpMessage.trim() ? "not-allowed" : "pointer",
                 fontSize: "13px",
@@ -1170,7 +1277,14 @@ function MetricItem({
 }) {
   const color = highlight === "error" ? "var(--status-error)" : undefined;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", color: color ?? "var(--foreground-muted)" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        color: color ?? "var(--foreground-muted)",
+      }}
+    >
       <span style={{ color: color ?? "var(--foreground-dim)", display: "flex" }}>{icon}</span>
       <span style={{ color: color ?? "var(--foreground-dim)" }}>{label}</span>
       <span>{value}</span>
@@ -1179,8 +1293,5 @@ function MetricItem({
 }
 
 function Separator() {
-  return (
-    <span style={{ color: "var(--foreground-dim)", userSelect: "none" }}>|</span>
-  );
+  return <span style={{ color: "var(--foreground-dim)", userSelect: "none" }}>|</span>;
 }
-

@@ -1,7 +1,7 @@
 """Agent lifecycle management."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from agent_orchestrator.adapters.base import AgentAdapter
 from agent_orchestrator.db.database import get_db
@@ -49,10 +49,13 @@ class AgentManagerService:
 
         try:
             process = await adapter.start(
-                project_id, project_path, agent_id=agent_id, model=model,
+                project_id,
+                project_path,
+                agent_id=agent_id,
+                model=model,
                 auth_header=auth_header,
             )
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             await db.execute(
                 "UPDATE agents SET status = ?, pid = ?, last_heartbeat = ? WHERE id = ?",
                 ("running", process.pid, now, agent_id),
@@ -119,7 +122,7 @@ class AgentManagerService:
         Marks agents unhealthy if heartbeat is older than 60s.
         Attempts restart if heartbeat is older than 300s.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         db = await get_db()
 
         for agent_id, info in list(self._running_agents.items()):
@@ -129,13 +132,14 @@ class AgentManagerService:
 
             heartbeat = datetime.fromisoformat(heartbeat_str)
             if heartbeat.tzinfo is None:
-                heartbeat = heartbeat.replace(tzinfo=timezone.utc)
+                heartbeat = heartbeat.replace(tzinfo=UTC)
             delta = (now - heartbeat).total_seconds()
 
             if delta > _RESTART_THRESHOLD_S:
                 logger.warning(
                     "Agent %s heartbeat stale for %.0fs, attempting restart",
-                    agent_id, delta,
+                    agent_id,
+                    delta,
                 )
                 await db.execute(
                     "UPDATE agents SET status = ? WHERE id = ?",
@@ -152,8 +156,12 @@ class AgentManagerService:
                     auth_header = info.get("auth_header")
                     self._running_agents.pop(agent_id, None)
                     await self.start_agent(
-                        agent_id, project_id, project_path, adapter_type,
-                        model=model, auth_header=auth_header,
+                        agent_id,
+                        project_id,
+                        project_path,
+                        adapter_type,
+                        model=model,
+                        auth_header=auth_header,
                     )
                 except Exception:
                     logger.exception("Failed to restart agent %s", agent_id)
@@ -161,7 +169,8 @@ class AgentManagerService:
             elif delta > _UNHEALTHY_THRESHOLD_S:
                 logger.warning(
                     "Agent %s heartbeat stale for %.0fs, marking unhealthy",
-                    agent_id, delta,
+                    agent_id,
+                    delta,
                 )
                 await db.execute(
                     "UPDATE agents SET status = ? WHERE id = ?",

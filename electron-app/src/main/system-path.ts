@@ -33,11 +33,11 @@ function resolveLoginShellPath(): string | null {
 
   const shell = process.env.SHELL || "/bin/zsh";
   try {
-    const out = execFileSync(
-      shell,
-      ["-ilc", `printf '%s' "${DELIM}$PATH${DELIM}"`],
-      { encoding: "utf8", timeout: SHELL_TIMEOUT_MS, stdio: ["ignore", "pipe", "ignore"] }
-    );
+    const out = execFileSync(shell, ["-ilc", `printf '%s' "${DELIM}$PATH${DELIM}"`], {
+      encoding: "utf8",
+      timeout: SHELL_TIMEOUT_MS,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
     const parts = out.split(DELIM);
     if (parts.length >= 3) {
       const resolved = parts[1].trim();

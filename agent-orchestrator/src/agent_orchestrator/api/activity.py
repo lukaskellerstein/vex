@@ -1,7 +1,9 @@
 """Activity event endpoints."""
 
 import json
+
 from fastapi import APIRouter, Query
+
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.models.activity import ActivityEvent
 
@@ -81,9 +83,7 @@ async def activity_stats(since: str | None = Query(default=None)):
     )
     total_actions = (await cursor.fetchone())["total"]
 
-    cursor = await db.execute(
-        "SELECT COUNT(*) as cnt FROM agents WHERE status = 'running'"
-    )
+    cursor = await db.execute("SELECT COUNT(*) as cnt FROM agents WHERE status = 'running'")
     active_agents = (await cursor.fetchone())["cnt"]
 
     cursor = await db.execute(

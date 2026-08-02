@@ -21,6 +21,7 @@ Continue a conversation with a finished agent by sending a follow-up message.
 | `message` | string | Yes | Non-empty (min 1 char) | Follow-up message to send to the agent |
 
 **Example**:
+
 ```json
 POST /api/agents/abc-123/continue
 {
@@ -154,6 +155,7 @@ New IPC method exposed via `window.electronAPI.continueAgent()`.
 **Electron main process**: Calls `POST /api/agents/{agentId}/continue` with `{ message }`.
 
 **Preload bridge**:
+
 ```typescript
 continueAgent: (agentId: string, message: string) =>
   ipcRenderer.invoke("continue-agent", agentId, message)

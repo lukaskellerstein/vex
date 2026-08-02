@@ -57,10 +57,12 @@ Also exposes:
 
 Add a `steps: list[dict]` field to `SDKAgentSession` alongside `log_buffer`. Each step is:
 ```python
-{"type": "text"|"tool_use"|"tool_result"|"progress"|"error"|"completed",
- "content": str,
- "timestamp": str,
- "status": "past"|"current"|"pending"}
+{
+    "type": "text" | "tool_use" | "tool_result" | "progress" | "error" | "completed",
+    "content": str,
+    "timestamp": str,
+    "status": "past" | "current" | "pending",
+}
 ```
 
 In `send_task()`, when processing messages:
@@ -90,6 +92,7 @@ Add endpoint `GET /projects/{project_id}/batches/{batch_id}/task` → returns al
 @router.get("/agents/{agent_id}/logs")
 async def get_agent_logs(agent_id: str):
     return batch_processor.get_logs(agent_id)
+
 
 @router.get("/agents/{agent_id}/steps")
 async def get_agent_steps(agent_id: str):

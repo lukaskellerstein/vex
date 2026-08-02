@@ -1,10 +1,10 @@
+import { AlertTriangle } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle } from "lucide-react";
 import { AddProjectDialog } from "../components/AddProjectDialog";
 import { ProjectCard } from "../components/projects/ProjectCard";
-import { ProjectListHeader } from "../components/projects/ProjectListHeader";
 import { ProjectEmptyState } from "../components/projects/ProjectEmptyState";
+import { ProjectListHeader } from "../components/projects/ProjectListHeader";
 
 interface Project {
   id: string;
@@ -98,7 +98,8 @@ function DeleteProjectDialog({
             marginBottom: "6px",
           }}
         >
-          This will remove the project from Vex and delete all associated data (batches, traces, screenshots).
+          This will remove the project from Vex and delete all associated data (batches, traces,
+          screenshots).
         </div>
         <div
           style={{
@@ -270,13 +271,16 @@ export function Projects() {
   const hasProjects = projects.length > 0;
 
   return (
-    <div style={{
-      display: "flex",
-      flexDirection: "column",
-      height: "100%",
-      overflow: "hidden",
-      background: "radial-gradient(ellipse at 20% 0%, hsla(263, 60%, 20%, 0.4) 0%, transparent 50%), radial-gradient(ellipse at 80% 100%, hsla(217, 60%, 15%, 0.3) 0%, transparent 50%), radial-gradient(ellipse at 95% 95%, hsla(160, 50%, 14%, 0.35) 0%, transparent 45%), var(--background)",
-    }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        background:
+          "radial-gradient(ellipse at 20% 0%, hsla(263, 60%, 20%, 0.4) 0%, transparent 50%), radial-gradient(ellipse at 80% 100%, hsla(217, 60%, 15%, 0.3) 0%, transparent 50%), radial-gradient(ellipse at 95% 95%, hsla(160, 50%, 14%, 0.35) 0%, transparent 45%), var(--background)",
+      }}
+    >
       {hasProjects ? (
         <>
           <ProjectListHeader

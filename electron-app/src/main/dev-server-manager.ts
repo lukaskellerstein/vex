@@ -11,7 +11,7 @@
  *   the user can still stop them.
  */
 
-import { ChildProcess, spawn, spawnSync } from "child_process";
+import { type ChildProcess, spawn, spawnSync } from "child_process";
 import fs from "fs";
 import net from "net";
 import os from "os";
@@ -61,11 +61,7 @@ export interface ProjectInfo {
   framework?: string;
 }
 
-type StatusUpdater = (
-  projectId: string,
-  status: string,
-  url?: string | null
-) => Promise<void>;
+type StatusUpdater = (projectId: string, status: string, url?: string | null) => Promise<void>;
 
 export class DevServerManager {
   private servers = new Map<string, DevServer>();
@@ -124,7 +120,10 @@ export class DevServerManager {
     this.servers.set(project.id, server);
     this.persist();
 
-    this.appendLog(server, `[system] Started: ${exe} ${args.join(" ")} (pid ${child.pid}) in ${project.path}`);
+    this.appendLog(
+      server,
+      `[system] Started: ${exe} ${args.join(" ")} (pid ${child.pid}) in ${project.path}`,
+    );
 
     const handleLine = (line: string, prefix: string) => {
       if (!line) return;
@@ -269,7 +268,10 @@ export class DevServerManager {
     return finish();
   }
 
-  getLogs(projectId: string, offset: number = 0): {
+  getLogs(
+    projectId: string,
+    offset: number = 0,
+  ): {
     lines: string[];
     offset: number;
     running: boolean;
@@ -560,8 +562,9 @@ export class DevServerManager {
     if (!cmd) return true;
     if (cmd.includes(cwd.toLowerCase())) return true;
     return (
-      /\b(node|npm|pnpm|yarn|bun|deno|vite|next|nuxt|astro|remix|webpack|static-server)\b/.test(cmd) ||
-      /\brun\s+(dev|start|serve)\b/.test(cmd)
+      /\b(node|npm|pnpm|yarn|bun|deno|vite|next|nuxt|astro|remix|webpack|static-server)\b/.test(
+        cmd,
+      ) || /\brun\s+(dev|start|serve)\b/.test(cmd)
     );
   }
 
@@ -598,7 +601,7 @@ export class DevServerManager {
   // --- Command detection ---------------------------------------------------
 
   private buildRunCommand(
-    project: ProjectInfo
+    project: ProjectInfo,
   ): { exe: string; args: string[]; env?: Record<string, string> } | null {
     const scriptKey = this.findScriptKey(project.path);
     if (scriptKey) {

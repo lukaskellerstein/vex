@@ -1,5 +1,5 @@
-import React from "react";
 import { FolderOpen, Plus } from "lucide-react";
+import React from "react";
 
 interface ProjectEmptyStateProps {
   onAddProject: () => void;

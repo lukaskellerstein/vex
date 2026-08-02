@@ -1,5 +1,6 @@
-import React, { useRef, useState, useCallback, useEffect } from "react";
-import { Search, ArrowDown, Trash2 } from "lucide-react";
+import { ArrowDown, Search, Trash2 } from "lucide-react";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface LogEntry {
   id: string;
@@ -88,7 +89,11 @@ export function DevServerLogs({ projectId, isRunning }: DevServerLogsProps) {
         const result = await window.electronAPI.getDevServerLogs(projectId, offsetRef.current);
         if (result?.lines?.length > 0) {
           const newEntries: LogEntry[] = result.lines.map((line: string, i: number) => {
-            const level = line.startsWith("[err]") ? "stderr" : line.startsWith("[warn]") ? "warn" : "stdout";
+            const level = line.startsWith("[err]")
+              ? "stderr"
+              : line.startsWith("[warn]")
+                ? "warn"
+                : "stdout";
             return {
               id: `${offsetRef.current}-${i}`,
               timestamp: new Date().toISOString(),
@@ -207,7 +212,11 @@ export function DevServerLogs({ projectId, isRunning }: DevServerLogsProps) {
         {/* Auto-scroll toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "auto" }}>
           <ArrowDown size={12} style={{ color: "var(--foreground-muted)" }} />
-          <span style={{ fontSize: "11px", color: "var(--foreground-muted)", whiteSpace: "nowrap" }}>Auto-scroll</span>
+          <span
+            style={{ fontSize: "11px", color: "var(--foreground-muted)", whiteSpace: "nowrap" }}
+          >
+            Auto-scroll
+          </span>
           <button
             onClick={() => setAutoScroll((p) => !p)}
             style={{

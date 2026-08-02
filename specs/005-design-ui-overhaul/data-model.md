@@ -136,24 +136,28 @@ Agent   1──N ActivityEvent
 ## State Transitions
 
 ### Project.status
+
 ```
 idle → starting → running → stopping → idle
                 → error → idle
 ```
 
 ### Batch.status
+
 ```
 pending → processing → completed
                      → failed
 ```
 
 ### Agent.status
+
 ```
 registered → starting → running → stopping → stopped
                       → error → starting (restart)
 ```
 
 ### AgentTrace.status
+
 ```
 running → completed
         → failed

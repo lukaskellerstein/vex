@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Play, Square, Trash2, Clock } from "lucide-react";
+import { Clock, Play, Square, Trash2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import { FrameworkBadge } from "./FrameworkBadge";
-import { StatusIndicator } from "./StatusIndicator";
 import { OperatorRobot } from "./OperatorRobot";
+import { StatusIndicator } from "./StatusIndicator";
 
 interface ProjectCardProps {
   project: {
@@ -55,7 +55,9 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
     if (hasAgents && isRunning) {
       setElapsed(project.agentRunningSeconds ?? 0);
       intervalRef.current = setInterval(() => setElapsed((prev) => prev + 1), 1000);
-      return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+      return () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      };
     }
     setElapsed(project.agentRunningSeconds ?? 0);
   }, [hasAgents, isRunning, project.agentRunningSeconds]);
@@ -74,7 +76,8 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
         minHeight: "148px",
         cursor: "pointer",
         position: "relative",
-        transition: "transform 200ms ease-out, border-color 150ms ease-out, box-shadow 200ms ease-out",
+        transition:
+          "transform 200ms ease-out, border-color 150ms ease-out, box-shadow 200ms ease-out",
         transform: hovered ? "translateY(-2px)" : "translateY(0)",
         boxShadow: hovered ? "0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2)" : "none",
         display: "flex",
@@ -82,7 +85,14 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
       }}
     >
       {/* Header: name + status */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: "12px",
+        }}
+      >
         <span
           style={{
             fontSize: "16px",
@@ -106,7 +116,15 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
       </div>
 
       {/* Agent status */}
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px", minHeight: "24px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          marginBottom: "10px",
+          minHeight: "24px",
+        }}
+      >
         {hasAgents && isRunning ? (
           <>
             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
@@ -129,13 +147,22 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <OperatorRobot size={16} idle />
-            <span style={{ fontSize: "11px", color: "var(--foreground-disabled)" }}>No agents running</span>
+            <span style={{ fontSize: "11px", color: "var(--foreground-disabled)" }}>
+              No agents running
+            </span>
           </div>
         )}
       </div>
 
       {/* Footer: last activity + quick actions */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: "auto",
+        }}
+      >
         {/* Last activity */}
         {project.lastActivityAt && (
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -180,7 +207,11 @@ export function ProjectCard({ project, onClick, onToggleServer, onDelete }: Proj
               e.currentTarget.style.background = "transparent";
             }}
           >
-            {isRunning ? <Square size={14} strokeWidth={1.5} /> : <Play size={14} strokeWidth={1.5} />}
+            {isRunning ? (
+              <Square size={14} strokeWidth={1.5} />
+            ) : (
+              <Play size={14} strokeWidth={1.5} />
+            )}
           </button>
 
           <button

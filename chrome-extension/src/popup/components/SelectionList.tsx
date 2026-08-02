@@ -18,10 +18,13 @@ export function SelectionList({ selections, onRemove, onUpdateInstruction }: Sel
     setEditText(currentText);
   }, []);
 
-  const saveEdit = useCallback((index: number) => {
-    onUpdateInstruction(index, editText);
-    setEditingIndex(null);
-  }, [editText, onUpdateInstruction]);
+  const saveEdit = useCallback(
+    (index: number) => {
+      onUpdateInstruction(index, editText);
+      setEditingIndex(null);
+    },
+    [editText, onUpdateInstruction],
+  );
 
   const cancelEdit = useCallback(() => {
     setEditingIndex(null);
@@ -31,8 +34,7 @@ export function SelectionList({ selections, onRemove, onUpdateInstruction }: Sel
     return (
       <div className="selection-list">
         <div className="empty-state">
-          No elements selected. Activate the selector and click elements on the
-          page.
+          No elements selected. Activate the selector and click elements on the page.
         </div>
       </div>
     );
@@ -71,8 +73,12 @@ export function SelectionList({ selections, onRemove, onUpdateInstruction }: Sel
                         autoFocus
                       />
                       <div className="selection-edit-actions">
-                        <button className="selection-edit-btn save" onClick={() => saveEdit(i)}>Save</button>
-                        <button className="selection-edit-btn" onClick={cancelEdit}>Cancel</button>
+                        <button className="selection-edit-btn save" onClick={() => saveEdit(i)}>
+                          Save
+                        </button>
+                        <button className="selection-edit-btn" onClick={cancelEdit}>
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -111,7 +117,8 @@ export function SelectionList({ selections, onRemove, onUpdateInstruction }: Sel
                       const w = window.open();
                       if (w) {
                         w.document.title = `Screenshot - ${label}`;
-                        w.document.body.style.cssText = "margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh";
+                        w.document.body.style.cssText =
+                          "margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh";
                         const img = w.document.createElement("img");
                         img.src = `data:image/jpeg;base64,${sel.screenshot}`;
                         img.style.maxWidth = "100%";
@@ -126,7 +133,6 @@ export function SelectionList({ selections, onRemove, onUpdateInstruction }: Sel
           );
         })}
       </div>
-
     </>
   );
 }

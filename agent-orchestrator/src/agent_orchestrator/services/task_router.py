@@ -54,7 +54,8 @@ class TaskRouter:
         if not by_tier:
             logger.debug(
                 "No capable agent found for task_type=%s project_id=%s",
-                task_type, project_id,
+                task_type,
+                project_id,
             )
             return None
 
@@ -70,6 +71,10 @@ class TaskRouter:
         chosen = candidates[next_idx]
         logger.info(
             "Routed task_type=%s to agent %s (tier %d, index %d/%d)",
-            task_type, chosen, best_tier, next_idx, len(candidates),
+            task_type,
+            chosen,
+            best_tier,
+            next_idx,
+            len(candidates),
         )
         return chosen

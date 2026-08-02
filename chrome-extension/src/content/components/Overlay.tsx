@@ -23,13 +23,7 @@ const ACTION_BADGE_COLORS: Record<string, string> = {
   copyStyle: "#6366f1",
 };
 
-function SelectionHighlight({
-  selection,
-  index,
-}: {
-  selection: Selection;
-  index: number;
-}) {
+function SelectionHighlight({ selection, index }: { selection: Selection; index: number }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,7 +114,15 @@ export function Overlay({ hover, selections, pendingSelection }: OverlayProps) {
 
 // --- Action markers: persistent numbered badges for ALL actions across all modes ---
 
-function ActionHighlight({ action, index, highlighted }: { action: Action; index: number; highlighted: boolean }) {
+function ActionHighlight({
+  action,
+  index,
+  highlighted,
+}: {
+  action: Action;
+  index: number;
+  highlighted: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -160,7 +162,9 @@ function ActionHighlight({ action, index, highlighted }: { action: Action; index
       className={`cs-action-marker ${highlighted ? "cs-action-marker-highlighted" : ""}`}
       style={{ borderColor }}
     >
-      <div className="cs-badge" style={{ background: borderColor }}>{index + 1}</div>
+      <div className="cs-badge" style={{ background: borderColor }}>
+        {index + 1}
+      </div>
     </div>
   );
 }
@@ -175,7 +179,12 @@ export function ActionMarkers({ actions, highlightedIndex }: ActionMarkersProps)
   return (
     <div className="cs-overlay">
       {actions.map((action, i) => (
-        <ActionHighlight key={action.selector + i} action={action} index={i} highlighted={highlightedIndex === i} />
+        <ActionHighlight
+          key={action.selector + i}
+          action={action}
+          index={i}
+          highlighted={highlightedIndex === i}
+        />
       ))}
     </div>
   );

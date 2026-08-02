@@ -5,6 +5,7 @@
 ## Prerequisites
 
 1. **NATS server binary** on PATH:
+
    ```bash
    curl -L https://github.com/nats-io/nats-server/releases/latest/download/nats-server-v2.10.25-linux-amd64.tar.gz -o nats.tar.gz
    tar xzf nats.tar.gz && sudo mv nats-server-*/nats-server /usr/local/bin/
@@ -42,33 +43,40 @@ This starts: NATS (port 4222/4223), AgentManager (port 8420), Electron window.
 ## Verify Each User Story
 
 ### US1: NATS Starts
+
 - StatusBar shows NATS connected (green dot)
 - `curl` or `nc -z localhost 4222` succeeds
 
 ### US2: Real SDK Agent
+
 - Add a project via the UI
 - Submit a task — verify real agent output (not "stub" messages)
 
 ### US3: Screenshot in Select Dialog
+
 - Enable extension on a page → select mode → click an element
 - Popup dialog shows a screenshot thumbnail with element highlighted
 
 ### US4: Resize Hover Borders
+
 - Switch to resize mode → hover over elements
 - Each hovered element gets a visible border
 
 ### US5: Style Editor Improvements
+
 - Switch to style mode → click an element
 - Style editor panel appears with drag handle, selection border on element
 - Drag the panel by its header
 - Click "Copy Style" button in the panel
 
 ### US6: Action Panel on Toolbar
+
 - Record some actions → click the chevron on the on-page toolbar
 - Panel expands showing all recorded actions
 - Popup dialog no longer shows the action list
 
 ### US7: End-to-End
+
 - Full cycle: select element → add instruction → submit batch → see real code changes
 
 ## Troubleshooting

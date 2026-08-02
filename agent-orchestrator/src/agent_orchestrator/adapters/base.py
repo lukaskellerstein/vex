@@ -1,8 +1,8 @@
 """Base class for agent adapters."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator
 
 
 @dataclass

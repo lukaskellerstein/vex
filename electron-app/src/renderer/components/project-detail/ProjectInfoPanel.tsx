@@ -1,20 +1,21 @@
-import React, { useEffect, useState } from "react";
 import {
-  FolderOpen,
-  ExternalLink,
-  Hash,
-  Terminal,
-  Cpu,
-  Clock,
-  Play,
-  Square,
-  Loader2,
-  ChevronDown,
   Check,
-  Zap,
+  ChevronDown,
+  Clock,
+  Cpu,
+  ExternalLink,
   Eye,
   EyeOff,
+  FolderOpen,
+  Hash,
+  Loader2,
+  Play,
+  Square,
+  Terminal,
+  Zap,
 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { FrameworkBadge } from "../projects/FrameworkBadge";
 import { StatusIndicator } from "../projects/StatusIndicator";
 
@@ -153,7 +154,14 @@ export function ProjectInfoPanel({
       {/* Project Identity */}
       <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid var(--border)" }}>
         <p style={sectionLabel}>Project Name</p>
-        <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--foreground)", marginBottom: "16px" }}>
+        <p
+          style={{
+            fontSize: "15px",
+            fontWeight: 600,
+            color: "var(--foreground)",
+            marginBottom: "16px",
+          }}
+        >
           {project.name}
         </p>
 
@@ -171,7 +179,10 @@ export function ProjectInfoPanel({
             gap: "6px",
           }}
         >
-          <FolderOpen size={13} style={{ flexShrink: 0, marginTop: "2px", color: "var(--foreground-dim)" }} />
+          <FolderOpen
+            size={13}
+            style={{ flexShrink: 0, marginTop: "2px", color: "var(--foreground-dim)" }}
+          />
           {project.path}
         </p>
 
@@ -205,16 +216,21 @@ export function ProjectInfoPanel({
 
       {/* Dev Server */}
       <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "12px",
+          }}
+        >
           <span style={sectionLabel}>Dev Server</span>
           <StatusIndicator status={status} showLabel />
         </div>
 
         <ServerToggleButton status={status} onClick={onServerToggle} />
 
-        {!isRunning && !isStarting && (
-          <FreePortButton projectId={project.id} />
-        )}
+        {!isRunning && !isStarting && <FreePortButton projectId={project.id} />}
 
         {isRunning && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "12px" }}>
@@ -250,14 +266,17 @@ export function ProjectInfoPanel({
               <Terminal size={12} style={{ color: "var(--foreground-dim)", flexShrink: 0 }} />
               <span style={serverLabel}>Dev Command</span>
               <span style={serverValue}>
-                {project.dev_command ?? (project.framework === "static" ? "built-in static server" : "npm run dev")}
+                {project.dev_command ??
+                  (project.framework === "static" ? "built-in static server" : "npm run dev")}
               </span>
             </div>
             {project.pid && (
               <div style={serverRow}>
                 <Cpu size={12} style={{ color: "var(--foreground-dim)", flexShrink: 0 }} />
                 <span style={serverLabel}>PID</span>
-                <span style={{ ...serverValue, color: "var(--foreground-dim)" }}>{project.pid}</span>
+                <span style={{ ...serverValue, color: "var(--foreground-dim)" }}>
+                  {project.pid}
+                </span>
               </div>
             )}
             {project.started_at && (
@@ -277,11 +296,15 @@ export function ProjectInfoPanel({
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div style={metaRow}>
             <span style={{ fontSize: "13px", color: "var(--foreground-dim)" }}>Total Batches</span>
-            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>{batchCount}</span>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>
+              {batchCount}
+            </span>
           </div>
           <div style={metaRow}>
             <span style={{ fontSize: "13px", color: "var(--foreground-dim)" }}>Total Actions</span>
-            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>{actionCount}</span>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>
+              {actionCount}
+            </span>
           </div>
           <div style={metaRow}>
             <span style={{ fontSize: "13px", color: "var(--foreground-dim)" }}>Last Batch</span>
@@ -335,7 +358,9 @@ function ModelSelect({ project }: { project: ProjectData }) {
   }
 
   return (
-    <span style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+    <span
+      style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "6px" }}
+    >
       {saved && <Check size={12} style={{ color: "var(--status-success)" }} />}
       <select
         value={selected}
@@ -427,7 +452,14 @@ function AuthHeaderField({ project }: { project: ProjectData }) {
           } as React.CSSProperties
         }
       />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "8px",
+        }}
+      >
         <span style={{ fontSize: "11px", color: "var(--foreground-dim)", lineHeight: 1.4 }}>
           Sent to your app in the agent's Playwright browser. Paste a bare token (used as{" "}
           <code>Authorization: Bearer …</code>) or full <code>Name: value</code> header lines, one
@@ -477,7 +509,9 @@ function ServerToggleButton({ status, onClick }: { status: string; onClick: () =
           cursor: "pointer",
           transition: "box-shadow 0.15s",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 12px hsla(142, 69%, 45%, 0.25)")}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.boxShadow = "0 0 12px hsla(142, 69%, 45%, 0.25)")
+        }
         onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
       >
         <Play size={14} />
@@ -565,7 +599,9 @@ function FreePortButton({ projectId }: { projectId: string }) {
       const freed = result?.port ?? port;
       const killedCount = result?.killed?.length ?? 0;
       if (result?.status === "killed") {
-        setMessage(`Freed port ${freed} (killed ${killedCount} process${killedCount === 1 ? "" : "es"}).`);
+        setMessage(
+          `Freed port ${freed} (killed ${killedCount} process${killedCount === 1 ? "" : "es"}).`,
+        );
       } else if (result?.status === "no_process") {
         setMessage(`No process was using port ${freed}.`);
       } else if (result?.status === "partial") {
@@ -585,7 +621,11 @@ function FreePortButton({ projectId }: { projectId: string }) {
       <button
         onClick={handleClick}
         disabled={busy}
-        title={port != null ? `Kill any process listening on port ${port}` : "Kill the process on this project's dev port"}
+        title={
+          port != null
+            ? `Kill any process listening on port ${port}`
+            : "Kill the process on this project's dev port"
+        }
         style={{
           width: "100%",
           height: "28px",
@@ -617,7 +657,14 @@ function FreePortButton({ projectId }: { projectId: string }) {
         {busy ? "Freeing port..." : port != null ? `Free Port ${port}` : "Free Dev Port"}
       </button>
       {message && (
-        <p style={{ fontSize: "11px", color: "var(--foreground-dim)", marginTop: "6px", lineHeight: 1.4 }}>
+        <p
+          style={{
+            fontSize: "11px",
+            color: "var(--foreground-dim)",
+            marginTop: "6px",
+            lineHeight: 1.4,
+          }}
+        >
           {message}
         </p>
       )}

@@ -62,10 +62,7 @@ export function computeDeltas(
 ): ResizeDelta[] {
   const deltas: ResizeDelta[] = [];
 
-  const allProps = new Set([
-    ...Object.keys(beforeStyles),
-    ...Object.keys(afterStyles),
-  ]);
+  const allProps = new Set([...Object.keys(beforeStyles), ...Object.keys(afterStyles)]);
 
   for (const prop of allProps) {
     const before = beforeStyles[prop] ?? "";
@@ -89,9 +86,7 @@ export function computeDeltas(
 
     if (beforeNum === 0) {
       if (afterNum === 0) continue;
-      const rounded = ROUNDABLE_PROPS.has(prop)
-        ? roundTo4px(afterNum)
-        : afterNum;
+      const rounded = ROUNDABLE_PROPS.has(prop) ? roundTo4px(afterNum) : afterNum;
       deltas.push({
         property: prop,
         before,

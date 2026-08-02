@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
-import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { markdown } from "@codemirror/lang-markdown";
+import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { EditorState } from "@codemirror/state";
+import { placeholder as cmPlaceholder, EditorView, keymap } from "@codemirror/view";
 import gsap from "gsap";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoundingRect } from "../../shared/types";
 import { computePopupPosition } from "../utils/positioning";
 import { ScreenshotThumb } from "./ScreenshotThumb";
@@ -35,7 +35,9 @@ export function PopupDialog({
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const [size, setSize] = useState({ width: POPUP_WIDTH, height: POPUP_HEIGHT });
-  const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(
+    null,
+  );
 
   const pos = computePopupPosition(elementRect, size.width, size.height);
 
@@ -94,7 +96,7 @@ export function PopupDialog({
             },
             {
               key: "Shift-Enter",
-              run: () => false,  // Let default newline behavior through
+              run: () => false, // Let default newline behavior through
             },
             ...defaultKeymap,
             ...historyKeymap,
@@ -170,28 +172,36 @@ export function PopupDialog({
     // are always available without recreating the editor.
   }, [handleSubmit, handleSkip]);
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startW: size.width, startH: size.height };
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: size.width,
+        startH: size.height,
+      };
 
-    const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dw = ev.clientX - dragRef.current.startX;
-      const dh = ev.clientY - dragRef.current.startY;
-      setSize({
-        width: Math.max(320, dragRef.current.startW + dw),
-        height: Math.max(280, dragRef.current.startH + dh),
-      });
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [size.width, size.height]);
+      const onMove = (ev: MouseEvent) => {
+        if (!dragRef.current) return;
+        const dw = ev.clientX - dragRef.current.startX;
+        const dh = ev.clientY - dragRef.current.startY;
+        setSize({
+          width: Math.max(320, dragRef.current.startW + dw),
+          height: Math.max(280, dragRef.current.startH + dh),
+        });
+      };
+      const onUp = () => {
+        dragRef.current = null;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [size.width, size.height],
+  );
 
   return (
     <div
@@ -230,7 +240,12 @@ export function PopupDialog({
 
       <div className="cs-popup-resize-grip" onMouseDown={handleResizeStart}>
         <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M9 1L1 9M9 5L5 9M9 9L9 9" stroke="#6c7086" strokeWidth="1.2" strokeLinecap="round" />
+          <path
+            d="M9 1L1 9M9 5L5 9M9 9L9 9"
+            stroke="#6c7086"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
         </svg>
       </div>
     </div>

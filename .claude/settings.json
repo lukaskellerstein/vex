@@ -52,7 +52,10 @@
       "Read(~/.npmrc)",
       "Read(~/.pypirc)",
       "Read(~/.zsh_history)",
+      "Read(~/.config/sops/age/**)",
+      "Read(~/.claude/.credentials.json)",
 
+      "Read(./**/.env)",
       "Read(./**/.env.local)",
       "Read(./**/.env.production)",
       "Read(./**/.env.staging)",
@@ -62,9 +65,15 @@
       "Read(./**/*.key)",
       "Read(./**/*.p12)",
       "Read(./**/*.pfx)",
+      "Read(./**/*.agekey)",
+      "Read(./**/keys.txt)",
+      "Read(./**/*.tfstate)",
+      "Read(./**/*.tfstate.backup)",
 
       "Edit(~/.ssh/**)",
       "Edit(~/.gnupg/**)",
+      "Edit(~/.config/sops/age/**)",
+      "Edit(~/.claude/.credentials.json)",
       "Edit(./.git/**)"
     ]
   },

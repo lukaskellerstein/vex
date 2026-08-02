@@ -9,7 +9,7 @@ Execute these steps in order. Do NOT skip steps.
 3. **Spec Documentation** — Update spec via `/sync-spec-kit` *(skip on `main` branch or trivial changes)*
 4. **Implement** — Write the code
 5. **Test** — Define DoD checklist, test, fix, repeat until it works *(see Step 5 below)*
-6. **Feature Documentation** — Update docs via `/docs-feature` *(skip on `main` branch or trivial changes)*
+6. **Feature Documentation** — Update docs via `/update-feature-docs` *(skip on `main` branch or trivial changes)*
 7. **Report** — Short summary: what was done, what was tested, whether docs were updated
 
 **NEVER report completion without first testing.** If you write code and stop without verifying it works, you have failed. Testing is YOUR responsibility — the user should never need to ask you to test.
@@ -17,3 +17,77 @@ Execute these steps in order. Do NOT skip steps.
 **Trivial changes** (typo, one-line fix, config tweak): skip steps 2, 3, and 6. State what you'll do and proceed.
 
 **On `main` branch**: skip steps 3 and 6 — spec and feature docs are tied to feature branches only.
+
+## Vex at a glance
+
+- **Three components, one repo.** `electron-app/` (Electron 30 + React 18 + Vite 6,
+  ships as `vex-desktop`), `chrome-extension/` (Manifest V3, React, `nats.ws`), and
+  `agent-orchestrator/` (Python 3.11 + FastAPI + Claude Agent SDK). They talk over
+  NATS, not HTTP.
+- **Run everything with `./dev-setup.sh`** from the repo root — one foreground
+  process per component with prefixed output, `Ctrl+C` stops all of them.
+  `--with-chrome` also launches Chrome for extension testing.
+- **Ports:** agent-orchestrator `8420`, NATS TCP `4222`, NATS WebSocket `4223`,
+  Electron remote debugging `9222`, extension debugging `9333`. The last two are
+  what the Playwright MCP servers attach to.
+- **State lives outside the repo.** SQLite at `~/.vex/vex.db` (WAL mode) and
+  screenshots under `~/.vex/data/{projectId}/`. Deleting or re-cloning the repo does
+  not reset it, and a schema change has to cope with a database that already exists.
+- **Package managers are not interchangeable.** Python is `uv`, *never* `pip`.
+  JavaScript is `npm`. See [`rules/10-tech-stack.md`](rules/10-tech-stack.md).
+- **Releasing** bumps `electron-app/package.json` (that version drives the
+  `v<version>` tag) plus the `chrome-extension` version, then
+  `node scripts/publish-release.mjs`. [`RELEASES.md`](../RELEASES.md) is the source
+  of truth.
+- **API keys arrive from the environment** — `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+  `ELEVENLABS_API_KEY`, delivered by `~/Projects/.envrc`. There is no `.env` in this
+  repo and none should be created with a value in it —
+  [`rules/12-security.md`](rules/12-security.md).
+
+Full facts → [`rules/01-project-config.md`](rules/01-project-config.md); stack and
+conventions → [`rules/10-tech-stack.md`](rules/10-tech-stack.md).
+
+## Standing authorizations — do NOT ask before doing these
+
+These actions are pre-approved. Run them yourself when the situation calls for it.
+
+### Read-only inspection (always safe)
+
+- Reading any file in this repo, `git status`, `git diff`, `git log`, `git show`.
+- `python3 .claude/hooks/dev-env.py status` — what is holding the dev ports and who
+  started it.
+- `lsof -i :8420 -i :4222 -i :4223 -i :9222 -i :9333`.
+- `npm run typecheck` / `npx tsc --noEmit` in `electron-app/` or `chrome-extension/`.
+- `uv run pytest` in `agent-orchestrator/`, including a single test or `-k` filter.
+- Read-only `SELECT`s against `~/.vex/vex.db` (`sqlite3 ~/.vex/vex.db '.tables'`).
+
+### Pre-approved mutations
+
+- Editing and creating files under `electron-app/src/`, `chrome-extension/src/`,
+  `agent-orchestrator/src/`, and their test directories.
+- `uv sync` / `uv add <pkg>` in `agent-orchestrator/`; `npm install` in
+  `electron-app/` or `chrome-extension/`.
+- `npm run build` in either JS package.
+- `python3 .claude/hooks/dev-env.py start` / `stop` — scoped to this repo's own dev
+  environment and its five ports, nothing else.
+
+### Requires confirmation — always ask first
+
+- `node scripts/publish-release.mjs`, and any version bump in
+  `electron-app/package.json` or the extension manifest — these publish to users.
+- `python3 .claude/hooks/dev-env.py start --force`. Without `--force` it refuses a
+  busy port on purpose; with it, it evicts whatever is there, which may be another
+  agent's session or the user's own.
+- Anything that deletes, migrates or rewrites `~/.vex/vex.db` or `~/.vex/data/`.
+  That is real user state, it is outside this repo, and there is no backup.
+- Adding anything to `electron-app/bin/` — those are the vendored multi-platform
+  `nats-server` binaries and each one is ~15 MB of permanent git history.
+- `git push`, `git push --force`, branch deletes — **never commit unless the user
+  explicitly asks**.
+- Anything touching secrets, TLS material, tokens, or credential files. A secret
+  never enters this repo in plaintext; if one must be versioned at all it is
+  SOPS+age — [`rules/12-security.md`](rules/12-security.md).
+
+When in doubt: ask. Vex drives a real browser and writes real code into the user's
+own project directories, `~/.vex/vex.db` is live state that outlives any clone of
+this repo, and a published release goes straight to installed desktop apps.
