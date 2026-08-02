@@ -362,8 +362,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
         # Determine batch outcome
         any_cancelled = any(isinstance(r, asyncio.CancelledError) for r in results)
         any_failed = any(
-            (isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError)) or r is False
-            for r in results
+            (isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError)) or r is False for r in results
         )
 
         if any_cancelled:
@@ -405,9 +404,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
         event_id = uuid.uuid4().hex
         succeeded = sum(1 for r in results if r is True)
         failed_count = len(results) - succeeded
-        summary = (
-            f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
-        )
+        summary = f"Batch {batch_id[:8]} {batch_status}: {succeeded}/{len(results)} actions succeeded"
         if failed_count > 0:
             summary += f", {failed_count} failed/cancelled"
         await db.execute(
@@ -504,9 +501,7 @@ async def _process_action(
         )
 
         # Create task row linked to batch
-        action_data = (
-            json.loads(action["data"]) if isinstance(action["data"], str) else action["data"]
-        )
+        action_data = json.loads(action["data"]) if isinstance(action["data"], str) else action["data"]
         screenshot_before = action["screenshot_before_path"]
         screenshot_after = action["screenshot_after_path"]
         prompt = _build_prompt(project, action, action_data, screenshot_before, screenshot_after)
@@ -550,9 +545,7 @@ async def _process_action(
                 "project_path": project["path"],
                 "framework": project["framework"],
                 "styling_approach": project["styling_approach"],
-                "actions": [
-                    _action_to_dict(action, action_data, screenshot_before, screenshot_after)
-                ],
+                "actions": [_action_to_dict(action, action_data, screenshot_before, screenshot_after)],
             },
         }
 
@@ -595,9 +588,7 @@ async def _process_action(
                 (agent_id,),
             )
             await db.commit()
-            logger.info(
-                "Action %d in batch %s cancelled for agent %s", action_idx, batch_id, agent_id
-            )
+            logger.info("Action %d in batch %s cancelled for agent %s", action_idx, batch_id, agent_id)
             return False
         else:
             await db.execute(
@@ -626,16 +617,12 @@ async def _process_action(
             )
             await db.commit()
 
-            logger.info(
-                "Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id
-            )
+            logger.info("Action %d in batch %s completed by agent %s", action_idx, batch_id, agent_id)
             return True
 
     except asyncio.CancelledError:
         # Task was cancelled via asyncio (backstop from stop_batch)
-        logger.info(
-            "Action %d in batch %s cancelled (asyncio) for agent %s", action_idx, batch_id, agent_id
-        )
+        logger.info("Action %d in batch %s cancelled (asyncio) for agent %s", action_idx, batch_id, agent_id)
         db = await get_db()
         completed_at = datetime.now(UTC).isoformat()
         await db.execute(
@@ -987,20 +974,14 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
             parts.append("**Style changes**:")
             for change in data["changes"]:
                 prop = change.get("property", "")
-                parts.append(
-                    f"  - `{prop}`: `{change.get('before', '')}` → `{change.get('after', '')}`"
-                )
+                parts.append(f"  - `{prop}`: `{change.get('before', '')}` → `{change.get('after', '')}`")
         if data.get("hover_changes"):
             parts.append("**Hover state changes**:")
             for hc in data["hover_changes"]:
-                parts.append(
-                    f"  - `{hc.get('property', '')}`: `{hc.get('value', '')}` — {hc.get('description', '')}"
-                )
+                parts.append(f"  - `{hc.get('property', '')}`: `{hc.get('value', '')}` — {hc.get('description', '')}")
         if data.get("transition"):
             t = data["transition"]
-            parts.append(
-                f"**Transition**: duration={t.get('duration', 'none')}, easing={t.get('easing', 'none')}"
-            )
+            parts.append(f"**Transition**: duration={t.get('duration', 'none')}, easing={t.get('easing', 'none')}")
 
     elif action_type == "resize":
         if data.get("deltas"):
@@ -1025,9 +1006,7 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
         if ref:
             parts.append(f"**Reference element**: `{ref}`")
         if content:
-            parts.append(
-                f"**Content**: tag=`{content.get('tag', 'div')}`, text=`{content.get('text', '')}`"
-            )
+            parts.append(f"**Content**: tag=`{content.get('tag', 'div')}`, text=`{content.get('text', '')}`")
             if content.get("attributes"):
                 parts.append(f"**Attributes**: {json.dumps(content['attributes'])}")
         if data.get("prompt"):
@@ -1058,9 +1037,7 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
         if wrapper:
             tag = wrapper.get("tag", "div")
             classes = " ".join(wrapper.get("class_list", wrapper.get("classList", [])))
-            parts.append(
-                f"**Wrapper**: `<{tag}" + (f' class="{classes}"' if classes else "") + ">`"
-            )
+            parts.append(f"**Wrapper**: `<{tag}" + (f' class="{classes}"' if classes else "") + ">`")
 
     elif action_type == "replaceImage":
         if data.get("original_src"):
@@ -1139,9 +1116,7 @@ def _append_element_context(parts: list[str], data: dict) -> None:
         # Include a compact summary of key styles
         styles = data["computed_styles"]
         style_lines = [
-            f"  - `{k}`: `{v}`"
-            for k, v in styles.items()
-            if v and v != "none" and v != "normal" and v != "0px"
+            f"  - `{k}`: `{v}`" for k, v in styles.items() if v and v != "none" and v != "normal" and v != "0px"
         ]
         if style_lines:
             parts.append("**Current styles**:")

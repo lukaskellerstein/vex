@@ -83,9 +83,7 @@ def _discover_plugins(marketplace_name: str, marketplace_path: Path) -> None:
                     meta.get("description", ""),
                 )
             else:
-                logger.warning(
-                    "  Skipping %s: no .claude-plugin/plugin.json", entry.get("name", "?")
-                )
+                logger.warning("  Skipping %s: no .claude-plugin/plugin.json", entry.get("name", "?"))
     else:
         # Flat layout: scan top-level directories
         for candidate in sorted(marketplace_path.iterdir()):

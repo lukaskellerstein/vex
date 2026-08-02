@@ -15,6 +15,17 @@
     "indentWidth": 2,
     "lineWidth": 100
   },
+  "html": {
+    // Biome 2.5.5's HTML formatter is EXPERIMENTAL and off by default
+    // upstream — this flag is the whole opt-in (enabled 2026-08-02; without
+    // it biome passes .html through untouched, measured). Not HTML inside
+    // .vue/.svelte — biome formats those as whole files anyway. Being
+    // experimental, the output style may shift on a biome upgrade — eyeball
+    // an .html diff after any bump.
+    "formatter": {
+      "enabled": true
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -24,6 +35,15 @@
       // (correctness/* — unused imports and variables are how wrong-variable
       // bugs surface). What's off is convention with no safe fix — findings
       // that sit in the gutter until a human rewrites working code.
+      "correctness": {
+        // Active only when package.json declares react (biome's react domain).
+        // Fires on every deliberate mount-only effect (deps: []), which is
+        // routine correct React, and its fix is unsafe — adding the deps
+        // changes when the effect re-runs — so it can never self-resolve on
+        // :w. Measured on 2.5.5. The other react-domain rules (conditional
+        // hooks etc.) stay on: they are silent on correct code.
+        "useExhaustiveDependencies": "off"
+      },
       "suspicious": {
         "noArrayIndexKey": "off",
         // `any` is a deliberate escape hatch, not a bug; no fix exists.
@@ -50,5 +70,25 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      // Enabling html.formatter above ALSO hands biome every .svg — measured
+      // on 2.5.5 (one repo: the flag pulled in 4 .html and 14 .svg). biome
+      // reformats the CSS inside an SVG's <style> as it would a stylesheet, so
+      // the compact one-line rules hand-authored and exported SVG normally
+      // carries explode to multi-line: a large diff on an artwork file for no
+      // correctness gain.
+      //
+      // This is a CLI/CI concern, not a :w one — `svg` is not in BIOME_FT in
+      // lua/plugins/formatting.lua, so conform never runs biome on an SVG
+      // buffer. What the block buys is `biome check .` staying honest: without
+      // it those 14 files are counted as format errors by every manual and CI
+      // run. Delete it in a repo whose SVGs are source you want formatted.
+      "includes": ["**/*.svg"],
+      "formatter": {
+        "enabled": false
+      }
+    }
+  ]
 }

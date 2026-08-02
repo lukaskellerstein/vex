@@ -8,7 +8,9 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 
-export function App() {
+zzzzzzzzzz
+
+export aasdfsdf function App() {
   useEffect(() => {
     window.electronAPI.subscribeProjectEvents();
     window.electronAPI.subscribeBatchEvents();
@@ -21,7 +23,7 @@ export function App() {
   }, []);
 
   return (
-    <MemoryRouter>
+    <jjjjjMemoryRouter>
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<Projects />} />

@@ -110,9 +110,7 @@ def _parse_headers(raw: str | None) -> dict[str, str]:
     return headers
 
 
-def _inject_playwright_auth(
-    mcp_servers: dict, auth_header: str | None, agent_id: str
-) -> tuple[dict, Path | None]:
+def _inject_playwright_auth(mcp_servers: dict, auth_header: str | None, agent_id: str) -> tuple[dict, Path | None]:
     """Rewrite the ``playwright-vex`` MCP server to launch with an auth ``--config``.
 
     Writes a Playwright MCP config file that injects ``extraHTTPHeaders`` into the
@@ -205,9 +203,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         plugin_refs = profile.get("plugins", [])
         plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
 
-        mcp_servers, pw_config_path = _inject_playwright_auth(
-            profile.get("mcp_servers", {}), auth_header, agent_id
-        )
+        mcp_servers, pw_config_path = _inject_playwright_auth(profile.get("mcp_servers", {}), auth_header, agent_id)
 
         session_id = str(uuid.uuid5(_VEX_SESSION_NS, agent_id))
         options = ClaudeAgentOptions(
@@ -254,8 +250,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         self._sessions[agent_id] = session
 
         logger.info(
-            "Started claude-code-sdk agent %s (profile=%s, model=%s, %d plugins) "
-            "for project %s at %s",
+            "Started claude-code-sdk agent %s (profile=%s, model=%s, %d plugins) for project %s at %s",
             agent_id,
             self._profile_name,
             model or "default",
@@ -322,9 +317,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             await session.client.__aenter__()
 
             # Log intended config (what we asked for)
-            intended_plugins = [
-                p.get("path", "") for p in (session.options.plugins if session.options else [])
-            ]
+            intended_plugins = [p.get("path", "") for p in (session.options.plugins if session.options else [])]
             intended_model = (session.options.model if session.options else None) or "default"
             print(
                 f"\n{_BOLD}{_BLUE}{'─' * 60}{_RESET}"
@@ -360,9 +353,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         plugin_refs = profile.get("plugins", [])
         plugins = marketplace_service.resolve_plugin_refs(plugin_refs)
 
-        mcp_servers, pw_config_path = _inject_playwright_auth(
-            profile.get("mcp_servers", {}), auth_header, agent_id
-        )
+        mcp_servers, pw_config_path = _inject_playwright_auth(profile.get("mcp_servers", {}), auth_header, agent_id)
 
         # Check if a session file exists for this agent so we can resume it.
         # Agents created before the session_id fix won't have one.
@@ -486,8 +477,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                     if subtype == "init":
                         profile = get_agent_profile(self._profile_name)
                         intended_plugins = [
-                            p.get("path", "")
-                            for p in (session.options.plugins if session.options else [])
+                            p.get("path", "") for p in (session.options.plugins if session.options else [])
                         ]
                         await self._log_agent_init(
                             agent_id,
@@ -564,9 +554,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                             log_line = f"[tool] {block.name}"
                             session.log_buffer.append(log_line)
                             if session.file_logger:
-                                input_preview = (
-                                    json.dumps(block.input)[:2000] if block.input else ""
-                                )
+                                input_preview = json.dumps(block.input)[:2000] if block.input else ""
                                 session.file_logger.event(
                                     "tool_call",
                                     input_preview,
@@ -637,9 +625,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 content_text = block.content
                             elif isinstance(block.content, list):
                                 content_text = " ".join(
-                                    item.get("text", "")
-                                    for item in block.content
-                                    if isinstance(item, dict)
+                                    item.get("text", "") for item in block.content if isinstance(item, dict)
                                 )
                             is_error = getattr(block, "is_error", False) or False
                             result_tool_name = None
@@ -702,9 +688,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                                 content_text = block.content
                             elif isinstance(block.content, list):
                                 content_text = " ".join(
-                                    item.get("text", "")
-                                    for item in block.content
-                                    if isinstance(item, dict)
+                                    item.get("text", "") for item in block.content if isinstance(item, dict)
                                 )
                             is_error = getattr(block, "is_error", False) or False
                             result_tool_name = None
@@ -956,10 +940,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             for p in loaded_plugins:
                 name = p.get("name", "?") if isinstance(p, dict) else str(p)
                 path = p.get("path", "") if isinstance(p, dict) else ""
-                print(
-                    f"    {_CYAN}[PLUGIN]{_RESET} {name}"
-                    + (f"  {_DIM}{path}{_RESET}" if path else "")
-                )
+                print(f"    {_CYAN}[PLUGIN]{_RESET} {name}" + (f"  {_DIM}{path}{_RESET}" if path else ""))
         else:
             print(f"    {_DIM}(none){_RESET}")
 
@@ -987,10 +968,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             for m in loaded_mcp:
                 name = m.get("name", "?") if isinstance(m, dict) else str(m)
                 status = m.get("status", "?") if isinstance(m, dict) else ""
-                print(
-                    f"    {_BLUE}[MCP]{_RESET}    {name}"
-                    + (f"  {_DIM}({status}){_RESET}" if status else "")
-                )
+                print(f"    {_BLUE}[MCP]{_RESET}    {name}" + (f"  {_DIM}({status}){_RESET}" if status else ""))
 
         print(f"{_GREEN}{'─' * 60}{_RESET}\n")
 
@@ -1020,20 +998,11 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 },
                 "loaded": {
                     "model": loaded_model,
-                    "plugins": [
-                        (p.get("name", "?") if isinstance(p, dict) else str(p))
-                        for p in loaded_plugins
-                    ],
-                    "skills": [
-                        (s.get("name", s) if isinstance(s, dict) else str(s)) for s in loaded_skills
-                    ],
-                    "agents": [
-                        (a.get("name", a) if isinstance(a, dict) else str(a)) for a in loaded_agents
-                    ],
+                    "plugins": [(p.get("name", "?") if isinstance(p, dict) else str(p)) for p in loaded_plugins],
+                    "skills": [(s.get("name", s) if isinstance(s, dict) else str(s)) for s in loaded_skills],
+                    "agents": [(a.get("name", a) if isinstance(a, dict) else str(a)) for a in loaded_agents],
                     "tools_count": len(loaded_tools),
-                    "mcp_servers": [
-                        (m.get("name", "?") if isinstance(m, dict) else str(m)) for m in loaded_mcp
-                    ],
+                    "mcp_servers": [(m.get("name", "?") if isinstance(m, dict) else str(m)) for m in loaded_mcp],
                 },
             },
         )
@@ -1287,9 +1256,7 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             if tool_name == "Skill":
                 payload["skill_name"] = hook_input.get("tool_input", {}).get("skill", "")
             elif tool_name == "Agent":
-                payload["subagent_description"] = hook_input.get("tool_input", {}).get(
-                    "description", ""
-                )
+                payload["subagent_description"] = hook_input.get("tool_input", {}).get("description", "")
 
             await nats_service.publish(f"vex.agent.{agent_id}.hooks", payload)
             return _CONTINUE
@@ -1334,15 +1301,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         """Classify SDK errors into actionable messages."""
         msg = str(error).lower()
         if "auth" in msg or "api_key" in msg or "401" in msg:
-            return (
-                "Authentication failed. Ensure ANTHROPIC_API_KEY is set "
-                "or run 'claude login' to authenticate."
-            )
+            return "Authentication failed. Ensure ANTHROPIC_API_KEY is set or run 'claude login' to authenticate."
         if "timeout" in msg or "timed out" in msg:
-            return (
-                "Agent task timed out. The task may be too complex. "
-                "Try breaking it into smaller batches."
-            )
+            return "Agent task timed out. The task may be too complex. Try breaking it into smaller batches."
         if "not found" in msg or "ModuleNotFoundError" in msg:
             return "Claude Agent SDK not available. Install it: cd agent-orchestrator && uv sync"
         return f"Agent error: {error}"

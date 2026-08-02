@@ -2,15 +2,26 @@
 
 **If you are going to use the Edit or Write tool, you MUST complete all applicable steps below before reporting completion.** This applies to every type of work: bug fixes, features, refactoring, config changes — no exceptions.
 
-Execute these steps in order. Do NOT skip steps.
+Execute these steps in order. Do NOT skip steps. Each step's detailed procedure
+is in the linked `rules/` file — already loaded into context, no need to open it.
 
-1. **Understand** — Read relevant code, ask clarifying questions, identify gaps and opportunities. For bugs: reproduce the issue first.
-2. **Plan** — Create a plan, get user approval, iterate if needed *(skip for trivial changes)*
-3. **Spec Documentation** — Update spec via `/sync-spec-kit` *(skip on `main` branch or trivial changes)*
-4. **Implement** — Write the code
-5. **Test** — Define DoD checklist, test, fix, repeat until it works *(see Step 5 below)*
-6. **Feature Documentation** — Update docs via `/update-feature-docs` *(skip on `main` branch or trivial changes)*
-7. **Report** — Short summary: what was done, what was tested, whether docs were updated
+1. **Understand** → [`rules/02-understand.md`](rules/02-understand.md) — Read relevant code, ask clarifying questions, identify gaps and opportunities. For bugs: reproduce the issue first.
+2. **Plan** → [`rules/03-plan.md`](rules/03-plan.md) — Create a plan, get user approval, iterate if needed *(skip for trivial changes)*
+3. **Spec Documentation** → [`rules/04-spec-documentation.md`](rules/04-spec-documentation.md) — Update spec via `/sync-spec-kit` *(skip on `main` branch or trivial changes)*
+4. **Implement** → [`rules/05-implement.md`](rules/05-implement.md) — Write the code
+5. **Test** → [`rules/06-testing.md`](rules/06-testing.md) — Define DoD checklist, test, fix, repeat until it works
+6. **Feature Documentation** → [`rules/07-feature-documentation.md`](rules/07-feature-documentation.md) — Update docs via `/update-feature-docs` *(skip on `main` branch or trivial changes)*
+7. **Report** → [`rules/08-report.md`](rules/08-report.md) — Short summary: what was done, what was tested, whether docs were updated
+
+The step numbers above are the workflow order; the `rules/` filenames keep their
+own numbering (`02`–`08`), which is why step 4 is `05-implement.md`. Reference
+files, outside the flow: [`rules/01-project-config.md`](rules/01-project-config.md),
+[`rules/09-code-quality.md`](rules/09-code-quality.md),
+[`rules/10-tech-stack.md`](rules/10-tech-stack.md),
+[`rules/11-communication.md`](rules/11-communication.md),
+[`rules/12-security.md`](rules/12-security.md),
+[`rules/machine-tools.md`](rules/machine-tools.md) (the `nvim-tools` and
+`lukas-ps` CLIs — pre-approved, read-only).
 
 **NEVER report completion without first testing.** If you write code and stop without verifying it works, you have failed. Testing is YOUR responsibility — the user should never need to ask you to test.
 
@@ -57,9 +68,16 @@ These actions are pre-approved. Run them yourself when the situation calls for i
 - `python3 .claude/hooks/dev-env.py status` — what is holding the dev ports and who
   started it.
 - `lsof -i :8420 -i :4222 -i :4223 -i :9222 -i :9333`.
-- `npm run typecheck` / `npx tsc --noEmit` in `electron-app/` or `chrome-extension/`.
+- `npm run typecheck` in `chrome-extension/`; `npx tsc --noEmit` in `electron-app/`,
+  which has a `tsconfig.json` but no `typecheck` script.
 - `uv run pytest` in `agent-orchestrator/`, including a single test or `-k` filter.
 - Read-only `SELECT`s against `~/.vex/vex.db` (`sqlite3 ~/.vex/vex.db '.tables'`).
+
+This machine's own `nvim-tools` and `lukas-ps` are pre-approved too, and are
+documented once in [`rules/machine-tools.md`](rules/machine-tools.md) — do not
+restate them here. What is specific to Vex: `dev-setup.sh` runs five processes at
+once, so `lukas-ps --json` is how you find which of them is actually holding the
+RAM rather than guessing from `ps`.
 
 ### Pre-approved mutations
 

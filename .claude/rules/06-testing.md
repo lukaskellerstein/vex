@@ -68,6 +68,19 @@ Both servers run in **attach mode** (`--cdp-endpoint`): they connect to a browse
 2. Verify the AO connects to NATS (check AO startup logs for NATS connection message).
 3. If the change affects the Chrome extension, test via the extension's NATS WebSocket connection on port 4223.
 
+**Every code change** — repo-wide lint / format / type check, from this machine's
+gated tooling:
+
+```bash
+nvim-tools --json --all
+```
+
+Your change must not add findings (compare against the baseline you took in
+[Step 1: Understand](02-understand.md)). How to read the output (including
+`gated-off`), and why this never replaces the project's own suite
+(`uv run pytest`, `npm run typecheck` in `chrome-extension/`, `npx tsc --noEmit`
+in `electron-app/`): [`machine-tools.md`](machine-tools.md).
+
 **Non-testable changes** (docs, config, build scripts): explicitly state why no runtime test is needed.
 
 ## 5d. Fix and repeat

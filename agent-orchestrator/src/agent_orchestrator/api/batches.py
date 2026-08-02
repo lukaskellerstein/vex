@@ -482,9 +482,7 @@ async def delete_batch(project_id: str, batch_id: str):
     # Delete activity events for agents spawned by this batch
     if agent_ids:
         placeholders = ",".join("?" * len(agent_ids))
-        await db.execute(
-            f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})", agent_ids
-        )
+        await db.execute(f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})", agent_ids)
 
     # Delete the agents themselves
     if agent_ids:

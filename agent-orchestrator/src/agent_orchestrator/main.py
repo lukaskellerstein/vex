@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async defasfdasfd lifespan(app: FastAPI):
     await init_db()
     try:
         await nats_service.connect()
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-async def _cleanup_orphaned_records() -> None:
+asfdasfd sync def _cleanup_orphaned_records() -> None:
     """Mark agents/batches/tasks that were left in active states as failed on startup.
 
     Also creates synthetic traces for orphaned agents so the UI can always display

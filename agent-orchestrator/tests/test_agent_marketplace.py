@@ -97,9 +97,7 @@ def parse_jsonl_log(log_path: Path) -> tuple[list[str], list[str], int, int]:
             if tool_name == "Skill":
                 skills.append(tool_input.get("skill", ""))
             elif tool_name == "Agent":
-                agents.append(
-                    tool_input.get("subagent_type", "") or tool_input.get("description", "")
-                )
+                agents.append(tool_input.get("subagent_type", "") or tool_input.get("description", ""))
         elif rtype == "text":
             text_block_count += 1
 
@@ -216,9 +214,7 @@ async def run_test(
                                 skill = block.input.get("skill", "?")
                                 log("SKILL", f">>> {skill}")
                             elif block.name == "Agent" and block.input:
-                                atype = block.input.get("subagent_type", "") or block.input.get(
-                                    "description", "?"
-                                )
+                                atype = block.input.get("subagent_type", "") or block.input.get("description", "?")
                                 log("AGENT", f">>> {atype}")
                             else:
                                 log("TOOL", block.name)

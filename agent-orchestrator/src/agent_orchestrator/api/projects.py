@@ -210,8 +210,7 @@ async def delete_project(project_id: str, delete_source: bool = False):
 
     # Delete agents spawned for this project's batches (via tasks)
     agent_cursor = await db.execute(
-        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id IN "
-        "(SELECT id FROM batches WHERE project_id = ?)",
+        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id IN (SELECT id FROM batches WHERE project_id = ?)",
         (project_id,),
     )
     agent_ids = [row["agent_id"] for row in await agent_cursor.fetchall()]

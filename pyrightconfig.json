@@ -1,6 +1,7 @@
 {
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": "none",
+  "exclude": ["**/.venv", "**/node_modules", "**/__pycache__"],
   "executionEnvironments": [
     {
       "root": "agent-orchestrator",

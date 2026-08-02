@@ -471,11 +471,7 @@ def reserved_spaces(manager: "WindowManager") -> frozenset:
     """
     if manager.name != "yabai":
         return frozenset()
-    return frozenset(
-        space.get("index")
-        for space in Yabai._spaces()
-        if (space.get("label") or "") == VEX_SPACE_LABEL
-    )
+    return frozenset(space.get("index") for space in Yabai._spaces() if (space.get("label") or "") == VEX_SPACE_LABEL)
 
 
 def detect(
