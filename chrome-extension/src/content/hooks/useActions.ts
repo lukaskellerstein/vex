@@ -23,25 +23,22 @@ export function useActions() {
     });
   }, []);
 
-  const updateInstruction = useCallback(
-    (index: number, instruction: string) => {
-      setActions((prev) => {
-        const next = prev.map((action, i) => {
-          if (i !== index) return action;
-          if (action.type === "select") {
-            return { ...action, instruction };
-          }
-          if ("prompt" in action) {
-            return { ...action, prompt: instruction };
-          }
-          return action;
-        });
-        actionsRef.current = next;
-        return next;
+  const updateInstruction = useCallback((index: number, instruction: string) => {
+    setActions((prev) => {
+      const next = prev.map((action, i) => {
+        if (i !== index) return action;
+        if (action.type === "select") {
+          return { ...action, instruction };
+        }
+        if ("prompt" in action) {
+          return { ...action, prompt: instruction };
+        }
+        return action;
       });
-    },
-    [],
-  );
+      actionsRef.current = next;
+      return next;
+    });
+  }, []);
 
   const clearActions = useCallback(() => {
     setActions([]);

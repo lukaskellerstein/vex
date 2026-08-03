@@ -197,7 +197,7 @@
 
 ### Two Independent Workstreams
 
-```
+```text
 Workstream A (Backend/Electron):  Setup → Foundational → US1 ∥ US2 → US7
 Workstream B (Chrome Extension):  Setup → US3 ∥ US4 ∥ US5 ∥ US6
 ```
@@ -266,7 +266,7 @@ Task: "T037 [P] [US6] Remove ActionList from popup"
 
 ### Parallel Team Strategy
 
-```
+```text
 Developer A: US1 (Electron) → US7 (E2E)
 Developer B: US2 (Python/SDK)
 Developer C: US3 + US4 (Extension: screenshot + resize)

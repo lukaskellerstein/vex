@@ -15,6 +15,7 @@ These subjects are already defined and used in the codebase. This feature wires 
 **Subscribers**: Chrome extension, Electron UI
 
 **Payload**:
+
 ```json
 {
     "agent_id": "string (UUID)",
@@ -32,6 +33,7 @@ These subjects are already defined and used in the codebase. This feature wires 
 **Subscribers**: Chrome extension, Electron UI
 
 **Payload**:
+
 ```json
 {
     "task_id": "string (UUID)",
@@ -51,6 +53,7 @@ These subjects are already defined and used in the codebase. This feature wires 
 **Subscribers**: Chrome extension, Electron UI
 
 **Payload**:
+
 ```json
 {
     "task_id": "string (UUID)",

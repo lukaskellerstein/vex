@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Search, Filter } from "lucide-react";
+import { Filter, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 import { BatchCard } from "./BatchCard";
 
 interface BatchData {
@@ -40,7 +40,13 @@ const STATUS_FILTERS = [
   { value: "cancelled", label: "Cancelled" },
 ] as const;
 
-export function BatchList({ projectId, onViewTrace, onViewAgent, onDeleteBatch, onStopBatch }: BatchListProps) {
+export function BatchList({
+  projectId,
+  onViewTrace,
+  onViewAgent,
+  onDeleteBatch,
+  onStopBatch,
+}: BatchListProps) {
   const [batches, setBatches] = useState<BatchData[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -209,7 +215,15 @@ export function BatchList({ projectId, onViewTrace, onViewAgent, onDeleteBatch, 
           </div>
         ) : (
           filtered.map((batch) => (
-            <BatchCard key={batch.id} batch={batch} projectId={projectId} onViewTrace={onViewTrace} onViewAgent={onViewAgent} onDelete={onDeleteBatch} onStop={onStopBatch} />
+            <BatchCard
+              key={batch.id}
+              batch={batch}
+              projectId={projectId}
+              onViewTrace={onViewTrace}
+              onViewAgent={onViewAgent}
+              onDelete={onDeleteBatch}
+              onStop={onStopBatch}
+            />
           ))
         )}
       </div>

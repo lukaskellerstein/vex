@@ -16,7 +16,7 @@ Existing entity. No schema changes required. State cycling behavior changes:
 
 **State Transitions (extended)**:
 
-```
+```text
 created → starting → running → completed/failed/stopped
                                         ↓ (continue)
                                     running → completed/failed/stopped
@@ -74,7 +74,7 @@ New Pydantic model for the continue endpoint request body.
 
 ## Relationships
 
-```
+```text
 Agent (1) ──── (N) Agent Trace     # One trace per turn (initial + continuations)
 Agent (1) ──── (N) Task            # One task per turn
 Agent Trace (1) ── (N) Trace Step  # Steps within a single turn

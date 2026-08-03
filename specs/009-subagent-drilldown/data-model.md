@@ -35,10 +35,10 @@ Parsed on-demand from JSONL transcript files. Maps to existing `TraceStep` inter
 | id | string | Generated from line index |
 | sequence_index | int | Line position in transcript |
 | type | string | Mapped step type (text, tool_call, tool_result, thinking, etc.) |
-| content | string | null | Text content or tool output |
-| metadata | object | null | Tool name, input, error flag, etc. |
-| duration_ms | int | null | Not available from transcript |
-| token_count | int | null | Not available from transcript |
+| content | string \| null | Text content or tool output |
+| metadata | object \| null | Tool name, input, error flag, etc. |
+| duration_ms | int \| null | Not available from transcript |
+| token_count | int \| null | Not available from transcript |
 | created_at | datetime | Timestamp from transcript record |
 
 **Mapping from Claude SDK JSONL**:

@@ -176,12 +176,7 @@ export type Action =
 
 // --- Modes ---
 
-export type InteractionMode =
-  | "idle"
-  | "select"
-  | "edit"
-  | "resize"
-  | "style";
+export type InteractionMode = "idle" | "select" | "edit" | "resize" | "style";
 
 // --- Batch ---
 

@@ -34,7 +34,7 @@
 
 **Purpose**: Backend schema changes, new API routers, and IPC bridge extensions that all user stories depend on
 
-**Backend: Schema & Models**
+### Backend: Schema & Models
 
 - [x] T004 Extend batches table with duration_ms, cost_usd, error_message, agent_id columns in agent-orchestrator/src/agent_orchestrator/db/database.py
 - [x] T005 [P] Create activity_events table in agent-orchestrator/src/agent_orchestrator/db/database.py
@@ -45,7 +45,7 @@
 - [x] T010 [P] Create ActivityEvent model in agent-orchestrator/src/agent_orchestrator/models/activity.py
 - [x] T011 [P] Create AgentTrace and TraceStep models in agent-orchestrator/src/agent_orchestrator/models/trace.py
 
-**Backend: API Endpoints**
+### Backend: API Endpoints
 
 - [x] T012 Create activity endpoints (GET /api/activity, GET /api/activity/stats) in agent-orchestrator/src/agent_orchestrator/api/activity.py
 - [x] T013 [P] Create storage endpoints (GET /api/storage/stats, DELETE /api/storage/screenshots) in agent-orchestrator/src/agent_orchestrator/api/storage.py
@@ -56,13 +56,13 @@
 - [x] T018 Update agent list/detail responses to include new fields in agent-orchestrator/src/agent_orchestrator/api/agents.py
 - [x] T019 Register new routers (activity, storage) in agent-orchestrator/src/agent_orchestrator/main.py
 
-**Electron Main: IPC Bridge**
+### Electron Main: IPC Bridge
 
 - [x] T020 Add new IPC methods to preload.ts: deleteProject, getProject, getBatches, getBatch, getAgentTrace, getActivity, getActivityStats, getTasks, getStorageStats, clearScreenshots, getAppInfo in electron-app/src/main/preload.ts
 - [x] T021 Add new IPC handlers in main process for all new methods in electron-app/src/main/index.ts
 - [x] T022 Add apiDelete helper function in electron-app/src/main/index.ts
 
-**Frontend: Shared UI Components**
+### Frontend: Shared UI Components
 
 - [x] T023 [P] Create Tooltip component in electron-app/src/renderer/components/ui/Tooltip.tsx
 - [x] T024 [P] Create StatusIndicator component (pulsing dot + label) in electron-app/src/renderer/components/projects/StatusIndicator.tsx
@@ -232,7 +232,7 @@
 
 ## Parallel Example: Phase 2 Foundational
 
-```
+```text
 # Backend models (all different files):
 Task T008: "Update BatchSummary model in models/batch.py"
 Task T009: "Update Agent model in models/agent.py"
@@ -248,7 +248,7 @@ Task T015: "Add agent logs endpoint in api/agents.py"
 
 ## Parallel Example: Phase 8 Settings
 
-```
+```text
 # All settings components (different files, no dependencies):
 Task T049: "Create SettingsLayout in components/settings/SettingsLayout.tsx"
 Task T050: "Create GeneralSettings in components/settings/GeneralSettings.tsx"

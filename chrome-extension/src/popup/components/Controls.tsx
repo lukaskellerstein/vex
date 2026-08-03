@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
-import type { Action, SelectAction } from "../../shared/types";
+import { useCallback, useEffect, useState } from "react";
 import { AGENT_MANAGER_URL } from "../../shared/messages";
+import type { Action, SelectAction } from "../../shared/types";
 import type { Project } from "./ProjectSelector";
 
 /** Normalize actions for the backend API.
@@ -167,9 +167,18 @@ export function Controls({
           title={selectorIsActive ? "Pause selector" : "Activate selector"}
         >
           {selectorIsActive ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor"/><rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor"/></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor" />
+              <rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor" />
+            </svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" fill="none"/><line x1="8" y1="1" x2="8" y2="4" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="12" x2="8" y2="15" stroke="currentColor" strokeWidth="1.5"/><line x1="1" y1="8" x2="4" y2="8" stroke="currentColor" strokeWidth="1.5"/><line x1="12" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1.5"/></svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              <line x1="8" y1="1" x2="8" y2="4" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="8" y1="12" x2="8" y2="15" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="1" y1="8" x2="4" y2="8" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="12" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
           )}
           <span>{selectorIsActive ? "Pause" : "Activate"}</span>
         </button>
@@ -180,7 +189,14 @@ export function Controls({
           title="Clear all"
           disabled={actions.length === 0}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5.5 2V1.5C5.5 1.22 5.72 1 6 1H10C10.28 1 10.5 1.22 10.5 1.5V2M2.5 3H13.5M4 3V13.5C4 14.05 4.45 14.5 5 14.5H11C11.55 14.5 12 14.05 12 13.5V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M5.5 2V1.5C5.5 1.22 5.72 1 6 1H10C10.28 1 10.5 1.22 10.5 1.5V2M2.5 3H13.5M4 3V13.5C4 14.05 4.45 14.5 5 14.5H11C11.55 14.5 12 14.05 12 13.5V3"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+            />
+          </svg>
           <span>Clear</span>
         </button>
       </div>
@@ -213,10 +229,16 @@ export function Controls({
               disabled={projectsLoading}
             >
               <option value="" disabled>
-                {projectsLoading ? "Loading..." : projects.length === 0 ? "No projects" : "Select project..."}
+                {projectsLoading
+                  ? "Loading..."
+                  : projects.length === 0
+                    ? "No projects"
+                    : "Select project..."}
               </option>
               {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </>
@@ -228,17 +250,16 @@ export function Controls({
           onClick={handleSend}
           title={!projectId ? "Select a project first" : sendTitle}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2L14 8L2 14V9.5L10 8L2 6.5V2Z" fill="currentColor"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 2L14 8L2 14V9.5L10 8L2 6.5V2Z" fill="currentColor" />
+          </svg>
           <span>{sendTitle}</span>
         </button>
       </div>
 
       {sendState === "sending" && (
         <div className="upload-progress-bar" title={sendTitle}>
-          <div
-            className="upload-progress-fill"
-            style={{ width: uploadProgress + "%" }}
-          />
+          <div className="upload-progress-fill" style={{ width: uploadProgress + "%" }} />
         </div>
       )}
 

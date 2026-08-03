@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  Action,
-  StyleChangeAction,
-  StyleChange,
-  HoverChange,
-} from "../../shared/types";
-import { generateSelector } from "../utils/selector";
+import type { Action, HoverChange, StyleChange, StyleChangeAction } from "../../shared/types";
 import { captureScreenshot } from "../hooks/useScreenshot";
 import { registerVisualRevert } from "../hooks/useUndo";
+import { generateSelector } from "../utils/selector";
 
 interface StylePanelProps {
   addAction: (action: Action) => void;
@@ -28,10 +23,7 @@ function Section({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="cs-style-section">
-      <button
-        className="cs-style-section-header"
-        onClick={() => setOpen((v) => !v)}
-      >
+      <button className="cs-style-section-header" onClick={() => setOpen((v) => !v)}>
         <span className="cs-style-section-arrow">{open ? "\u25BC" : "\u25B6"}</span>
         {title}
       </button>
@@ -158,11 +150,7 @@ function SelectRow({
   return (
     <div className="cs-style-row">
       <label className="cs-style-label">{label}</label>
-      <select
-        className="cs-style-select"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
+      <select className="cs-style-select" value={value} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -260,13 +248,11 @@ function FourValueRow({
 
 function toHex(color: string): string {
   if (color.startsWith("#")) return color.slice(0, 7);
-  const match = color.match(
-    /rgba?\((\d+),\s*(\d+),\s*(\d+)/,
-  );
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
   if (!match) return "#000000";
-  const r = parseInt(match[1]).toString(16).padStart(2, "0");
-  const g = parseInt(match[2]).toString(16).padStart(2, "0");
-  const b = parseInt(match[3]).toString(16).padStart(2, "0");
+  const r = parseInt(match[1], 10).toString(16).padStart(2, "0");
+  const g = parseInt(match[2], 10).toString(16).padStart(2, "0");
+  const b = parseInt(match[3], 10).toString(16).padStart(2, "0");
   return `#${r}${g}${b}`;
 }
 
@@ -393,8 +379,10 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
 
   const [borderWidth, setBorderWidth] = useState(0);
   const [borderStyle, setBorderStyle] = useState("none");
-  const [borderRadius, setBorderRadius] = useState(0);
-  const [borderRadiusValues, setBorderRadiusValues] = useState<[number, number, number, number]>([0, 0, 0, 0]);
+  const [, setBorderRadius] = useState(0);
+  const [borderRadiusValues, setBorderRadiusValues] = useState<[number, number, number, number]>([
+    0, 0, 0, 0,
+  ]);
   const [borderRadiusLinked, setBorderRadiusLinked] = useState(true);
 
   const [displayNone, setDisplayNone] = useState(false);
@@ -516,11 +504,7 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
 
       // Capture before screenshot
       try {
-        screenshotBeforeRef.current = await captureScreenshot(
-          htmlEl,
-          0,
-          hostElement,
-        );
+        screenshotBeforeRef.current = await captureScreenshot(htmlEl, 0, hostElement);
       } catch {
         screenshotBeforeRef.current = null;
       }
@@ -734,13 +718,6 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
     setSelectedEl(null);
   }, [finalizeAction, cleanupHoverStyle]);
 
-  // Cancel: revert styles and close panel
-  const handleCancel = useCallback(() => {
-    revertStyles();
-    cleanupHoverStyle();
-    setSelectedEl(null);
-  }, [revertStyles, cleanupHoverStyle]);
-
   // Drag handlers for panel header
   const onHeaderPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -761,8 +738,14 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
   useEffect(() => {
     const onPointerMove = (e: PointerEvent) => {
       if (!dragRef.current.dragging) return;
-      const newLeft = Math.max(0, Math.min(window.innerWidth - 280, e.clientX - dragRef.current.offsetX));
-      const newTop = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragRef.current.offsetY));
+      const newLeft = Math.max(
+        0,
+        Math.min(window.innerWidth - 280, e.clientX - dragRef.current.offsetX),
+      );
+      const newTop = Math.max(
+        0,
+        Math.min(window.innerHeight - 100, e.clientY - dragRef.current.offsetY),
+      );
       setDragPos({ top: newTop, left: newLeft });
     };
     const onPointerUp = () => {
@@ -953,8 +936,7 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
           next[2] = v;
           next[3] = v;
           setBorderRadius(v);
-          if (selectedEl)
-            selectedEl.style.setProperty("border-radius", `${v}px`);
+          if (selectedEl) selectedEl.style.setProperty("border-radius", `${v}px`);
         } else {
           next[index] = v;
           if (selectedEl)
@@ -1124,21 +1106,35 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
               }}
               title="Copy style from another element"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
               <span>Copy Style</span>
             </button>
-            <button
-              className="cs-style-panel-apply"
-              onClick={handleApply}
-              title="Apply styles"
-            >
+            <button className="cs-style-panel-apply" onClick={handleApply} title="Apply styles">
               Apply
             </button>
             <button className="cs-style-panel-close" onClick={handleClose} title="Cancel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -1146,246 +1142,234 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
           </div>
         </div>
 
-      <div className="cs-style-panel-body">
-        {/* Colors */}
-        <Section title="Colors">
-          <ColorRow label="Color" value={color} onChange={handleColorChange} />
-          <ColorRow
-            label="Background"
-            value={bgColor}
-            onChange={handleBgColorChange}
-          />
-          <ColorRow
-            label="Border Color"
-            value={borderColor}
-            onChange={handleBorderColorChange}
-          />
-        </Section>
+        <div className="cs-style-panel-body">
+          {/* Colors */}
+          <Section title="Colors">
+            <ColorRow label="Color" value={color} onChange={handleColorChange} />
+            <ColorRow label="Background" value={bgColor} onChange={handleBgColorChange} />
+            <ColorRow label="Border Color" value={borderColor} onChange={handleBorderColorChange} />
+          </Section>
 
-        {/* Typography */}
-        <Section title="Typography">
-          <SelectRow
-            label="Font Family"
-            value={fontFamily}
-            options={fontOptions}
-            onChange={handleFontFamilyChange}
-          />
-          <div className="cs-style-row">
-            <label className="cs-style-label">Custom</label>
-            <input
-              type="text"
-              className="cs-style-text-input"
-              value={customFont}
-              placeholder="Custom font..."
-              onChange={(e) => handleCustomFontChange(e.target.value)}
+          {/* Typography */}
+          <Section title="Typography">
+            <SelectRow
+              label="Font Family"
+              value={fontFamily}
+              options={fontOptions}
+              onChange={handleFontFamilyChange}
             />
-          </div>
-          <SliderRow
-            label="Size"
-            value={fontSize}
-            min={8}
-            max={72}
-            suffix="px"
-            onChange={handleFontSizeChange}
-          />
-          <SelectRow
-            label="Weight"
-            value={fontWeight}
-            options={FONT_WEIGHT_OPTIONS}
-            onChange={handleFontWeightChange}
-          />
-          <NumberRow
-            label="Line Height"
-            value={lineHeight}
-            min={0.5}
-            max={5}
-            step={0.1}
-            onChange={handleLineHeightChange}
-          />
-          <NumberRow
-            label="Letter Spacing"
-            value={letterSpacing}
-            min={-5}
-            max={20}
-            step={0.5}
-            suffix="px"
-            onChange={handleLetterSpacingChange}
-          />
-          <ButtonGroupRow
-            label="Transform"
-            value={textTransform}
-            options={[
-              { value: "none", label: "Aa" },
-              { value: "uppercase", label: "AA" },
-              { value: "lowercase", label: "aa" },
-              { value: "capitalize", label: "Ab" },
-            ]}
-            onChange={handleTextTransformChange}
-          />
-          <ButtonGroupRow
-            label="Align"
-            value={textAlign}
-            options={[
-              { value: "left", label: "\u2190" },
-              { value: "center", label: "\u2194" },
-              { value: "right", label: "\u2192" },
-              { value: "justify", label: "\u2550" },
-            ]}
-            onChange={handleTextAlignChange}
-          />
-          <ButtonGroupRow
-            label="Decoration"
-            value={textDecoration}
-            options={[
-              { value: "none", label: "None" },
-              { value: "underline", label: "U" },
-              { value: "line-through", label: "S" },
-            ]}
-            onChange={handleTextDecorationChange}
-          />
-        </Section>
+            <div className="cs-style-row">
+              <label className="cs-style-label">Custom</label>
+              <input
+                type="text"
+                className="cs-style-text-input"
+                value={customFont}
+                placeholder="Custom font..."
+                onChange={(e) => handleCustomFontChange(e.target.value)}
+              />
+            </div>
+            <SliderRow
+              label="Size"
+              value={fontSize}
+              min={8}
+              max={72}
+              suffix="px"
+              onChange={handleFontSizeChange}
+            />
+            <SelectRow
+              label="Weight"
+              value={fontWeight}
+              options={FONT_WEIGHT_OPTIONS}
+              onChange={handleFontWeightChange}
+            />
+            <NumberRow
+              label="Line Height"
+              value={lineHeight}
+              min={0.5}
+              max={5}
+              step={0.1}
+              onChange={handleLineHeightChange}
+            />
+            <NumberRow
+              label="Letter Spacing"
+              value={letterSpacing}
+              min={-5}
+              max={20}
+              step={0.5}
+              suffix="px"
+              onChange={handleLetterSpacingChange}
+            />
+            <ButtonGroupRow
+              label="Transform"
+              value={textTransform}
+              options={[
+                { value: "none", label: "Aa" },
+                { value: "uppercase", label: "AA" },
+                { value: "lowercase", label: "aa" },
+                { value: "capitalize", label: "Ab" },
+              ]}
+              onChange={handleTextTransformChange}
+            />
+            <ButtonGroupRow
+              label="Align"
+              value={textAlign}
+              options={[
+                { value: "left", label: "\u2190" },
+                { value: "center", label: "\u2194" },
+                { value: "right", label: "\u2192" },
+                { value: "justify", label: "\u2550" },
+              ]}
+              onChange={handleTextAlignChange}
+            />
+            <ButtonGroupRow
+              label="Decoration"
+              value={textDecoration}
+              options={[
+                { value: "none", label: "None" },
+                { value: "underline", label: "U" },
+                { value: "line-through", label: "S" },
+              ]}
+              onChange={handleTextDecorationChange}
+            />
+          </Section>
 
-        {/* Spacing */}
-        <Section title="Spacing" defaultOpen={false}>
-          <FourValueRow
-            label="Padding"
-            values={padding}
-            linked={paddingLinked}
-            onToggleLink={() => setPaddingLinked((v) => !v)}
-            onChange={handlePaddingChange}
-          />
-          <FourValueRow
-            label="Margin"
-            values={margin}
-            linked={marginLinked}
-            onToggleLink={() => setMarginLinked((v) => !v)}
-            onChange={handleMarginChange}
-          />
-        </Section>
+          {/* Spacing */}
+          <Section title="Spacing" defaultOpen={false}>
+            <FourValueRow
+              label="Padding"
+              values={padding}
+              linked={paddingLinked}
+              onToggleLink={() => setPaddingLinked((v) => !v)}
+              onChange={handlePaddingChange}
+            />
+            <FourValueRow
+              label="Margin"
+              values={margin}
+              linked={marginLinked}
+              onToggleLink={() => setMarginLinked((v) => !v)}
+              onChange={handleMarginChange}
+            />
+          </Section>
 
-        {/* Borders */}
-        <Section title="Borders" defaultOpen={false}>
-          <NumberRow
-            label="Width"
-            value={borderWidth}
-            min={0}
-            max={20}
-            suffix="px"
-            onChange={handleBorderWidthChange}
-          />
-          <SelectRow
-            label="Style"
-            value={borderStyle}
-            options={BORDER_STYLE_OPTIONS}
-            onChange={handleBorderStyleChange}
-          />
-          <ColorRow
-            label="Color"
-            value={borderColor}
-            onChange={handleBorderColorChange}
-          />
-          <FourValueRow
-            label="Radius"
-            values={borderRadiusValues}
-            linked={borderRadiusLinked}
-            onToggleLink={() => setBorderRadiusLinked((v) => !v)}
-            onChange={handleBorderRadiusChange}
-          />
-        </Section>
+          {/* Borders */}
+          <Section title="Borders" defaultOpen={false}>
+            <NumberRow
+              label="Width"
+              value={borderWidth}
+              min={0}
+              max={20}
+              suffix="px"
+              onChange={handleBorderWidthChange}
+            />
+            <SelectRow
+              label="Style"
+              value={borderStyle}
+              options={BORDER_STYLE_OPTIONS}
+              onChange={handleBorderStyleChange}
+            />
+            <ColorRow label="Color" value={borderColor} onChange={handleBorderColorChange} />
+            <FourValueRow
+              label="Radius"
+              values={borderRadiusValues}
+              linked={borderRadiusLinked}
+              onToggleLink={() => setBorderRadiusLinked((v) => !v)}
+              onChange={handleBorderRadiusChange}
+            />
+          </Section>
 
-        {/* Visibility */}
-        <Section title="Visibility" defaultOpen={false}>
-          <div className="cs-style-row">
-            <label className="cs-style-label">Display None</label>
-            <button
-              className={`cs-style-toggle ${displayNone ? "cs-style-toggle-on" : ""}`}
-              onClick={handleDisplayToggle}
-            >
-              {displayNone ? "ON" : "OFF"}
-            </button>
-          </div>
-          <SliderRow
-            label="Opacity"
-            value={opacity}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={handleOpacityChange}
-          />
-          <div className="cs-style-row">
-            <label className="cs-style-label">Hidden</label>
-            <button
-              className={`cs-style-toggle ${visibilityHidden ? "cs-style-toggle-on" : ""}`}
-              onClick={handleVisibilityToggle}
-            >
-              {visibilityHidden ? "ON" : "OFF"}
-            </button>
-          </div>
-        </Section>
-
-        {/* Hover Effects */}
-        <Section title="Hover Effects" defaultOpen={false}>
-          <div className="cs-style-row">
-            <label className="cs-style-label">Presets</label>
-            <div className="cs-style-btn-group">
+          {/* Visibility */}
+          <Section title="Visibility" defaultOpen={false}>
+            <div className="cs-style-row">
+              <label className="cs-style-label">Display None</label>
               <button
-                className={`cs-style-btn-option ${hoverPreset === "scale" ? "cs-style-btn-option-active" : ""}`}
-                onClick={() => applyHoverPreset("scale")}
+                className={`cs-style-toggle ${displayNone ? "cs-style-toggle-on" : ""}`}
+                onClick={handleDisplayToggle}
               >
-                Scale
-              </button>
-              <button
-                className={`cs-style-btn-option ${hoverPreset === "shadow" ? "cs-style-btn-option-active" : ""}`}
-                onClick={() => applyHoverPreset("shadow")}
-              >
-                Shadow
-              </button>
-              <button
-                className={`cs-style-btn-option ${hoverPreset === "lift" ? "cs-style-btn-option-active" : ""}`}
-                onClick={() => applyHoverPreset("lift")}
-              >
-                Lift
+                {displayNone ? "ON" : "OFF"}
               </button>
             </div>
-          </div>
-          <div className="cs-style-row">
-            <label className="cs-style-label">Transform</label>
-            <input
-              type="text"
-              className="cs-style-text-input"
-              value={hoverTransform}
-              placeholder="e.g. scale(1.1)"
-              onChange={(e) => handleHoverTransformChange(e.target.value)}
+            <SliderRow
+              label="Opacity"
+              value={opacity}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={handleOpacityChange}
             />
-          </div>
-          <div className="cs-style-row">
-            <label className="cs-style-label">Box Shadow</label>
-            <input
-              type="text"
-              className="cs-style-text-input"
-              value={hoverBoxShadow}
-              placeholder="e.g. 0 4px 12px rgba(0,0,0,0.2)"
-              onChange={(e) => handleHoverBoxShadowChange(e.target.value)}
+            <div className="cs-style-row">
+              <label className="cs-style-label">Hidden</label>
+              <button
+                className={`cs-style-toggle ${visibilityHidden ? "cs-style-toggle-on" : ""}`}
+                onClick={handleVisibilityToggle}
+              >
+                {visibilityHidden ? "ON" : "OFF"}
+              </button>
+            </div>
+          </Section>
+
+          {/* Hover Effects */}
+          <Section title="Hover Effects" defaultOpen={false}>
+            <div className="cs-style-row">
+              <label className="cs-style-label">Presets</label>
+              <div className="cs-style-btn-group">
+                <button
+                  className={`cs-style-btn-option ${hoverPreset === "scale" ? "cs-style-btn-option-active" : ""}`}
+                  onClick={() => applyHoverPreset("scale")}
+                >
+                  Scale
+                </button>
+                <button
+                  className={`cs-style-btn-option ${hoverPreset === "shadow" ? "cs-style-btn-option-active" : ""}`}
+                  onClick={() => applyHoverPreset("shadow")}
+                >
+                  Shadow
+                </button>
+                <button
+                  className={`cs-style-btn-option ${hoverPreset === "lift" ? "cs-style-btn-option-active" : ""}`}
+                  onClick={() => applyHoverPreset("lift")}
+                >
+                  Lift
+                </button>
+              </div>
+            </div>
+            <div className="cs-style-row">
+              <label className="cs-style-label">Transform</label>
+              <input
+                type="text"
+                className="cs-style-text-input"
+                value={hoverTransform}
+                placeholder="e.g. scale(1.1)"
+                onChange={(e) => handleHoverTransformChange(e.target.value)}
+              />
+            </div>
+            <div className="cs-style-row">
+              <label className="cs-style-label">Box Shadow</label>
+              <input
+                type="text"
+                className="cs-style-text-input"
+                value={hoverBoxShadow}
+                placeholder="e.g. 0 4px 12px rgba(0,0,0,0.2)"
+                onChange={(e) => handleHoverBoxShadowChange(e.target.value)}
+              />
+            </div>
+            <SliderRow
+              label="Duration"
+              value={transitionDuration}
+              min={0}
+              max={1000}
+              step={50}
+              suffix="ms"
+              onChange={handleTransitionDurationChange}
             />
-          </div>
-          <SliderRow
-            label="Duration"
-            value={transitionDuration}
-            min={0}
-            max={1000}
-            step={50}
-            suffix="ms"
-            onChange={handleTransitionDurationChange}
-          />
-          <SelectRow
-            label="Easing"
-            value={transitionEasing}
-            options={EASING_OPTIONS}
-            onChange={handleTransitionEasingChange}
-          />
-        </Section>
+            <SelectRow
+              label="Easing"
+              value={transitionEasing}
+              options={EASING_OPTIONS}
+              onChange={handleTransitionEasingChange}
+            />
+          </Section>
+        </div>
       </div>
-    </div>
     </>
   );
 }

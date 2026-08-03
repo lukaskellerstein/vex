@@ -1,5 +1,5 @@
-import React from "react";
-import { CheckCircle2, XCircle, Layers, Bot, DollarSign } from "lucide-react";
+import { Bot, CheckCircle2, DollarSign, Layers, XCircle } from "lucide-react";
+import type React from "react";
 
 export interface ActivityStatsData {
   completed_batches: number;
@@ -75,9 +75,7 @@ interface StatItemProps {
 function StatItem({ icon, iconColor, value, label }: StatItemProps) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-      <span style={{ flexShrink: 0, display: "flex", color: iconColor }}>
-        {icon}
-      </span>
+      <span style={{ flexShrink: 0, display: "flex", color: iconColor }}>{icon}</span>
       <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
         <span
           style={{
@@ -107,7 +105,5 @@ function StatItem({ icon, iconColor, value, label }: StatItemProps) {
 }
 
 function Divider() {
-  return (
-    <span style={{ color: "var(--border)", userSelect: "none" }}>|</span>
-  );
+  return <span style={{ color: "var(--border)", userSelect: "none" }}>|</span>;
 }

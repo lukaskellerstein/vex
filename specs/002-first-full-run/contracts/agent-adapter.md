@@ -39,16 +39,16 @@ class AgentAdapter(ABC):
 
 ```python
 {
-    "project_id": str,           # UUID
-    "type": str,                 # e.g., "code-edit", "section-generation"
-    "prompt": str,               # Formatted prompt with batch actions
+    "project_id": str,  # UUID
+    "type": str,  # e.g., "code-edit", "section-generation"
+    "prompt": str,  # Formatted prompt with batch actions
     "context": {
-        "project_path": str,     # Absolute path to project
-        "framework": str,        # e.g., "next", "react", "vue"
-        "styling_approach": str, # e.g., "tailwind", "css-modules"
-        "batch_id": str,         # Reference to batch
-        "actions": list[dict],   # Structured action data
-    }
+        "project_path": str,  # Absolute path to project
+        "framework": str,  # e.g., "next", "react", "vue"
+        "styling_approach": str,  # e.g., "tailwind", "css-modules"
+        "batch_id": str,  # Reference to batch
+        "actions": list[dict],  # Structured action data
+    },
 }
 ```
 

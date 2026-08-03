@@ -9,8 +9,7 @@ body {
   width: 480px;
   max-width: 800px;
   max-height: 600px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   color: #e5e7eb;
   background: #1a1a2e;
@@ -109,7 +108,10 @@ body {
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
 }
 
 .ctrl-btn:hover:not(:disabled) {
@@ -253,7 +255,9 @@ body {
   padding: 8px 6px;
   border-bottom: 1px solid #2d2d44;
   border-radius: 6px;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .selection-item:hover {
@@ -870,9 +874,16 @@ body {
   font-family: inherit;
   font-size: 12px;
 }
-.batch-item:hover { background: rgba(137, 180, 250, 0.06); }
-.batch-item--selected { background: rgba(137, 180, 250, 0.1); }
-.batch-item:disabled { opacity: 0.5; cursor: wait; }
+.batch-item:hover {
+  background: rgba(137, 180, 250, 0.06);
+}
+.batch-item--selected {
+  background: rgba(137, 180, 250, 0.1);
+}
+.batch-item:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 .batch-dot {
   width: 7px;
   height: 7px;

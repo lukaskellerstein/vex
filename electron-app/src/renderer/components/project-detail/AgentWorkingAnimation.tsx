@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
+import { useEffect, useRef } from "react";
 
 /**
  * A visually attractive GSAP-animated "agent is working" state.
@@ -47,7 +47,15 @@ export function AgentWorkingAnimation() {
     }
 
     // --- Particles ---
-    const particles: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number }[] = [];
+    const particles: {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      life: number;
+      maxLife: number;
+      size: number;
+    }[] = [];
 
     function spawnParticle() {
       const orb = orbs[Math.floor(Math.random() * orbs.length)];
@@ -93,7 +101,9 @@ export function AgentWorkingAnimation() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 180) {
             const lineAlpha = (1 - dist / 180) * 0.25 * Math.min(orbs[i].alpha, orbs[j].alpha);
-            ctx.strokeStyle = `${primary}${Math.round(lineAlpha * 255).toString(16).padStart(2, "0")}`;
+            ctx.strokeStyle = `${primary}${Math.round(lineAlpha * 255)
+              .toString(16)
+              .padStart(2, "0")}`;
             ctx.beginPath();
             ctx.moveTo(orbs[i].x, orbs[i].y);
             ctx.lineTo(orbs[j].x, orbs[j].y);
@@ -107,8 +117,20 @@ export function AgentWorkingAnimation() {
       const centerR = 12 + Math.sin(time * 2) * 3;
 
       // Center glow
-      const gradient = ctx.createRadialGradient(currentCx, currentCy, 0, currentCx, currentCy, centerR * 4);
-      gradient.addColorStop(0, `${primary}${Math.round(centerPulse * 80).toString(16).padStart(2, "0")}`);
+      const gradient = ctx.createRadialGradient(
+        currentCx,
+        currentCy,
+        0,
+        currentCx,
+        currentCy,
+        centerR * 4,
+      );
+      gradient.addColorStop(
+        0,
+        `${primary}${Math.round(centerPulse * 80)
+          .toString(16)
+          .padStart(2, "0")}`,
+      );
       gradient.addColorStop(1, `${primary}00`);
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -116,7 +138,9 @@ export function AgentWorkingAnimation() {
       ctx.fill();
 
       // Center orb
-      ctx.fillStyle = `${primary}${Math.round(centerPulse * 255).toString(16).padStart(2, "0")}`;
+      ctx.fillStyle = `${primary}${Math.round(centerPulse * 255)
+        .toString(16)
+        .padStart(2, "0")}`;
       ctx.beginPath();
       ctx.arc(currentCx, currentCy, centerR, 0, Math.PI * 2);
       ctx.fill();
@@ -125,7 +149,12 @@ export function AgentWorkingAnimation() {
       for (const orb of orbs) {
         // Glow
         const glowGrad = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.r * 3);
-        glowGrad.addColorStop(0, `${primary}${Math.round(orb.alpha * 60).toString(16).padStart(2, "0")}`);
+        glowGrad.addColorStop(
+          0,
+          `${primary}${Math.round(orb.alpha * 60)
+            .toString(16)
+            .padStart(2, "0")}`,
+        );
         glowGrad.addColorStop(1, `${primary}00`);
         ctx.fillStyle = glowGrad;
         ctx.beginPath();
@@ -133,14 +162,18 @@ export function AgentWorkingAnimation() {
         ctx.fill();
 
         // Orb
-        ctx.fillStyle = `${primary}${Math.round(orb.alpha * 255).toString(16).padStart(2, "0")}`;
+        ctx.fillStyle = `${primary}${Math.round(orb.alpha * 255)
+          .toString(16)
+          .padStart(2, "0")}`;
         ctx.beginPath();
         ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
         ctx.fill();
 
         // Line to center
         const lineToCenterAlpha = orb.alpha * 0.15;
-        ctx.strokeStyle = `${primary}${Math.round(lineToCenterAlpha * 255).toString(16).padStart(2, "0")}`;
+        ctx.strokeStyle = `${primary}${Math.round(lineToCenterAlpha * 255)
+          .toString(16)
+          .padStart(2, "0")}`;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(orb.x, orb.y);
@@ -161,7 +194,9 @@ export function AgentWorkingAnimation() {
           continue;
         }
         const pAlpha = 1 - p.life / p.maxLife;
-        ctx.fillStyle = `${primary}${Math.round(pAlpha * 100).toString(16).padStart(2, "0")}`;
+        ctx.fillStyle = `${primary}${Math.round(pAlpha * 100)
+          .toString(16)
+          .padStart(2, "0")}`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * pAlpha, 0, Math.PI * 2);
         ctx.fill();
@@ -176,8 +211,11 @@ export function AgentWorkingAnimation() {
     const tl = gsap.timeline({ repeat: -1 });
     const textEl = container.querySelector(".agent-working-text");
     if (textEl) {
-      tl.to(textEl, { opacity: 0.4, duration: 1.2, ease: "sine.inOut" })
-        .to(textEl, { opacity: 1, duration: 1.2, ease: "sine.inOut" });
+      tl.to(textEl, { opacity: 0.4, duration: 1.2, ease: "sine.inOut" }).to(textEl, {
+        opacity: 1,
+        duration: 1.2,
+        ease: "sine.inOut",
+      });
     }
     tlRef.current = tl;
 

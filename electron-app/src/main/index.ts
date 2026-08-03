@@ -1,13 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, globalShortcut } from "electron";
-import path from "path";
-import fs from "fs";
-import http from "http";
-import net from "net";
+import fs from "node:fs";
+import http from "node:http";
+import net from "node:net";
+import path from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import WebSocket from "ws";
-import { ProcessManager } from "./process-manager.js";
+import { installDependencies } from "./dependency-installer.js";
 import { DevServerManager } from "./dev-server-manager.js";
 import { cloneRepo } from "./github-cloner.js";
-import { installDependencies } from "./dependency-installer.js";
+import { ProcessManager } from "./process-manager.js";
 
 // Disable GPU acceleration on WSL — its virtual GPU misrenders semi-transparent surfaces
 try {
@@ -24,7 +24,9 @@ try {
 
 // Dynamic import after WebSocket polyfill is in place
 let natsWs: typeof import("nats.ws") | null = null;
-const natsWsReady = import("nats.ws").then((mod) => { natsWs = mod; });
+const natsWsReady = import("nats.ws").then((mod) => {
+  natsWs = mod;
+});
 
 // macOS routes clipboard shortcuts (Cmd+V/C/X/A/Z) through the application
 // menu's Edit roles — with no menu, paste is dead in every input. The menu
@@ -32,7 +34,7 @@ const natsWsReady = import("nats.ws").then((mod) => { natsWs = mod; });
 // Windows/Linux the shortcuts work natively, so the in-window menu stays hidden.
 if (process.platform === "darwin") {
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }])
+    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }]),
   );
 } else {
   Menu.setApplicationMenu(null);
@@ -102,9 +104,7 @@ function createWindow(): void {
   if (cliArgs.dev) {
     mainWindow.loadURL(`http://localhost:${cliArgs.vitePort}`);
   } else {
-    mainWindow.loadFile(
-      path.join(__dirname, "..", "renderer", "index.html")
-    );
+    mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   }
 
   // Notify renderer when maximized/fullscreen state changes
@@ -147,8 +147,9 @@ ipcMain.handle("window-maximize", () => {
   }
 });
 ipcMain.handle("window-close", () => mainWindow?.close());
-ipcMain.handle("window-is-maximized", () =>
-  (mainWindow?.isFullScreen() || mainWindow?.isMaximized()) ?? false
+ipcMain.handle(
+  "window-is-maximized",
+  () => (mainWindow?.isFullScreen() || mainWindow?.isMaximized()) ?? false,
 );
 
 // --- API helpers ---
@@ -193,7 +194,7 @@ function apiPost(urlPath: string, data?: unknown): Promise<unknown> {
             resolve(body);
           }
         });
-      }
+      },
     );
     req.on("error", reject);
     req.write(payload);
@@ -223,7 +224,7 @@ function apiPatch(urlPath: string, data: unknown): Promise<unknown> {
             resolve(body);
           }
         });
-      }
+      },
     );
     req.on("error", reject);
     req.write(payload);
@@ -233,25 +234,21 @@ function apiPatch(urlPath: string, data: unknown): Promise<unknown> {
 
 function apiDelete(urlPath: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const req = http.request(
-      `${API_BASE}${urlPath}`,
-      { method: "DELETE" },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk: string) => (body += chunk));
-        res.on("end", () => {
-          if (res.statusCode === 204) {
-            resolve(null);
-          } else {
-            try {
-              resolve(JSON.parse(body));
-            } catch {
-              resolve(body);
-            }
+    const req = http.request(`${API_BASE}${urlPath}`, { method: "DELETE" }, (res) => {
+      let body = "";
+      res.on("data", (chunk: string) => (body += chunk));
+      res.on("end", () => {
+        if (res.statusCode === 204) {
+          resolve(null);
+        } else {
+          try {
+            resolve(JSON.parse(body));
+          } catch {
+            resolve(body);
           }
-        });
-      }
-    );
+        }
+      });
+    });
     req.on("error", reject);
     req.end();
   });
@@ -284,9 +281,12 @@ ipcMain.handle("create-project", async (_event, name: string, folderPath: string
   return apiPost("/api/projects", { name, path: folderPath });
 });
 
-ipcMain.handle("update-project", async (_event, projectId: string, data: Record<string, unknown>) => {
-  return apiPatch(`/api/projects/${projectId}`, data);
-});
+ipcMain.handle(
+  "update-project",
+  async (_event, projectId: string, data: Record<string, unknown>) => {
+    return apiPatch(`/api/projects/${projectId}`, data);
+  },
+);
 
 ipcMain.handle("start-dev-server", async (_event, projectId: string) => {
   const project = (await apiGet(`/api/projects/${projectId}`)) as Record<string, unknown> | null;
@@ -402,10 +402,13 @@ ipcMain.handle("update-config", async (_event, config: Record<string, unknown>) 
   return apiPatch("/api/config", config);
 });
 
-ipcMain.handle("delete-project", async (_event, projectId: string, deleteSource: boolean = false) => {
-  const qs = deleteSource ? "?delete_source=true" : "";
-  return apiDelete(`/api/projects/${projectId}${qs}`);
-});
+ipcMain.handle(
+  "delete-project",
+  async (_event, projectId: string, deleteSource: boolean = false) => {
+    const qs = deleteSource ? "?delete_source=true" : "";
+    return apiDelete(`/api/projects/${projectId}${qs}`);
+  },
+);
 
 ipcMain.handle("get-project", async (_event, projectId: string) => {
   return apiGet(`/api/projects/${projectId}`);
@@ -439,14 +442,17 @@ ipcMain.handle("get-agent-trace", async (_event, batchId: string) => {
   return apiGet(`/api/batches/${batchId}/trace`);
 });
 
-ipcMain.handle("get-activity", async (_event, filters?: { projectId?: string; type?: string; since?: string }) => {
-  const params = new URLSearchParams();
-  if (filters?.projectId) params.set("project_id", filters.projectId);
-  if (filters?.type) params.set("type", filters.type);
-  if (filters?.since) params.set("since", filters.since);
-  const qs = params.toString();
-  return apiGet(`/api/activity${qs ? `?${qs}` : ""}`);
-});
+ipcMain.handle(
+  "get-activity",
+  async (_event, filters?: { projectId?: string; type?: string; since?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.projectId) params.set("project_id", filters.projectId);
+    if (filters?.type) params.set("type", filters.type);
+    if (filters?.since) params.set("since", filters.since);
+    const qs = params.toString();
+    return apiGet(`/api/activity${qs ? `?${qs}` : ""}`);
+  },
+);
 
 ipcMain.handle("get-activity-stats", async (_event, since?: string) => {
   const qs = since ? `?since=${encodeURIComponent(since)}` : "";
@@ -559,8 +565,10 @@ ipcMain.handle("subscribe-agent-steps", async (_event, agentId: string) => {
     for await (const msg of stepSub) {
       try {
         const data = natsJsonDecode(msg.data);
-        mainWindow?.webContents.send("agent-step", { agentId, ...data as object });
-      } catch { /* decode error */ }
+        mainWindow?.webContents.send("agent-step", { agentId, ...(data as object) });
+      } catch {
+        /* decode error */
+      }
     }
   })();
 
@@ -571,8 +579,10 @@ ipcMain.handle("subscribe-agent-steps", async (_event, agentId: string) => {
     for await (const msg of statusSub) {
       try {
         const data = natsJsonDecode(msg.data);
-        mainWindow?.webContents.send("agent-status", { agentId, ...data as object });
-      } catch { /* decode error */ }
+        mainWindow?.webContents.send("agent-status", { agentId, ...(data as object) });
+      } catch {
+        /* decode error */
+      }
     }
   })();
 
@@ -583,8 +593,10 @@ ipcMain.handle("subscribe-agent-steps", async (_event, agentId: string) => {
     for await (const msg of hooksSub) {
       try {
         const data = natsJsonDecode(msg.data);
-        mainWindow?.webContents.send("agent-hook", { agentId, ...data as object });
-      } catch { /* decode error */ }
+        mainWindow?.webContents.send("agent-hook", { agentId, ...(data as object) });
+      } catch {
+        /* decode error */
+      }
     }
   })();
 
@@ -631,7 +643,9 @@ for (const [key, { nats: natsSubject, ipc: ipcChannel }] of Object.entries(broad
         try {
           const data = natsJsonDecode(msg.data);
           mainWindow?.webContents.send(ipcChannel, data);
-        } catch { /* decode error */ }
+        } catch {
+          /* decode error */
+        }
       }
     })();
 
@@ -672,7 +686,10 @@ function checkHttp(url: string): Promise<boolean> {
 
 async function resetAllProjectStatuses(): Promise<void> {
   try {
-    const projects = (await apiGet("/api/projects")) as Array<{ id: string; status?: string }> | null;
+    const projects = (await apiGet("/api/projects")) as Array<{
+      id: string;
+      status?: string;
+    }> | null;
     if (!Array.isArray(projects)) return;
     for (const p of projects) {
       if (p.status !== "idle") {
@@ -689,7 +706,7 @@ app.on("ready", async () => {
   if (cliArgs.standalone) {
     console.log(
       `[standalone] Expecting external NATS on port ${cliArgs.natsPort}, ` +
-      `AgentOrchestrator on port ${cliArgs.aoPort}`
+        `AgentOrchestrator on port ${cliArgs.aoPort}`,
     );
     // Verify external services are reachable
     const natsOk = await checkTcp(cliArgs.natsPort);
@@ -730,11 +747,19 @@ app.on("before-quit", async (event) => {
   event.preventDefault();
   // Clean up NATS subscriptions and connection
   for (const sub of natsSubscriptions.values()) {
-    try { sub.unsubscribe(); } catch { /* already closed */ }
+    try {
+      sub.unsubscribe();
+    } catch {
+      /* already closed */
+    }
   }
   natsSubscriptions.clear();
   if (natsConnection && !natsConnection.isClosed()) {
-    try { await natsConnection.drain(); } catch { /* ignore */ }
+    try {
+      await natsConnection.drain();
+    } catch {
+      /* ignore */
+    }
     natsConnection = null;
   }
   try {

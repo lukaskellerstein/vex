@@ -1,15 +1,15 @@
-import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import {
-  FolderOpen,
   Activity,
-  Settings2,
   ChevronsLeft,
   ChevronsRight,
+  FolderOpen,
   type LucideIcon,
+  Settings2,
 } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import type React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import logoIcon from "../../assets/logo-icon.png";
+import { Tooltip } from "../ui/Tooltip";
 
 interface NavItem {
   path: string;
@@ -123,9 +123,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div style={logoContainerStyle}>
         <img src={logoIcon} alt="Vex" style={logoIconStyle} />
         {!collapsed && (
-          <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--foreground)" }}>
-            Vex
-          </span>
+          <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--foreground)" }}>Vex</span>
         )}
       </div>
 

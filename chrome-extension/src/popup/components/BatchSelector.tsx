@@ -62,7 +62,11 @@ export function BatchSelector({ tabUrl, activeTabId }: BatchSelectorProps) {
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return;
-      const data = (await res.json()) as { batchId: string; pageUrl: string; agents: CursorAgent[] };
+      const data = (await res.json()) as {
+        batchId: string;
+        pageUrl: string;
+        agents: CursorAgent[];
+      };
       setSelectedId(batchId);
       chrome.tabs.sendMessage(activeTabId, { action: "loadBatchCursors", agents: data.agents });
     } catch {

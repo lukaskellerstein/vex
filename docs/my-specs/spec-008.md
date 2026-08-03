@@ -88,7 +88,7 @@ Each handler: `ensureNatsConnection()` → `nc.subscribe(subject)` → async ite
 
 Add 9 methods (3 per subject), following the `subscribeAgentSteps`/`onAgentStep` pattern:
 
-```
+```text
 subscribeProjectEvents / unsubscribeProjectEvents / onProjectEvent
 subscribeBatchEvents   / unsubscribeBatchEvents   / onBatchEvent
 subscribeActivityEvents / unsubscribeActivityEvents / onActivityEvent

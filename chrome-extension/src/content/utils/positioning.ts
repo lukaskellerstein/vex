@@ -17,10 +17,7 @@ export function computePopupPosition(
       ? elementRect.y + elementRect.height + 8
       : Math.max(4, elementRect.y - popupHeight - 8);
 
-  const left = Math.max(
-    4,
-    Math.min(elementRect.x, window.innerWidth - popupWidth - 4),
-  );
+  const left = Math.max(4, Math.min(elementRect.x, window.innerWidth - popupWidth - 4));
 
   return { top, left };
 }
@@ -36,13 +33,7 @@ export function clampToViewport(
   height: number,
   margin = 8,
 ): PopupPosition {
-  const clampedLeft = Math.max(
-    margin,
-    Math.min(left, window.innerWidth - width - margin),
-  );
-  const clampedTop = Math.max(
-    margin,
-    Math.min(top, window.innerHeight - height - margin),
-  );
+  const clampedLeft = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+  const clampedTop = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
   return { top: clampedTop, left: clampedLeft };
 }

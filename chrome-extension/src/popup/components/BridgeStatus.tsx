@@ -23,12 +23,8 @@ export function BridgeStatus() {
 
   return (
     <span className="bridge-status">
-      <span
-        className={`status-dot ${connected ? "connected" : "disconnected"}`}
-      />
-      <span className="connection-text">
-        {connected ? "Connected" : "Disconnected"}
-      </span>
+      <span className={`status-dot ${connected ? "connected" : "disconnected"}`} />
+      <span className="connection-text">{connected ? "Connected" : "Disconnected"}</span>
     </span>
   );
 }

@@ -51,7 +51,9 @@ def parse_transcript(
             # --- Conversation format (subagent transcripts) ---
             if record_type in ("user", "assistant") and "message" in record:
                 new_steps, extracted_prompt = _parse_conversation_record(
-                    record, seq, capture_prompt=prompt is None,
+                    record,
+                    seq,
+                    capture_prompt=prompt is None,
                 )
                 if extracted_prompt and prompt is None:
                     prompt = extracted_prompt
@@ -70,21 +72,23 @@ def parse_transcript(
                 continue
 
             if record_type == "finish":
-                steps.append({
-                    "id": f"step-{seq}",
-                    "sequence_index": seq,
-                    "type": "completed",
-                    "content": f"Agent {record.get('status', 'finished')}",
-                    "metadata": {
-                        "status": record.get("status"),
-                        "cost_usd": record.get("cost_usd"),
+                steps.append(
+                    {
+                        "id": f"step-{seq}",
+                        "sequence_index": seq,
+                        "type": "completed",
+                        "content": f"Agent {record.get('status', 'finished')}",
+                        "metadata": {
+                            "status": record.get("status"),
+                            "cost_usd": record.get("cost_usd"),
+                            "duration_ms": record.get("duration_ms"),
+                            "events": record.get("events"),
+                        },
                         "duration_ms": record.get("duration_ms"),
-                        "events": record.get("events"),
-                    },
-                    "duration_ms": record.get("duration_ms"),
-                    "token_count": None,
-                    "created_at": ts,
-                })
+                        "token_count": None,
+                        "created_at": ts,
+                    }
+                )
                 seq += 1
                 if seq >= max_steps:
                     break
@@ -107,7 +111,10 @@ def parse_transcript(
 
 
 def _parse_conversation_record(
-    record: dict, seq: int, *, capture_prompt: bool = False,
+    record: dict,
+    seq: int,
+    *,
+    capture_prompt: bool = False,
 ) -> tuple[list[dict], str | None]:
     """Convert a conversation-format record into one or more step dicts.
 
@@ -129,16 +136,18 @@ def _parse_conversation_record(
     if isinstance(content, str):
         if role == "user":
             return [], content if capture_prompt else None
-        return [{
-            "id": f"step-{seq}",
-            "sequence_index": seq,
-            "type": "text",
-            "content": content,
-            "metadata": None,
-            "duration_ms": None,
-            "token_count": None,
-            "created_at": ts,
-        }], None
+        return [
+            {
+                "id": f"step-{seq}",
+                "sequence_index": seq,
+                "type": "text",
+                "content": content,
+                "metadata": None,
+                "duration_ms": None,
+                "token_count": None,
+                "created_at": ts,
+            }
+        ], None
 
     if not isinstance(content, list):
         return [], None
@@ -156,7 +165,10 @@ def _parse_conversation_record(
 
 
 def _conversation_block_to_step(
-    block: dict, block_type: str, seq: int, ts: str,
+    block: dict,
+    block_type: str,
+    seq: int,
+    ts: str,
 ) -> dict | None:
     """Map a single content block from conversation format to a step dict."""
     if block_type == "text":

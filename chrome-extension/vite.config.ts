@@ -1,5 +1,5 @@
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 import webExtension from "vite-plugin-web-extension";
 
 export default defineConfig({
@@ -7,11 +7,7 @@ export default defineConfig({
     react(),
     webExtension({
       manifest: "manifest.json",
-      additionalInputs: [
-        "screenshot-viewer.html",
-        "screenshot-viewer.js",
-        "src/content/index.tsx",
-      ],
+      additionalInputs: ["screenshot-viewer.html", "screenshot-viewer.js", "src/content/index.tsx"],
     }),
   ],
   build: {

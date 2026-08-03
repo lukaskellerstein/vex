@@ -5,6 +5,7 @@
 ## Prerequisites
 
 1. **NATS server binary** installed and on PATH:
+
    ```bash
    # Linux
    curl -L https://github.com/nats-io/nats-server/releases/latest/download/nats-server-v2.10.25-linux-amd64.tar.gz -o nats.tar.gz
@@ -23,6 +24,7 @@
 ## Setup
 
 ### Agent Orchestrator
+
 ```bash
 cd agent-orchestrator
 uv venv && source .venv/bin/activate
@@ -30,6 +32,7 @@ uv sync
 ```
 
 ### Electron App
+
 ```bash
 cd electron-app
 npm install

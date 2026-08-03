@@ -13,10 +13,10 @@
  * The result is cached for the app lifetime.
  */
 
-import { execFileSync } from "child_process";
-import fs from "fs";
-import os from "os";
-import path from "path";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const SHELL_TIMEOUT_MS = 5000;
 const DELIM = "__VEX_PATH_DELIM__";
@@ -33,11 +33,11 @@ function resolveLoginShellPath(): string | null {
 
   const shell = process.env.SHELL || "/bin/zsh";
   try {
-    const out = execFileSync(
-      shell,
-      ["-ilc", `printf '%s' "${DELIM}$PATH${DELIM}"`],
-      { encoding: "utf8", timeout: SHELL_TIMEOUT_MS, stdio: ["ignore", "pipe", "ignore"] }
-    );
+    const out = execFileSync(shell, ["-ilc", `printf '%s' "${DELIM}$PATH${DELIM}"`], {
+      encoding: "utf8",
+      timeout: SHELL_TIMEOUT_MS,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
     const parts = out.split(DELIM);
     if (parts.length >= 3) {
       const resolved = parts[1].trim();

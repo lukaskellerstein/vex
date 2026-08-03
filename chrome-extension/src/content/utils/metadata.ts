@@ -38,7 +38,31 @@ function buildAccessibilityPath(el: Element): string | null {
     const tag = current.tagName.toLowerCase();
 
     // Use semantic landmarks and labeled elements
-    if (role || ariaLabel || ["main", "nav", "header", "footer", "aside", "section", "article", "form", "h1", "h2", "h3", "h4", "h5", "h6", "button", "a", "input", "select", "textarea"].includes(tag)) {
+    if (
+      role ||
+      ariaLabel ||
+      [
+        "main",
+        "nav",
+        "header",
+        "footer",
+        "aside",
+        "section",
+        "article",
+        "form",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "button",
+        "a",
+        "input",
+        "select",
+        "textarea",
+      ].includes(tag)
+    ) {
       let part = role || tag;
       if (ariaLabel) {
         part += `[aria-label="${ariaLabel}"]`;
@@ -61,13 +85,18 @@ function getReactComponent(el: Element): string | null {
   );
   if (!fiberKey) return null;
 
-  let fiber = (el as unknown as Record<string, unknown>)[fiberKey] as Record<string, unknown> | null;
+  let fiber = (el as unknown as Record<string, unknown>)[fiberKey] as Record<
+    string,
+    unknown
+  > | null;
   while (fiber) {
     const type = fiber.type;
     if (typeof type === "function" || typeof type === "object") {
-      const name = typeof type === "function"
-        ? (type as { displayName?: string; name?: string }).displayName || (type as { name?: string }).name
-        : (type as { displayName?: string })?.displayName;
+      const name =
+        typeof type === "function"
+          ? (type as { displayName?: string; name?: string }).displayName ||
+            (type as { name?: string }).name
+          : (type as { displayName?: string })?.displayName;
       // Component names start with uppercase
       if (name && /^[A-Z]/.test(name)) return name;
     }
@@ -83,7 +112,10 @@ function getReactSourceFile(el: Element): string | null {
   );
   if (!fiberKey) return null;
 
-  let fiber = (el as unknown as Record<string, unknown>)[fiberKey] as Record<string, unknown> | null;
+  let fiber = (el as unknown as Record<string, unknown>)[fiberKey] as Record<
+    string,
+    unknown
+  > | null;
   while (fiber) {
     const source = fiber._debugSource as { fileName?: string; lineNumber?: number } | undefined;
     if (source?.fileName) {
@@ -126,9 +158,7 @@ export function collectMetadata(el: Element): Selection {
       width: rect.width,
       height: rect.height,
     },
-    parentTag: el.parentElement
-      ? el.parentElement.tagName.toLowerCase()
-      : null,
+    parentTag: el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
     childCount: el.children.length,
     instruction: "",
     screenshot: "",

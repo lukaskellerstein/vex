@@ -24,11 +24,26 @@ WITH_CHROME=false
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --ao-port)   AO_PORT="$2"; shift 2 ;;
-    --nats-port) NATS_PORT="$2"; shift 2 ;;
-    --nats-ws-port) NATS_WS_PORT="$2"; shift 2 ;;
-    --with-chrome) WITH_CHROME=true; shift ;;
-    *) echo "Unknown argument: $1"; exit 1 ;;
+    --ao-port)
+      AO_PORT="$2"
+      shift 2
+      ;;
+    --nats-port)
+      NATS_PORT="$2"
+      shift 2
+      ;;
+    --nats-ws-port)
+      NATS_WS_PORT="$2"
+      shift 2
+      ;;
+    --with-chrome)
+      WITH_CHROME=true
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      exit 1
+      ;;
   esac
 done
 
@@ -37,10 +52,13 @@ PLATFORM="$(uname -s)"
 ARCH="$(uname -m)"
 
 case "${PLATFORM}-${ARCH}" in
-  Linux-x86_64)   NATS_DIR="linux-amd64" ;;
-  Darwin-arm64)   NATS_DIR="darwin-arm64" ;;
-  Darwin-x86_64)  NATS_DIR="darwin-x64" ;;
-  *)              echo "Unsupported platform: ${PLATFORM}-${ARCH}"; exit 1 ;;
+  Linux-x86_64) NATS_DIR="linux-amd64" ;;
+  Darwin-arm64) NATS_DIR="darwin-arm64" ;;
+  Darwin-x86_64) NATS_DIR="darwin-x64" ;;
+  *)
+    echo "Unsupported platform: ${PLATFORM}-${ARCH}"
+    exit 1
+    ;;
 esac
 
 NATS_BIN="${ROOT_DIR}/electron-app/bin/${NATS_DIR}/nats-server"
@@ -60,14 +78,14 @@ TMP_DIR="/tmp/vex"
 mkdir -p "$LOG_DIR" "$TMP_DIR"
 
 # Truncate old logs
-> "$LOG_DIR/nats.log"
-> "$LOG_DIR/ao.log"
-> "$LOG_DIR/vite.log"
-> "$LOG_DIR/electron.log"
-> "$LOG_DIR/chrome.log"
+: >"$LOG_DIR/nats.log"
+: >"$LOG_DIR/ao.log"
+: >"$LOG_DIR/vite.log"
+: >"$LOG_DIR/electron.log"
+: >"$LOG_DIR/chrome.log"
 
 NATS_CONF="${TMP_DIR}/nats-dev.conf"
-cat > "$NATS_CONF" <<EOF
+cat >"$NATS_CONF" <<EOF
 listen: 0.0.0.0:${NATS_PORT}
 max_payload: 8388608
 
@@ -131,7 +149,7 @@ echo ""
 # --- 1. Start NATS ---
 # Kill any stale process on the NATS ports from a previous run
 for port in "$NATS_PORT" "$NATS_WS_PORT"; do
-  if lsof -ti ":${port}" > /dev/null 2>&1; then
+  if lsof -ti ":${port}" >/dev/null 2>&1; then
     echo "Killing stale process on port ${port}..."
     lsof -ti ":${port}" | xargs kill 2>/dev/null || true
     sleep 0.5
@@ -143,7 +161,7 @@ sleep 1
 
 # --- 2. Start Agent Orchestrator ---
 # Kill any stale process on the AO port from a previous run
-if lsof -ti ":${AO_PORT}" > /dev/null 2>&1; then
+if lsof -ti ":${AO_PORT}" >/dev/null 2>&1; then
   echo "Killing stale process on port ${AO_PORT}..."
   lsof -ti ":${AO_PORT}" | xargs kill 2>/dev/null || true
   sleep 0.5
@@ -160,7 +178,7 @@ run_prefixed " ao " "$LOG_DIR/ao.log" "$AO_PYTHON" -m uvicorn agent_orchestrator
 # Wait for AO to be healthy
 echo "Waiting for Agent Orchestrator..."
 for i in $(seq 1 30); do
-  if curl -sf "http://localhost:${AO_PORT}/api/health" > /dev/null 2>&1; then
+  if curl -sf "http://localhost:${AO_PORT}/api/health" >/dev/null 2>&1; then
     echo "Agent Orchestrator is ready."
     break
   fi
@@ -185,7 +203,7 @@ echo "Compiling Electron TypeScript..."
 (cd "$ELECTRON_DIR" && npx tsc 2>&1 | sed 's/^/[build] /')
 
 # Kill any stale process on the Vite port from a previous run
-if lsof -ti ":${VITE_PORT}" > /dev/null 2>&1; then
+if lsof -ti ":${VITE_PORT}" >/dev/null 2>&1; then
   echo "Killing stale process on port ${VITE_PORT}..."
   lsof -ti ":${VITE_PORT}" | xargs kill 2>/dev/null || true
   sleep 0.5
@@ -199,7 +217,7 @@ PIDS+=($!)
 # Wait for Vite to be ready
 echo "Waiting for Vite dev server..."
 for i in $(seq 1 30); do
-  if curl -sf "http://localhost:${VITE_PORT}" > /dev/null 2>&1; then
+  if curl -sf "http://localhost:${VITE_PORT}" >/dev/null 2>&1; then
     echo "Vite dev server is ready."
     break
   fi
@@ -212,7 +230,7 @@ done
 # --- 4. Start Electron ---
 # Kill any stale process on the devtools port from a previous run
 DEVTOOLS_PORT=9222
-if lsof -ti ":${DEVTOOLS_PORT}" > /dev/null 2>&1; then
+if lsof -ti ":${DEVTOOLS_PORT}" >/dev/null 2>&1; then
   echo "Killing stale process on port ${DEVTOOLS_PORT}..."
   lsof -ti ":${DEVTOOLS_PORT}" | xargs kill 2>/dev/null || true
   sleep 0.5
@@ -225,7 +243,7 @@ run_prefixed "elec" "$LOG_DIR/electron.log" npx --prefix "$ELECTRON_DIR" electro
 if [[ "$WITH_CHROME" == true ]]; then
   CHROME_CDP_PORT=9333
   # Kill any stale process on the Chrome CDP port from a previous run
-  if lsof -ti ":${CHROME_CDP_PORT}" > /dev/null 2>&1; then
+  if lsof -ti ":${CHROME_CDP_PORT}" >/dev/null 2>&1; then
     echo "Killing stale process on port ${CHROME_CDP_PORT}..."
     lsof -ti ":${CHROME_CDP_PORT}" | xargs kill 2>/dev/null || true
     sleep 0.5
@@ -239,7 +257,7 @@ if [[ "$WITH_CHROME" == true ]]; then
     chromium \
     chromium-browser \
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; do
-    if command -v "$candidate" > /dev/null 2>&1 || [[ -x "$candidate" ]]; then
+    if command -v "$candidate" >/dev/null 2>&1 || [[ -x "$candidate" ]]; then
       CHROME_BIN="$candidate"
       break
     fi

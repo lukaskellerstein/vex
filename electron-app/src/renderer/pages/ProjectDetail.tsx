@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2, Layers, FileText, Bot, Check, AlertCircle } from "lucide-react";
-import { FrameworkBadge } from "../components/projects/FrameworkBadge";
-import { ProjectInfoPanel } from "../components/project-detail/ProjectInfoPanel";
+import { AlertCircle, ArrowLeft, Bot, Check, FileText, Layers, Loader2 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { BatchList } from "../components/project-detail/BatchList";
 import { DevServerLogs } from "../components/project-detail/DevServerLogs";
+import { ProjectInfoPanel } from "../components/project-detail/ProjectInfoPanel";
+import { FrameworkBadge } from "../components/projects/FrameworkBadge";
 
 interface ProjectData {
   id: string;
@@ -44,7 +45,6 @@ interface AgentsSummary {
 
 type TabId = "batches" | "agents" | "logs";
 
-
 export function ProjectDetail() {
   const { id: projectId = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -55,10 +55,14 @@ export function ProjectDetail() {
   const [actionCount, setActionCount] = useState(0);
   const [lastBatchTime, setLastBatchTime] = useState<string | null>(null);
 
-
   // Agent state
   const [agents, setAgents] = useState<AgentData[]>([]);
-  const [agentSummary, setAgentSummary] = useState<AgentsSummary>({ total: 0, running: 0, completed: 0, failed: 0 });
+  const [agentSummary, setAgentSummary] = useState<AgentsSummary>({
+    total: 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+  });
 
   async function fetchProject() {
     try {
@@ -143,7 +147,6 @@ export function ProjectDetail() {
     };
   }, [projectId]);
 
-
   async function handleServerToggle() {
     if (!project) return;
     const status = project.status ?? "stopped";
@@ -181,7 +184,9 @@ export function ProjectDetail() {
 
   if (!projectId) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}
+      >
         <p style={{ color: "var(--foreground-muted)" }}>No project selected.</p>
       </div>
     );
@@ -189,7 +194,9 @@ export function ProjectDetail() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}
+      >
         <p style={{ color: "var(--foreground-muted)" }}>Loading...</p>
       </div>
     );
@@ -197,7 +204,9 @@ export function ProjectDetail() {
 
   if (!project) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}
+      >
         <p style={{ color: "var(--foreground-muted)" }}>Project not found.</p>
       </div>
     );
@@ -206,7 +215,11 @@ export function ProjectDetail() {
   const status = project.status ?? "stopped";
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: "batches", label: "Batches", icon: <Layers size={14} /> },
-    { id: "agents", label: `Agents${agentSummary.total > 0 ? ` (${agentSummary.total})` : ""}`, icon: <Bot size={14} /> },
+    {
+      id: "agents",
+      label: `Agents${agentSummary.total > 0 ? ` (${agentSummary.total})` : ""}`,
+      icon: <Bot size={14} />,
+    },
     { id: "logs", label: "Dev Server Logs", icon: <FileText size={14} /> },
   ];
 
@@ -265,7 +278,6 @@ export function ProjectDetail() {
           </span>
           <FrameworkBadge framework={project.framework ?? null} />
         </div>
-
       </header>
 
       {/* Body: two columns */}
@@ -329,7 +341,13 @@ export function ProjectDetail() {
           {/* Tab Content */}
           <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
             {activeTab === "batches" && (
-              <BatchList projectId={projectId} onViewTrace={handleViewTrace} onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)} onDeleteBatch={handleDeleteBatch} onStopBatch={handleStopBatch} />
+              <BatchList
+                projectId={projectId}
+                onViewTrace={handleViewTrace}
+                onViewAgent={(agentId) => navigate(`/project/${projectId}/agent/${agentId}`)}
+                onDeleteBatch={handleDeleteBatch}
+                onStopBatch={handleStopBatch}
+              />
             )}
             {activeTab === "agents" && (
               <AgentsPanel
@@ -365,11 +383,17 @@ function AgentsPanel({
       {/* Summary header */}
       {summary.total > 0 && (
         <div style={{ fontSize: "12px", color: "var(--foreground-dim)", marginBottom: "12px" }}>
-          {summary.running > 0 && <span style={{ color: "var(--primary)" }}>{summary.running} running</span>}
+          {summary.running > 0 && (
+            <span style={{ color: "var(--primary)" }}>{summary.running} running</span>
+          )}
           {summary.running > 0 && (summary.completed > 0 || summary.failed > 0) && ", "}
-          {summary.completed > 0 && <span style={{ color: "var(--status-success)" }}>{summary.completed} completed</span>}
+          {summary.completed > 0 && (
+            <span style={{ color: "var(--status-success)" }}>{summary.completed} completed</span>
+          )}
           {summary.completed > 0 && summary.failed > 0 && ", "}
-          {summary.failed > 0 && <span style={{ color: "var(--status-error)" }}>{summary.failed} failed</span>}
+          {summary.failed > 0 && (
+            <span style={{ color: "var(--status-error)" }}>{summary.failed} failed</span>
+          )}
         </div>
       )}
 
@@ -384,14 +408,26 @@ function AgentsPanel({
           key={agent.id}
           onClick={() => onViewAgent(agent.id)}
           style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            width: "100%", padding: "10px 12px", marginBottom: "4px",
-            background: "var(--surface)", border: "1px solid var(--border)",
-            borderRadius: "var(--radius)", cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            padding: "10px 12px",
+            marginBottom: "4px",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            cursor: "pointer",
             transition: "all 0.15s",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.background = "var(--surface-elevated)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface)"; }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "var(--primary)";
+            e.currentTarget.style.background = "var(--surface-elevated)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.background = "var(--surface)";
+          }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <Bot size={14} style={{ color: "var(--foreground-dim)" }} />
@@ -432,11 +468,19 @@ function AgentStatusBadge({ status }: { status: string }) {
   }
 
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: "4px",
-      fontSize: "11px", fontWeight: 500, color, background: bg,
-      padding: "2px 6px", borderRadius: "4px",
-    }}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        fontSize: "11px",
+        fontWeight: 500,
+        color,
+        background: bg,
+        padding: "2px 6px",
+        borderRadius: "4px",
+      }}
+    >
       {icon}
       {status}
     </span>
@@ -447,7 +491,7 @@ function AgentModelBadge({ type }: { type: string }) {
   const modelMap: Record<string, string> = {
     "claude-code-sdk": "Sonnet 4.5",
     "cli-wrapper": "CLI",
-    "external": "External",
+    external: "External",
   };
   const label = modelMap[type] || type;
 

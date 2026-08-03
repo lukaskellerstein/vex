@@ -100,10 +100,18 @@ async def create_project(body: ProjectCreate):
         """INSERT INTO projects (id, name, path, framework, dev_command, dev_port,
            package_manager, styling_approach, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (project_id, name, body.path,
-         detected["framework"], detected["dev_command"], detected["dev_port"],
-         detected["package_manager"], detected["styling_approach"],
-         now, now),
+        (
+            project_id,
+            name,
+            body.path,
+            detected["framework"],
+            detected["dev_command"],
+            detected["dev_port"],
+            detected["package_manager"],
+            detected["styling_approach"],
+            now,
+            now,
+        ),
     )
     await db.commit()
 
@@ -111,12 +119,15 @@ async def create_project(body: ProjectCreate):
     row = await cursor.fetchone()
     project_data = _row_to_project(row)
 
-    await nats_service.publish("vex.project.events", {
-        "event": "created",
-        "project_id": project_id,
-        "project": _redact(project_data),
-        "timestamp": now,
-    })
+    await nats_service.publish(
+        "vex.project.events",
+        {
+            "event": "created",
+            "project_id": project_id,
+            "project": _redact(project_data),
+            "timestamp": now,
+        },
+    )
 
     return project_data
 
@@ -156,21 +167,22 @@ async def update_project(project_id: str, body: ProjectUpdate):
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [project_id]
 
-    await db.execute(
-        f"UPDATE projects SET {set_clause} WHERE id = ?", values
-    )
+    await db.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", values)
     await db.commit()
 
     cursor = await db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
     row = await cursor.fetchone()
     project_data = _row_to_project(row)
 
-    await nats_service.publish("vex.project.events", {
-        "event": "updated",
-        "project_id": project_id,
-        "project": _redact(project_data),
-        "timestamp": updates["updated_at"],
-    })
+    await nats_service.publish(
+        "vex.project.events",
+        {
+            "event": "updated",
+            "project_id": project_id,
+            "project": _redact(project_data),
+            "timestamp": updates["updated_at"],
+        },
+    )
 
     return project_data
 
@@ -178,9 +190,7 @@ async def update_project(project_id: str, body: ProjectUpdate):
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(project_id: str, delete_source: bool = False):
     db = await get_db()
-    cursor = await db.execute(
-        "SELECT id, path FROM projects WHERE id = ?", (project_id,)
-    )
+    cursor = await db.execute("SELECT id, path FROM projects WHERE id = ?", (project_id,))
     row = await cursor.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -194,22 +204,19 @@ async def delete_project(project_id: str, delete_source: bool = False):
         (project_id,),
     )
     await db.execute(
-        "DELETE FROM agent_traces WHERE batch_id IN "
-        "(SELECT id FROM batches WHERE project_id = ?)",
+        "DELETE FROM agent_traces WHERE batch_id IN (SELECT id FROM batches WHERE project_id = ?)",
         (project_id,),
     )
 
     # Delete agents spawned for this project's batches (via tasks)
     agent_cursor = await db.execute(
-        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id IN "
-        "(SELECT id FROM batches WHERE project_id = ?)",
+        "SELECT DISTINCT agent_id FROM tasks WHERE batch_id IN (SELECT id FROM batches WHERE project_id = ?)",
         (project_id,),
     )
     agent_ids = [row["agent_id"] for row in await agent_cursor.fetchall()]
 
     await db.execute(
-        "DELETE FROM tasks WHERE batch_id IN "
-        "(SELECT id FROM batches WHERE project_id = ?)",
+        "DELETE FROM tasks WHERE batch_id IN (SELECT id FROM batches WHERE project_id = ?)",
         (project_id,),
     )
 
@@ -219,14 +226,10 @@ async def delete_project(project_id: str, delete_source: bool = False):
             f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})",
             agent_ids,
         )
-        await db.execute(
-            f"DELETE FROM agents WHERE id IN ({placeholders})", agent_ids
-        )
+        await db.execute(f"DELETE FROM agents WHERE id IN ({placeholders})", agent_ids)
 
     # Delete any remaining activity events linked directly to the project
-    await db.execute(
-        "DELETE FROM activity_events WHERE project_id = ?", (project_id,)
-    )
+    await db.execute("DELETE FROM activity_events WHERE project_id = ?", (project_id,))
 
     # Delete any remaining agents linked directly to the project
     await db.execute("DELETE FROM agents WHERE project_id = ?", (project_id,))
@@ -235,11 +238,14 @@ async def delete_project(project_id: str, delete_source: bool = False):
     await db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     await db.commit()
 
-    await nats_service.publish("vex.project.events", {
-        "event": "deleted",
-        "project_id": project_id,
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
+    await nats_service.publish(
+        "vex.project.events",
+        {
+            "event": "deleted",
+            "project_id": project_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
 
     # Clean up screenshot directory from filesystem
     project_data_dir = DATA_DIR / project_id

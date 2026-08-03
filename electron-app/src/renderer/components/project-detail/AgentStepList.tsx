@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useCallback, useState } from "react";
 import gsap from "gsap";
-import { AgentStepItem } from "./AgentStepItem";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentStep } from "./AgentStepItem";
+import { AgentStepItem } from "./AgentStepItem";
 
 interface AgentStepListProps {
   steps: AgentStep[];
@@ -26,35 +26,38 @@ export function AgentStepList({ steps, status, onAgentClick }: AgentStepListProp
   }, [isAtBottom]);
 
   // Animate new steps in via GSAP
-  const animateNewSteps = useCallback((startIndex: number) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const stepEls = el.querySelectorAll<HTMLElement>("[data-step-index]");
-    const targets: HTMLElement[] = [];
-    stepEls.forEach((node) => {
-      const idx = parseInt(node.dataset.stepIndex ?? "-1", 10);
-      if (idx >= startIndex) targets.push(node);
-    });
-    if (targets.length === 0) return;
+  const animateNewSteps = useCallback(
+    (startIndex: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const stepEls = el.querySelectorAll<HTMLElement>("[data-step-index]");
+      const targets: HTMLElement[] = [];
+      stepEls.forEach((node) => {
+        const idx = parseInt(node.dataset.stepIndex ?? "-1", 10);
+        if (idx >= startIndex) targets.push(node);
+      });
+      if (targets.length === 0) return;
 
-    gsap.fromTo(
-      targets,
-      { opacity: 0, x: -20, scale: 0.97 },
-      {
-        opacity: 1,
-        x: 0,
-        scale: 1,
-        duration: 0.4,
-        ease: "power2.out",
-        stagger: 0.06,
-        onComplete: () => {
-          if (isRunning && autoScroll && el) {
-            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-          }
+      gsap.fromTo(
+        targets,
+        { opacity: 0, x: -20, scale: 0.97 },
+        {
+          opacity: 1,
+          x: 0,
+          scale: 1,
+          duration: 0.4,
+          ease: "power2.out",
+          stagger: 0.06,
+          onComplete: () => {
+            if (isRunning && autoScroll && el) {
+              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+            }
+          },
         },
-      },
-    );
-  }, [isRunning, autoScroll]);
+      );
+    },
+    [isRunning, autoScroll],
+  );
 
   useEffect(() => {
     const prevCount = prevCountRef.current;
@@ -77,7 +80,10 @@ export function AgentStepList({ steps, status, onAgentClick }: AgentStepListProp
   // with their preceding tool_call. Skip redundant subagent/skill steps.
   const grouped = React.useMemo(() => {
     const redundant = new Set([
-      "subagent_spawn", "subagent_result", "skill_invoke", "skill_result",
+      "subagent_spawn",
+      "subagent_result",
+      "skill_invoke",
+      "skill_result",
     ]);
     // Detail step types that should be absorbed into the preceding tool_call
     const detailTypes = new Set(["bash_command", "write_file", "diff"]);
@@ -85,7 +91,8 @@ export function AgentStepList({ steps, status, onAgentClick }: AgentStepListProp
     for (const s of steps) {
       if (redundant.has(s.type)) continue;
       const prev = result.length > 0 ? result[result.length - 1] : null;
-      const prevIsToolCall = prev && (prev.step.type === "tool_call" || prev.step.type === "tool_use");
+      const prevIsToolCall =
+        prev && (prev.step.type === "tool_call" || prev.step.type === "tool_use");
       // Absorb detail steps into the preceding tool_call's metadata
       if (detailTypes.has(s.type) && prevIsToolCall) {
         prev.step = {
@@ -97,10 +104,7 @@ export function AgentStepList({ steps, status, onAgentClick }: AgentStepListProp
         };
         continue;
       }
-      if (
-        (s.type === "tool_result" || s.type === "tool_error") &&
-        prevIsToolCall
-      ) {
+      if ((s.type === "tool_result" || s.type === "tool_error") && prevIsToolCall) {
         prev.resultSteps.push(s);
       } else {
         result.push({ step: s, resultSteps: [] });

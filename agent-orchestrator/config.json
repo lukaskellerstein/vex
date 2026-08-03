@@ -69,18 +69,12 @@
       "mcp_servers": {
         "playwright-vex": {
           "command": "npx",
-          "args": [
-            "@playwright/mcp@latest",
-            "--isolated"
-          ],
+          "args": ["@playwright/mcp@latest", "--isolated"],
           "description": "Playwright browser automation for UI checks (OpenMetadata, agent chat)"
         }
       },
       "log_dir": "~/.vex/logs",
-      "log_formats": [
-        "jsonl",
-        "html"
-      ]
+      "log_formats": ["jsonl", "html"]
     }
   }
 }

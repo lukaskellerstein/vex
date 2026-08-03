@@ -3,11 +3,10 @@
 import asyncio
 import logging
 import shlex
-from typing import AsyncIterator
-
-from agent_orchestrator.utils.ids import generate_agent_id
+from collections.abc import AsyncIterator
 
 from agent_orchestrator.adapters.base import AgentAdapter, AgentProcess
+from agent_orchestrator.utils.ids import generate_agent_id
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +33,28 @@ class CLIWrapperAdapter(AgentAdapter):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         self._agent_config: dict[str, dict] = {}
 
-    async def start(self, project_id: str, project_path: str) -> AgentProcess:
-        agent_id = generate_agent_id()
+    async def start(
+        self,
+        project_id: str,
+        project_path: str,
+        agent_id: str | None = None,
+        model: str | None = None,
+        auth_header: str | None = None,
+    ) -> AgentProcess:
+        # model and auth_header are part of the AgentAdapter contract but have no
+        # meaning for a generic CLI wrapper: it neither selects a model nor drives
+        # a browser. They are accepted and ignored on purpose.
+        agent_id = agent_id or generate_agent_id()
         self._agent_config[agent_id] = {
             "project_id": project_id,
             "project_path": project_path,
         }
         logger.info(
             "Registered cli-wrapper agent %s (cmd=%s) for project %s at %s",
-            agent_id, self._cli_command, project_id, project_path,
+            agent_id,
+            self._cli_command,
+            project_id,
+            project_path,
         )
         return AgentProcess(agent_id=agent_id, pid=None)
 
@@ -52,7 +64,7 @@ class CLIWrapperAdapter(AgentAdapter):
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
             logger.info("Killed cli-wrapper agent %s", agent_id)
         self._agent_config.pop(agent_id, None)
@@ -89,12 +101,15 @@ class CLIWrapperAdapter(AgentAdapter):
         if proc.returncode != 0:
             logger.error(
                 "Agent %s exited with code %d: %s",
-                agent_id, proc.returncode, stderr.decode(errors="replace"),
+                agent_id,
+                proc.returncode,
+                stderr.decode(errors="replace"),
             )
         else:
             logger.info(
                 "Agent %s completed task: %s",
-                agent_id, stdout.decode(errors="replace")[:500],
+                agent_id,
+                stdout.decode(errors="replace")[:500],
             )
 
     async def get_status(self, agent_id: str) -> str:

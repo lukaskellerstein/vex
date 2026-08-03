@@ -1,4 +1,3 @@
-import React from "react";
 import { FolderOpen, Plus } from "lucide-react";
 
 interface ProjectEmptyStateProps {

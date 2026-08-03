@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Tab = "github" | "folder";
 
@@ -28,7 +29,7 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
         setPhase(data.phase);
         setProgress(data.progress);
         setStatusMessage(data.message);
-      }
+      },
     );
     return () => {
       cleanupRef.current?.();
@@ -55,7 +56,9 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
     setProgress(0);
     setStatusMessage("Installing dependencies...");
 
-    const installResult = await (window as any).electronAPI.installDependencies(cloneResult.projectPath);
+    const installResult = await (window as any).electronAPI.installDependencies(
+      cloneResult.projectPath,
+    );
     if (!installResult.success) {
       setError(installResult.error);
       setPhase(null);
@@ -68,7 +71,7 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
 
     const project = await (window as any).electronAPI.createProject(
       cloneResult.repoName,
-      cloneResult.projectPath
+      cloneResult.projectPath,
     );
 
     if (project) {
@@ -98,10 +101,7 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
     if (!pendingPath || !projectName.trim() || busy) return;
     setBusy(true);
     setError(null);
-    const result = await (window as any).electronAPI.createProject(
-      projectName.trim(),
-      pendingPath
-    );
+    const result = await (window as any).electronAPI.createProject(projectName.trim(), pendingPath);
     if (result) {
       onProjectCreated();
     } else {
@@ -139,7 +139,9 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
         zIndex: 1000,
         animation: "fade-in 0.15s ease-out",
       }}
-      onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
     >
       <div
         style={{
@@ -154,8 +156,17 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
         }}
       >
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0, color: "var(--foreground)" }}>Add Project</h3>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "16px",
+          }}
+        >
+          <h3 style={{ fontSize: "18px", fontWeight: 600, margin: 0, color: "var(--foreground)" }}>
+            Add Project
+          </h3>
           {!busy && (
             <button
               onClick={onClose}
@@ -167,8 +178,12 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                 fontSize: "18px",
                 transition: "color 150ms",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--foreground)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--foreground-muted)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--foreground)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--foreground-muted)";
+              }}
             >
               ×
             </button>
@@ -176,7 +191,14 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: "4px", marginBottom: "16px", borderBottom: "1px solid var(--border)" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "4px",
+            marginBottom: "16px",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
           <button style={tabStyle(tab === "github")} onClick={() => !busy && setTab("github")}>
             From GitHub URL
           </button>
@@ -187,15 +209,17 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
 
         {/* Error */}
         {error && (
-          <div style={{
-            padding: "10px 14px",
-            background: "hsla(0, 84%, 60%, 0.1)",
-            border: "1px solid var(--status-error)",
-            borderRadius: "var(--radius)",
-            color: "var(--status-error)",
-            fontSize: "13px",
-            marginBottom: "12px",
-          }}>
+          <div
+            style={{
+              padding: "10px 14px",
+              background: "hsla(0, 84%, 60%, 0.1)",
+              border: "1px solid var(--status-error)",
+              borderRadius: "var(--radius)",
+              color: "var(--status-error)",
+              fontSize: "13px",
+              marginBottom: "12px",
+            }}
+          >
             {error}
           </div>
         )}
@@ -227,27 +251,38 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
 
             {phase && (
               <div style={{ marginBottom: "12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "12px", color: "var(--foreground-muted)" }}>{statusMessage}</span>
-                  <span style={{ fontSize: "12px", color: "var(--foreground-muted)" }}>{progress}%</span>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}
+                >
+                  <span style={{ fontSize: "12px", color: "var(--foreground-muted)" }}>
+                    {statusMessage}
+                  </span>
+                  <span style={{ fontSize: "12px", color: "var(--foreground-muted)" }}>
+                    {progress}%
+                  </span>
                 </div>
-                <div style={{
-                  height: "6px",
-                  background: "var(--surface)",
-                  borderRadius: "3px",
-                  overflow: "hidden",
-                }}>
-                  <div style={{
-                    height: "100%",
-                    width: `${progress}%`,
-                    background: phase === "ready"
-                      ? "var(--status-success)"
-                      : phase === "error"
-                        ? "var(--status-error)"
-                        : "var(--primary)",
+                <div
+                  style={{
+                    height: "6px",
+                    background: "var(--surface)",
                     borderRadius: "3px",
-                    transition: "width 0.3s",
-                  }} />
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${progress}%`,
+                      background:
+                        phase === "ready"
+                          ? "var(--status-success)"
+                          : phase === "error"
+                            ? "var(--status-error)"
+                            : "var(--primary)",
+                      borderRadius: "3px",
+                      transition: "width 0.3s",
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -309,7 +344,13 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
               </button>
             ) : (
               <div>
-                <div style={{ fontSize: "12px", color: "var(--foreground-muted)", marginBottom: "8px" }}>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--foreground-muted)",
+                    marginBottom: "8px",
+                  }}
+                >
                   {pendingPath}
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
@@ -336,9 +377,10 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                     disabled={!projectName.trim() || busy}
                     style={{
                       padding: "8px 16px",
-                      background: projectName.trim() && !busy
-                        ? "linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)"
-                        : "var(--surface-hover)",
+                      background:
+                        projectName.trim() && !busy
+                          ? "linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%)"
+                          : "var(--surface-hover)",
                       color: "var(--primary-foreground)",
                       border: "none",
                       borderRadius: "var(--radius)",
@@ -351,7 +393,10 @@ export function AddProjectDialog({ onClose, onProjectCreated }: Props) {
                     Create
                   </button>
                   <button
-                    onClick={() => { setPendingPath(null); setProjectName(""); }}
+                    onClick={() => {
+                      setPendingPath(null);
+                      setProjectName("");
+                    }}
                     disabled={busy}
                     style={{
                       padding: "8px 16px",

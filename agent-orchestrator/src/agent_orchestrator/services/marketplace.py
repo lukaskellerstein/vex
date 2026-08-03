@@ -5,6 +5,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from claude_agent_sdk.types import SdkPluginConfig
+
 logger = logging.getLogger(__name__)
 
 # Default storage for cloned marketplace repos
@@ -33,9 +35,7 @@ def sync_marketplace(name: str, url: str, branch: str = "main") -> Path:
         if result.returncode == 0:
             logger.info("Updated '%s': %s", name, result.stdout.strip())
         else:
-            logger.warning(
-                "Pull failed for '%s' (using existing): %s", name, result.stderr.strip()
-            )
+            logger.warning("Pull failed for '%s' (using existing): %s", name, result.stderr.strip())
     else:
         logger.info("Cloning marketplace '%s' from %s", name, url)
         result = subprocess.run(
@@ -85,9 +85,7 @@ def _discover_plugins(marketplace_name: str, marketplace_path: Path) -> None:
                     meta.get("description", ""),
                 )
             else:
-                logger.warning(
-                    "  Skipping %s: no .claude-plugin/plugin.json", entry.get("name", "?")
-                )
+                logger.warning("  Skipping %s: no .claude-plugin/plugin.json", entry.get("name", "?"))
     else:
         # Flat layout: scan top-level directories
         for candidate in sorted(marketplace_path.iterdir()):
@@ -106,9 +104,7 @@ def _discover_plugins(marketplace_name: str, marketplace_path: Path) -> None:
                 )
 
     _resolved[marketplace_name] = plugins
-    logger.info(
-        "Marketplace '%s': %d plugin(s) discovered", marketplace_name, len(plugins)
-    )
+    logger.info("Marketplace '%s': %d plugin(s) discovered", marketplace_name, len(plugins))
 
 
 def sync_all(config: dict) -> None:
@@ -135,9 +131,7 @@ def resolve_plugin_ref(ref: str) -> Path | None:
     plugin_name, marketplace_name = ref.rsplit("@", 1)
     marketplace_plugins = _resolved.get(marketplace_name)
     if marketplace_plugins is None:
-        logger.warning(
-            "Marketplace '%s' not synced (ref: %s)", marketplace_name, ref
-        )
+        logger.warning("Marketplace '%s' not synced (ref: %s)", marketplace_name, ref)
         return None
 
     path = marketplace_plugins.get(plugin_name)
@@ -153,9 +147,9 @@ def resolve_plugin_ref(ref: str) -> Path | None:
     return path
 
 
-def resolve_plugin_refs(refs: list[str]) -> list[dict]:
+def resolve_plugin_refs(refs: list[str]) -> list[SdkPluginConfig]:
     """Resolve a list of plugin refs to SDK plugin config dicts."""
-    plugins: list[dict] = []
+    plugins: list[SdkPluginConfig] = []
     for ref in refs:
         path = resolve_plugin_ref(ref)
         if path:

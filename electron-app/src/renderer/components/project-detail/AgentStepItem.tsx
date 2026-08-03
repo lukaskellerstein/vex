@@ -1,20 +1,21 @@
-import React, { useState } from "react";
 import {
+  AlertTriangle,
+  Bot,
   Brain,
   CheckCircle,
-  MessageSquare,
-  Wrench,
-  Plug,
-  FileCode,
-  GitBranch,
-  Sparkles,
-  AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Terminal,
-  Bot,
   CornerDownRight,
+  FileCode,
+  GitBranch,
+  MessageSquare,
+  Plug,
+  Sparkles,
+  Terminal,
+  Wrench,
 } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
 
 /* ─── Types ──────────────────────────────────────── */
 
@@ -121,13 +122,7 @@ function StepMeta({
   );
 }
 
-function CollapsibleText({
-  text,
-  style,
-}: {
-  text: string;
-  style?: React.CSSProperties;
-}) {
+function CollapsibleText({ text, style }: { text: string; style?: React.CSSProperties }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > COLLAPSIBLE_THRESHOLD;
   const display = expanded || !isLong ? text : text.slice(0, COLLAPSIBLE_THRESHOLD) + "...";
@@ -411,7 +406,16 @@ function ToolCard({
           borderBottom: children || resultContent ? "1px solid var(--border)" : undefined,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            flexWrap: "wrap",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
           {header}
         </div>
         <StepMeta durationMs={durationMs ?? null} tokenCount={tokenCount ?? null} />
@@ -602,7 +606,15 @@ function BashInput({ command, description }: { command: string; description: str
           <span style={{ fontSize: "11px", color: "var(--foreground-dim)" }}>{description}</span>
         </div>
       )}
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.6 }}>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: "12px",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-all",
+          lineHeight: 1.6,
+        }}
+      >
         <span style={{ color: termGreen, userSelect: "none" }}>$ </span>
         <span style={{ color: "hsl(0, 0%, 85%)" }}>{command}</span>
       </div>
@@ -619,15 +631,51 @@ function WriteInput({ filePath, fileContent }: { filePath: string; fileContent: 
 
   return (
     <div style={{ fontSize: "11px", fontFamily: "var(--font-mono)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "6px 12px",
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
         <FileCode size={11} style={{ color: "var(--primary)" }} />
         <span style={{ color: "var(--foreground-muted)" }}>{filePath}</span>
-        <span style={{ marginLeft: "auto", fontSize: "10px", color: "var(--foreground-dim)" }}>{allLines.length} lines</span>
+        <span style={{ marginLeft: "auto", fontSize: "10px", color: "var(--foreground-dim)" }}>
+          {allLines.length} lines
+        </span>
       </div>
-      <div style={{ background: "var(--background)", maxHeight: expanded ? "500px" : undefined, overflowY: expanded ? "auto" : undefined }}>
+      <div
+        style={{
+          background: "var(--background)",
+          maxHeight: expanded ? "500px" : undefined,
+          overflowY: expanded ? "auto" : undefined,
+        }}
+      >
         {visibleLines.map((line, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "1px 12px", color: "var(--foreground-muted)", wordBreak: "break-all" }}>
-            <span style={{ color: "var(--foreground-dim)", userSelect: "none", minWidth: "24px", textAlign: "right" }}>{i + 1}</span>
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "8px",
+              padding: "1px 12px",
+              color: "var(--foreground-muted)",
+              wordBreak: "break-all",
+            }}
+          >
+            <span
+              style={{
+                color: "var(--foreground-dim)",
+                userSelect: "none",
+                minWidth: "24px",
+                textAlign: "right",
+              }}
+            >
+              {i + 1}
+            </span>
             <span>{line}</span>
           </div>
         ))}
@@ -635,7 +683,20 @@ function WriteInput({ filePath, fileContent }: { filePath: string; fileContent: 
       {isTruncatable && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", width: "100%", padding: "6px", fontSize: "11px", color: "var(--foreground-dim)", background: "var(--surface)", border: "none", borderTop: "1px solid var(--border)", cursor: "pointer" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "4px",
+            width: "100%",
+            padding: "6px",
+            fontSize: "11px",
+            color: "var(--foreground-dim)",
+            background: "var(--surface)",
+            border: "none",
+            borderTop: "1px solid var(--border)",
+            cursor: "pointer",
+          }}
         >
           {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
           {expanded ? "Show less" : `Show all ${allLines.length} lines`}
@@ -645,14 +706,31 @@ function WriteInput({ filePath, fileContent }: { filePath: string; fileContent: 
   );
 }
 
-function EditInput({ filePath, oldString, newString }: { filePath: string; oldString: string; newString: string }) {
+function EditInput({
+  filePath,
+  oldString,
+  newString,
+}: {
+  filePath: string;
+  oldString: string;
+  newString: string;
+}) {
   const lines: { text: string; type: "remove" | "add" | "neutral" }[] = [];
   for (const line of oldString.split("\n")) lines.push({ text: line, type: "remove" });
   for (const line of newString.split("\n")) lines.push({ text: line, type: "add" });
 
   return (
     <div style={{ fontSize: "11px", fontFamily: "var(--font-mono)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "6px 12px",
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
         <FileCode size={11} style={{ color: "var(--foreground-dim)" }} />
         <span style={{ color: "var(--foreground-muted)" }}>{filePath}</span>
       </div>
@@ -678,11 +756,17 @@ function EditInput({ filePath, oldString, newString }: { filePath: string; oldSt
                   : isAdded
                     ? "2px solid var(--status-success)"
                     : "2px solid transparent",
-                color: isRemoved ? "var(--status-error)" : isAdded ? "var(--status-success)" : "var(--foreground-muted)",
+                color: isRemoved
+                  ? "var(--status-error)"
+                  : isAdded
+                    ? "var(--status-success)"
+                    : "var(--foreground-muted)",
                 wordBreak: "break-all",
               }}
             >
-              <span style={{ userSelect: "none", minWidth: "12px" }}>{isRemoved ? "-" : isAdded ? "+" : " "}</span>
+              <span style={{ userSelect: "none", minWidth: "12px" }}>
+                {isRemoved ? "-" : isAdded ? "+" : " "}
+              </span>
               <span>{line.text}</span>
             </div>
           );
@@ -696,7 +780,16 @@ function ReadInput({ filePath }: { filePath: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px" }}>
       <FileCode size={12} style={{ color: "var(--foreground-dim)" }} />
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--foreground-muted)", wordBreak: "break-all" }}>{filePath}</span>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: "12px",
+          color: "var(--foreground-muted)",
+          wordBreak: "break-all",
+        }}
+      >
+        {filePath}
+      </span>
     </div>
   );
 }
@@ -788,8 +881,20 @@ function AgentBlock({
           cursor: onAgentClick && agentType ? "pointer" : undefined,
           transition: "background 0.15s",
         }}
-        onMouseEnter={onAgentClick && agentType ? (e) => { e.currentTarget.style.background = `color-mix(in srgb, ${agentColor} 18%, transparent)`; } : undefined}
-        onMouseLeave={onAgentClick && agentType ? (e) => { e.currentTarget.style.background = `color-mix(in srgb, ${agentColor} 10%, transparent)`; } : undefined}
+        onMouseEnter={
+          onAgentClick && agentType
+            ? (e) => {
+                e.currentTarget.style.background = `color-mix(in srgb, ${agentColor} 18%, transparent)`;
+              }
+            : undefined
+        }
+        onMouseLeave={
+          onAgentClick && agentType
+            ? (e) => {
+                e.currentTarget.style.background = `color-mix(in srgb, ${agentColor} 10%, transparent)`;
+              }
+            : undefined
+        }
       >
         <Bot size={18} style={{ color: agentColor, flexShrink: 0 }} />
         <span
@@ -998,7 +1103,11 @@ const iconStyle = (color: string): React.CSSProperties => ({
   flexShrink: 0,
 });
 
-export function AgentStepItem({ step, resultSteps, onAgentClick }: {
+export function AgentStepItem({
+  step,
+  resultSteps,
+  onAgentClick,
+}: {
   step: AgentStep;
   resultSteps?: AgentStep[];
   onAgentClick?: (agentType: string) => void;
@@ -1078,7 +1187,10 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
             >
               Message
             </span>
-            <CollapsibleText text={content} style={{ color: "var(--foreground)", fontSize: "14px", lineHeight: "1.7" }} />
+            <CollapsibleText
+              text={content}
+              style={{ color: "var(--foreground)", fontSize: "14px", lineHeight: "1.7" }}
+            />
           </div>
           <StepMeta durationMs={step.duration_ms} tokenCount={step.token_count} />
         </div>
@@ -1088,11 +1200,12 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
     case "tool_call":
     case "tool_use": {
       // Extract result content from grouped resultSteps
-      const resultContent = resultSteps
-        ?.filter((rs) => rs.type !== "tool_error")
-        .map((rs) => rs.content ?? "")
-        .filter(Boolean)
-        .join("\n\n") || null;
+      const resultContent =
+        resultSteps
+          ?.filter((rs) => rs.type !== "tool_error")
+          .map((rs) => rs.content ?? "")
+          .filter(Boolean)
+          .join("\n\n") || null;
       const errors = resultSteps?.filter((rs) => rs.type === "tool_error") ?? [];
 
       // Parse tool name
@@ -1113,12 +1226,18 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
 
       // Parse JSON input once (used by rich renderers)
       let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(toolContent); } catch { /* not JSON */ }
+      try {
+        parsed = JSON.parse(toolContent);
+      } catch {
+        /* not JSON */
+      }
 
       // Agent tool call — its own card design
       if (rawToolName === "Agent") {
         return (
-          <div style={{ padding: "10px 4px", display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div
+            style={{ padding: "10px 4px", display: "flex", flexDirection: "column", gap: "4px" }}
+          >
             <AgentBlock
               description={(parsed.description as string) ?? ""}
               prompt={(parsed.prompt as string) ?? ""}
@@ -1159,7 +1278,9 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
         headerContent = (
           <>
             <Plug size={13} style={{ color: mcpColor, flexShrink: 0 }} />
-            {toolInfo.pluginName && <ToolBadgeSmall label={toolInfo.pluginName} color={pluginColor} />}
+            {toolInfo.pluginName && (
+              <ToolBadgeSmall label={toolInfo.pluginName} color={pluginColor} />
+            )}
             <ToolBadge label={toolInfo.serverName} color={mcpColor} />
             <ToolBadge label={toolInfo.toolName} color="var(--primary)" />
           </>
@@ -1173,31 +1294,41 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
         };
         headerContent = (
           <>
-            {iconMap[rawToolName] ?? <Wrench size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />}
+            {iconMap[rawToolName] ?? (
+              <Wrench size={13} style={{ color: "var(--primary)", flexShrink: 0 }} />
+            )}
             <ToolBadge label={rawToolName} color="var(--primary)" />
           </>
         );
       }
 
       // Detail step absorbed from the timeline (bash_command, write_file, diff)
-      const detail = meta._detail as { type: string; content: string | null; metadata: Record<string, unknown> | null } | undefined;
+      const detail = meta._detail as
+        | { type: string; content: string | null; metadata: Record<string, unknown> | null }
+        | undefined;
 
       // Build rich input content based on tool name
       let inputContent: React.ReactNode = null;
 
       if (effectiveToolName === "Bash") {
-        const cmd = (parsed.command as string) || (detail?.type === "bash_command" ? detail.content ?? "" : "");
-        const desc = (parsed.description as string) || ((detail?.metadata?.description as string) ?? "");
+        const cmd =
+          (parsed.command as string) ||
+          (detail?.type === "bash_command" ? (detail.content ?? "") : "");
+        const desc =
+          (parsed.description as string) || ((detail?.metadata?.description as string) ?? "");
         if (cmd) inputContent = <BashInput command={cmd} description={desc} />;
       } else if (effectiveToolName === "Write") {
         const fp = (parsed.file_path as string) || ((detail?.metadata?.file_path as string) ?? "");
-        const fc = (parsed.content as string) || (detail?.type === "write_file" ? detail.content ?? "" : "");
+        const fc =
+          (parsed.content as string) ||
+          (detail?.type === "write_file" ? (detail.content ?? "") : "");
         if (fp && fc) inputContent = <WriteInput filePath={fp} fileContent={fc} />;
       } else if (effectiveToolName === "Edit") {
         const fp = (parsed.file_path as string) ?? "";
         const os = (parsed.old_string as string) ?? "";
         const ns = (parsed.new_string as string) ?? "";
-        if (fp && (os || ns)) inputContent = <EditInput filePath={fp} oldString={os} newString={ns} />;
+        if (fp && (os || ns))
+          inputContent = <EditInput filePath={fp} oldString={os} newString={ns} />;
       } else if (effectiveToolName === "Read") {
         const fp = (parsed.file_path as string) ?? "";
         if (fp) inputContent = <ReadInput filePath={fp} />;
@@ -1211,7 +1342,11 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
 
       // Fallback: show raw JSON for tools without a rich renderer
       if (!inputContent && toolContent) {
-        inputContent = <div style={{ padding: "6px 12px" }}><ToolInputPreview content={toolContent} /></div>;
+        inputContent = (
+          <div style={{ padding: "6px 12px" }}>
+            <ToolInputPreview content={toolContent} />
+          </div>
+        );
       }
 
       return (
@@ -1255,8 +1390,13 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
               background: "color-mix(in srgb, var(--status-error) 8%, transparent)",
             }}
           >
-            <AlertTriangle size={13} style={{ color: "var(--status-error)", marginTop: "1px", flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+            <AlertTriangle
+              size={13}
+              style={{ color: "var(--status-error)", marginTop: "1px", flexShrink: 0 }}
+            />
+            <div
+              style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 <span
                   style={{
@@ -1320,7 +1460,9 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
           }}
         >
           <GitBranch size={14} style={iconStyle("var(--status-info)")} />
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div
+            style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
                 Spawned subagent:
@@ -1380,7 +1522,9 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
           }}
         >
           <Sparkles size={14} style={iconStyle("hsl(330, 70%, 60%)")} />
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div
+            style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
                 Invoked skill:
@@ -1442,7 +1586,9 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
         >
           <AlertTriangle size={14} style={iconStyle("var(--status-error)")} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: "13px", color: "var(--status-error)", lineHeight: 1.6, margin: 0 }}>
+            <p
+              style={{ fontSize: "13px", color: "var(--status-error)", lineHeight: 1.6, margin: 0 }}
+            >
               {content}
             </p>
           </div>
@@ -1462,7 +1608,15 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
         >
           <CheckCircle size={16} style={iconStyle("hsl(142, 69%, 55%)")} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: "14px", fontWeight: 600, color: "hsl(142, 69%, 55%)", lineHeight: 1.6, margin: 0 }}>
+            <p
+              style={{
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "hsl(142, 69%, 55%)",
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
               {content || "Task completed"}
             </p>
           </div>
@@ -1475,7 +1629,14 @@ export function AgentStepItem({ step, resultSteps, onAgentClick }: {
         <div style={rowBase}>
           <MessageSquare size={14} style={iconStyle("var(--foreground-dim)")} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: "13px", color: "var(--foreground-dim)", lineHeight: 1.6, margin: 0 }}>
+            <p
+              style={{
+                fontSize: "13px",
+                color: "var(--foreground-dim)",
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
               {content}
             </p>
           </div>

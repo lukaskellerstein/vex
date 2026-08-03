@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
 import { Activity as ActivityIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { ActivityEntry, type TimelineEvent } from "./ActivityEntry";
 
 type TimeGroup = "just-now" | "earlier-today" | "yesterday" | "older";
@@ -101,11 +101,7 @@ export function ActivityTimeline({ events }: ActivityTimelineProps) {
       }}
     >
       {grouped.map(({ group, events: groupEvents }) => (
-        <TimelineGroup
-          key={group}
-          label={GROUP_LABELS[group]}
-          events={groupEvents}
-        />
+        <TimelineGroup key={group} label={GROUP_LABELS[group]} events={groupEvents} />
       ))}
     </div>
   );

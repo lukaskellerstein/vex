@@ -30,9 +30,11 @@ packages = ["src/agent_orchestrator"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
-[tool.ruff]
-target-version = "py311"
-line-length = 100
+# No [tool.ruff] here on purpose. Ruff resolves config per file by walking up,
+# so a table here would shadow the repo-root ruff.toml for this whole leaf — and
+# a [tool.ruff] with no lint.select does not mean "defaults", it means ruff's
+# full rule set (measured on 0.16.0: S110 and BLE001 fire). target-version is
+# inferred from requires-python above.
 
 [dependency-groups]
 dev = [

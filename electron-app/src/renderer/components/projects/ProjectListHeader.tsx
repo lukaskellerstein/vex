@@ -1,5 +1,5 @@
-import React from "react";
-import { Search, Grid3X3, List, Plus } from "lucide-react";
+import { Grid3X3, List, Plus, Search } from "lucide-react";
+import type React from "react";
 
 type ViewMode = "grid" | "list";
 

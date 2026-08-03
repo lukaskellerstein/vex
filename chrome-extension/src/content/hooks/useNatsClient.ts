@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { connect, JSONCodec, type NatsConnection, type Subscription } from "nats.ws";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AGENT_MANAGER_URL, NATS_WS_URL } from "../../shared/messages";
 
 interface SubEntry {
@@ -52,23 +52,20 @@ export function useNatsClient(enabled: boolean): NatsClient {
     }
   }, []);
 
-  const startSubscription = useCallback(
-    (nc: NatsConnection, entry: SubEntry) => {
-      const sub = nc.subscribe(entry.subject);
-      entry.sub = sub;
-      (async () => {
-        for await (const msg of sub) {
-          try {
-            const data = jc.decode(msg.data) as object;
-            entry.callback(data);
-          } catch {
-            // decode error — skip
-          }
+  const startSubscription = useCallback((nc: NatsConnection, entry: SubEntry) => {
+    const sub = nc.subscribe(entry.subject);
+    entry.sub = sub;
+    (async () => {
+      for await (const msg of sub) {
+        try {
+          const data = jc.decode(msg.data) as object;
+          entry.callback(data);
+        } catch {
+          // decode error — skip
         }
-      })();
-    },
-    [],
-  );
+      }
+    })();
+  }, []);
 
   const doConnect = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -165,42 +162,39 @@ export function useNatsClient(enabled: boolean): NatsClient {
     [drainSubscription],
   );
 
-  const pollForResult = useCallback(
-    (requestId: string, timeoutMs: number): Promise<unknown> => {
-      const url = AGENT_MANAGER_URL + "/api/tasks/" + requestId;
-      const pollInterval = 2000;
+  const pollForResult = useCallback((requestId: string, timeoutMs: number): Promise<unknown> => {
+    const url = AGENT_MANAGER_URL + "/api/tasks/" + requestId;
+    const pollInterval = 2000;
 
-      return new Promise((resolve, reject) => {
-        const deadline = Date.now() + timeoutMs;
+    return new Promise((resolve, reject) => {
+      const deadline = Date.now() + timeoutMs;
 
-        const tick = async () => {
-          if (Date.now() > deadline) {
-            reject(new Error("pollForResult timed out after " + timeoutMs + "ms"));
+      const tick = async () => {
+        if (Date.now() > deadline) {
+          reject(new Error("pollForResult timed out after " + timeoutMs + "ms"));
+          return;
+        }
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const data = (await res.json()) as { status?: string };
+          if (data.status === "completed") {
+            resolve(data);
             return;
           }
-          try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-            if (!res.ok) throw new Error("HTTP " + res.status);
-            const data = (await res.json()) as { status?: string };
-            if (data.status === "completed") {
-              resolve(data);
-              return;
-            }
-            if (data.status === "failed") {
-              reject(new Error("Task failed"));
-              return;
-            }
-          } catch {
-            // Network error — keep polling until deadline
+          if (data.status === "failed") {
+            reject(new Error("Task failed"));
+            return;
           }
-          setTimeout(tick, pollInterval);
-        };
+        } catch {
+          // Network error — keep polling until deadline
+        }
+        setTimeout(tick, pollInterval);
+      };
 
-        tick();
-      });
-    },
-    [],
-  );
+      tick();
+    });
+  }, []);
 
   return { connected, fallbackMode, publish, subscribe, unsubscribe, pollForResult };
 }

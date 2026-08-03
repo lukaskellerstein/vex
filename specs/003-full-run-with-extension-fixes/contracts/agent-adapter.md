@@ -21,15 +21,15 @@ class AgentAdapter(ABC):
 ```python
 {
     "project_id": str,
-    "type": str,           # "code-edit", "section-generation"
-    "prompt": str,         # Formatted prompt with batch actions
+    "type": str,  # "code-edit", "section-generation"
+    "prompt": str,  # Formatted prompt with batch actions
     "context": {
         "project_path": str,
         "framework": str,
         "styling_approach": str,
         "batch_id": str,
         "actions": list[dict],
-    }
+    },
 }
 ```
 

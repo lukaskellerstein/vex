@@ -7,9 +7,11 @@
 ## Project Endpoints
 
 ### GET /api/projects
+
 List all projects.
 
 **Response 200**:
+
 ```json
 {
   "projects": [
@@ -32,9 +34,11 @@ List all projects.
 ```
 
 ### POST /api/projects
+
 Create project. Triggers auto-detection.
 
 **Request**:
+
 ```json
 {
   "path": "/home/user/my-website",
@@ -45,14 +49,17 @@ Create project. Triggers auto-detection.
 **Response 201**: Project object with auto-detected fields populated.
 
 ### GET /api/projects/{id}
+
 Get project details.
 
 **Response 200**: Single project object.
 
 ### PATCH /api/projects/{id}
+
 Update project settings. Accepts partial updates.
 
 **Request**:
+
 ```json
 {
   "devCommand": "npm run dev -- --port 3001",
@@ -63,14 +70,17 @@ Update project settings. Accepts partial updates.
 **Response 200**: Updated project object.
 
 ### DELETE /api/projects/{id}
+
 Remove project.
 
 **Response 204**: No content.
 
 ### POST /api/projects/{id}/start
+
 Start dev server.
 
 **Response 200**:
+
 ```json
 {
   "status": "starting",
@@ -79,9 +89,11 @@ Start dev server.
 ```
 
 ### POST /api/projects/{id}/stop
+
 Stop dev server.
 
 **Response 200**:
+
 ```json
 {
   "status": "stopping",
@@ -94,9 +106,11 @@ Stop dev server.
 ## Batch Endpoints
 
 ### POST /api/projects/{id}/batches
+
 Submit a batch of actions. Max 50MB body.
 
 **Request**:
+
 ```json
 {
   "batch": {
@@ -117,6 +131,7 @@ Submit a batch of actions. Max 50MB body.
 ```
 
 **Response 201**:
+
 ```json
 {
   "id": "batch-uuid",
@@ -128,9 +143,11 @@ Submit a batch of actions. Max 50MB body.
 ```
 
 ### GET /api/projects/{id}/batches
+
 List batches for a project.
 
 **Response 200**:
+
 ```json
 {
   "batches": [
@@ -146,16 +163,19 @@ List batches for a project.
 ```
 
 ### GET /api/projects/{id}/batches/{batchId}
+
 Get a specific batch with all actions.
 
 **Response 200**: Full batch object including actions array with screenshot file paths (not base64).
 
 ### GET /api/projects/{id}/batches/latest
+
 Get the most recent batch.
 
 **Response 200**: Same as single batch response.
 
 ### DELETE /api/projects/{id}/batches/{batchId}
+
 Delete a batch.
 
 **Response 204**: No content.
@@ -165,9 +185,11 @@ Delete a batch.
 ## Agent Endpoints
 
 ### GET /api/agents
+
 List all registered agents.
 
 **Response 200**:
+
 ```json
 {
   "agents": [
@@ -186,9 +208,11 @@ List all registered agents.
 ```
 
 ### POST /api/agents
+
 Register an agent.
 
 **Request**:
+
 ```json
 {
   "name": "Claude Code",
@@ -200,29 +224,35 @@ Register an agent.
 **Response 201**: Agent object.
 
 ### GET /api/agents/{id}
+
 Agent details + health.
 
 **Response 200**: Agent object with additional `healthy` boolean field.
 
 ### POST /api/agents/{id}/start
+
 Start an agent process.
 
 **Response 200**: `{ "status": "starting" }`
 
 ### POST /api/agents/{id}/stop
+
 Stop an agent.
 
 **Response 200**: `{ "status": "stopping" }`
 
 ### DELETE /api/agents/{id}
+
 Deregister agent.
 
 **Response 204**: No content.
 
 ### POST /api/agents/{id}/heartbeat
+
 Agent heartbeat.
 
 **Request**:
+
 ```json
 {
   "status": "running",
@@ -237,9 +267,11 @@ Agent heartbeat.
 ## Task Endpoints
 
 ### POST /api/tasks
+
 Create a task (generation request). AgentManager routes to capable agent.
 
 **Request**:
+
 ```json
 {
   "projectId": "project-uuid",
@@ -254,6 +286,7 @@ Create a task (generation request). AgentManager routes to capable agent.
 ```
 
 **Response 201**:
+
 ```json
 {
   "id": "task-uuid",
@@ -263,9 +296,11 @@ Create a task (generation request). AgentManager routes to capable agent.
 ```
 
 ### GET /api/tasks/{id}
+
 Task status and result.
 
 **Response 200**:
+
 ```json
 {
   "id": "task-uuid",
@@ -276,11 +311,13 @@ Task status and result.
 ```
 
 ### GET /api/tasks/pending
+
 Pending tasks for an agent (filtered by capability query param).
 
 **Query params**: `?capability=section-generation`
 
 **Response 200**:
+
 ```json
 {
   "tasks": [{ "id": "task-uuid", "type": "section", "prompt": "...", "context": {} }]
@@ -288,9 +325,11 @@ Pending tasks for an agent (filtered by capability query param).
 ```
 
 ### POST /api/tasks/{id}/result
+
 Agent posts task result.
 
 **Request**:
+
 ```json
 {
   "status": "completed",
@@ -305,9 +344,11 @@ Agent posts task result.
 ## Utility Endpoints
 
 ### GET /api/health
+
 AgentManager health.
 
 **Response 200**:
+
 ```json
 {
   "status": "healthy",
@@ -319,9 +360,11 @@ AgentManager health.
 ```
 
 ### GET /api/config
+
 Global configuration.
 
 **Response 200**:
+
 ```json
 {
   "config": {
@@ -333,6 +376,7 @@ Global configuration.
 ```
 
 ### PATCH /api/config
+
 Update configuration.
 
 **Request**: `{ "key": "value" }`
@@ -343,6 +387,7 @@ Update configuration.
 ## Error Format
 
 All error responses use:
+
 ```json
 {
   "error": {

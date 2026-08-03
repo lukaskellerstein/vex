@@ -36,42 +36,82 @@
       "mcp__electron-playwright",
       "mcp__extension-playwright"
     ],
+    "ask": [
+      "Bash(node scripts/publish-release.mjs:*)",
+      "Edit(./electron-app/package.json)",
+      "Edit(./chrome-extension/manifest.json)",
+
+      "Bash(python3 .claude/hooks/dev-env.py start --force:*)",
+      "Bash(python3 ./.claude/hooks/dev-env.py start --force:*)",
+
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --delete:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(npm publish:*)"
+    ],
     "deny": [
+      "Bash(rm -rf /)",
       "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
       "Bash(rm -rf ~*)",
+      "Bash(rm -rf $HOME*)",
       "Bash(sudo rm -rf /*)",
       "Bash(sudo rm -rf ~*)",
+      "Bash(sudo rm -rf *)",
+      "Bash(*--no-preserve-root*)",
+      "Bash(mkfs*)",
+      "Bash(diskutil erase*)",
+      "Bash(dd * of=/dev/*)",
 
       "Read(~/.ssh/**)",
       "Read(~/.gnupg/**)",
       "Read(~/.aws/**)",
+      "Read(~/.azure/**)",
       "Read(~/.config/gcloud/**)",
       "Read(~/.kube/config)",
       "Read(~/.docker/config.json)",
       "Read(~/.netrc)",
       "Read(~/.npmrc)",
       "Read(~/.pypirc)",
+      "Read(~/.bash_history)",
       "Read(~/.zsh_history)",
+      "Read(~/.config/sops/age/**)",
+      "Read(~/.claude/.credentials.json)",
 
+      "Read(./secrets/**)",
+      "Read(./.secrets/**)",
+      "Read(./.npmrc)",
+      "Read(./**/.env)",
       "Read(./**/.env.local)",
       "Read(./**/.env.production)",
       "Read(./**/.env.staging)",
       "Read(./**/secrets/**)",
       "Read(./**/*credentials*.json)",
+      "Read(./**/serviceAccountKey.json)",
       "Read(./**/*.pem)",
       "Read(./**/*.key)",
       "Read(./**/*.p12)",
       "Read(./**/*.pfx)",
+      "Read(./**/*.keystore)",
+      "Read(./**/*.jks)",
+      "Read(./**/*.agekey)",
+      "Read(./**/keys.txt)",
+      "Read(./**/*.tfstate)",
+      "Read(./**/*.tfstate.backup)",
 
       "Edit(~/.ssh/**)",
       "Edit(~/.gnupg/**)",
+      "Edit(~/.config/sops/age/**)",
+      "Edit(~/.claude/.credentials.json)",
       "Edit(./.git/**)"
     ]
   },
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "mcp__(electron|extension)-playwright__browser_(navigate|run_code|snapshot)",
+        "matcher": "mcp__(electron|extension)-playwright__browser_(navigate|navigate_back|tabs|snapshot|take_screenshot|evaluate)",
         "hooks": [
           {
             "type": "command",
@@ -100,6 +140,8 @@
     ]
   },
   "enabledPlugins": {
-    "dev-tools-plugin@claude-my-marketplace": true
+    "dev-tools-plugin@claude-my-marketplace": true,
+    "lsp-python@claude-my-marketplace": false,
+    "lsp-typescript@claude-my-marketplace": false
   }
 }

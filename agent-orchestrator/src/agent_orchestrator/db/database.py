@@ -1,7 +1,8 @@
 """SQLite database management with async access via aiosqlite."""
 
-import aiosqlite
 from pathlib import Path
+
+import aiosqlite
 
 DB_DIR = Path.home() / ".vex"
 DB_PATH = DB_DIR / "vex.db"
@@ -216,13 +217,33 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
         ("batches", "duration_ms", "ALTER TABLE batches ADD COLUMN duration_ms INTEGER"),
         ("batches", "cost_usd", "ALTER TABLE batches ADD COLUMN cost_usd REAL"),
         ("batches", "error_message", "ALTER TABLE batches ADD COLUMN error_message TEXT"),
-        ("batches", "agent_id", "ALTER TABLE batches ADD COLUMN agent_id TEXT REFERENCES agents(id)"),
-        ("agents", "tasks_completed", "ALTER TABLE agents ADD COLUMN tasks_completed INTEGER DEFAULT 0"),
+        (
+            "batches",
+            "agent_id",
+            "ALTER TABLE batches ADD COLUMN agent_id TEXT REFERENCES agents(id)",
+        ),
+        (
+            "agents",
+            "tasks_completed",
+            "ALTER TABLE agents ADD COLUMN tasks_completed INTEGER DEFAULT 0",
+        ),
         ("agents", "tasks_failed", "ALTER TABLE agents ADD COLUMN tasks_failed INTEGER DEFAULT 0"),
         ("agents", "total_cost_usd", "ALTER TABLE agents ADD COLUMN total_cost_usd REAL DEFAULT 0"),
-        ("tasks", "batch_id", "ALTER TABLE tasks ADD COLUMN batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL"),
-        ("agent_traces", "input_tokens", "ALTER TABLE agent_traces ADD COLUMN input_tokens INTEGER"),
-        ("agent_traces", "output_tokens", "ALTER TABLE agent_traces ADD COLUMN output_tokens INTEGER"),
+        (
+            "tasks",
+            "batch_id",
+            "ALTER TABLE tasks ADD COLUMN batch_id TEXT REFERENCES batches(id) ON DELETE SET NULL",
+        ),
+        (
+            "agent_traces",
+            "input_tokens",
+            "ALTER TABLE agent_traces ADD COLUMN input_tokens INTEGER",
+        ),
+        (
+            "agent_traces",
+            "output_tokens",
+            "ALTER TABLE agent_traces ADD COLUMN output_tokens INTEGER",
+        ),
         ("projects", "model", "ALTER TABLE projects ADD COLUMN model TEXT"),
         ("projects", "auth_header", "ALTER TABLE projects ADD COLUMN auth_header TEXT"),
     ]
@@ -236,9 +257,8 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
     # Earlier schema had batch_id UNIQUE (1 trace per batch), but the current
     # design creates 1 trace per action, so multiple traces per batch.
     try:
-        row = await db.execute_fetchall(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_traces'"
-        )
+        rows = await db.execute_fetchall("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_traces'")
+        row = list(rows)
         if row and "UNIQUE" in (row[0][0] or ""):
             await db.executescript("""
                 CREATE TABLE agent_traces_new (

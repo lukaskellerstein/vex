@@ -1,17 +1,17 @@
-import { useCallback, useState } from "react";
 import {
-  MousePointer,
-  Type,
-  Palette,
-  Move,
   Copy,
-  Trash2,
-  LayoutGrid,
   Image,
+  LayoutGrid,
   Maximize2,
-  Scissors,
+  MousePointer,
+  Move,
   PaintBucket,
+  Palette,
+  Scissors,
+  Trash2,
+  Type,
 } from "lucide-react";
+import { useCallback, useState } from "react";
 import type { Action, ActionType } from "../../shared/types";
 
 interface ActionListProps {
@@ -63,10 +63,13 @@ export function ActionList({ actions, onRemove, onUpdateInstruction }: ActionLis
     setEditText(currentText);
   }, []);
 
-  const saveEdit = useCallback((index: number) => {
-    onUpdateInstruction(index, editText);
-    setEditingIndex(null);
-  }, [editText, onUpdateInstruction]);
+  const saveEdit = useCallback(
+    (index: number) => {
+      onUpdateInstruction(index, editText);
+      setEditingIndex(null);
+    },
+    [editText, onUpdateInstruction],
+  );
 
   const cancelEdit = useCallback(() => {
     setEditingIndex(null);
@@ -97,8 +100,8 @@ export function ActionList({ actions, onRemove, onUpdateInstruction }: ActionLis
                 <div className="selection-tag" title={action.selector}>
                   {truncate(action.selector, 40)}
                 </div>
-                {isSelect && (
-                  isEditing ? (
+                {isSelect &&
+                  (isEditing ? (
                     <div className="selection-edit">
                       <textarea
                         className="selection-edit-input"
@@ -115,8 +118,12 @@ export function ActionList({ actions, onRemove, onUpdateInstruction }: ActionLis
                         autoFocus
                       />
                       <div className="selection-edit-actions">
-                        <button className="selection-edit-btn save" onClick={() => saveEdit(i)}>Save</button>
-                        <button className="selection-edit-btn" onClick={cancelEdit}>Cancel</button>
+                        <button className="selection-edit-btn save" onClick={() => saveEdit(i)}>
+                          Save
+                        </button>
+                        <button className="selection-edit-btn" onClick={cancelEdit}>
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -127,8 +134,7 @@ export function ActionList({ actions, onRemove, onUpdateInstruction }: ActionLis
                     >
                       {action.instruction || "no instruction"}
                     </div>
-                  )
-                )}
+                  ))}
               </div>
               <button
                 className="selection-remove"
@@ -149,10 +155,7 @@ function ActionTypeBadge({ type }: { type: ActionType }) {
   const Icon = TYPE_ICONS[type];
   const color = TYPE_BADGE_COLORS[type];
   return (
-    <span
-      className="action-type-badge"
-      style={{ backgroundColor: color }}
-    >
+    <span className="action-type-badge" style={{ backgroundColor: color }}>
       <Icon size={10} />
       {type}
     </span>

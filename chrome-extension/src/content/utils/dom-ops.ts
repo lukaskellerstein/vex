@@ -102,11 +102,7 @@ export function cloneElement(el: Element): Element {
   return clone;
 }
 
-export function reorderElement(
-  parent: Element,
-  fromIndex: number,
-  toIndex: number,
-): void {
+export function reorderElement(parent: Element, fromIndex: number, toIndex: number): void {
   const children = Array.from(parent.children);
   if (fromIndex < 0 || fromIndex >= children.length) return;
   if (toIndex < 0 || toIndex >= children.length) return;
@@ -121,11 +117,7 @@ export function reorderElement(
   }
 }
 
-export function wrapElement(
-  el: Element,
-  wrapperTag: string,
-  wrapperClasses: string[],
-): Element {
+export function wrapElement(el: Element, wrapperTag: string, wrapperClasses: string[]): Element {
   const wrapper = document.createElement(wrapperTag);
   for (const cls of wrapperClasses) {
     if (cls) wrapper.classList.add(cls);

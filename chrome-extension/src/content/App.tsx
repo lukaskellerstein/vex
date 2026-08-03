@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Action, InteractionMode, Selection } from "../shared/types";
-import { useSelectionState } from "./hooks/useSelectionState";
-import { useActions } from "./hooks/useActions";
-import { useHoverHighlight } from "./hooks/useHoverHighlight";
-import { revertAllVisualChanges } from "./hooks/useUndo";
-import { useNatsClient } from "./hooks/useNatsClient";
-import { captureScreenshot } from "./hooks/useScreenshot";
-import { collectMetadata } from "./utils/metadata";
-import { Overlay, ActionMarkers } from "./components/Overlay";
-import { PopupDialog } from "./components/PopupDialog";
-import { Toolbar } from "./components/Toolbar";
+import type { Action, Selection } from "../shared/types";
+import { AgentCursors } from "./components/AgentCursors";
 import { EditMode } from "./components/EditMode";
+import { ActionMarkers, Overlay } from "./components/Overlay";
+import { PopupDialog } from "./components/PopupDialog";
 import { ResizeMode } from "./components/ResizeMode";
 import { StylePanel } from "./components/StylePanel";
-import { AgentCursors } from "./components/AgentCursors";
+import { Toolbar } from "./components/Toolbar";
+import { useActions } from "./hooks/useActions";
+import { useHoverHighlight } from "./hooks/useHoverHighlight";
+import { useNatsClient } from "./hooks/useNatsClient";
+import { captureScreenshot } from "./hooks/useScreenshot";
+import { useSelectionState } from "./hooks/useSelectionState";
+import { revertAllVisualChanges } from "./hooks/useUndo";
+import { collectMetadata } from "./utils/metadata";
 
 const HOST_ID = "__web-selector-root";
-
 
 interface PopupState {
   element: Element;
@@ -72,17 +71,6 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
   const [highlightedActionIndex, setHighlightedActionIndex] = useState<number | null>(null);
 
-
-  // Send handler
-  const handleSend = useCallback(() => {
-    chrome.runtime.sendMessage({
-      action: "sendActions",
-      actions: actionsRef.current,
-      pageUrl: location.href,
-      pageTitle: document.title,
-    });
-  }, [actionsRef]);
-
   // Watch for selected element removal from DOM
   useEffect(() => {
     if (state !== "selected" || !popupRef.current) return;
@@ -129,16 +117,9 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       const selectionNumber = selectionsRef.current.length + 1;
 
       try {
-        metadata.screenshot = await captureScreenshot(
-          el,
-          selectionNumber,
-          hostElement,
-        );
+        metadata.screenshot = await captureScreenshot(el, selectionNumber, hostElement);
       } catch (err) {
-        console.warn(
-          "Web Selector: screenshot capture failed:",
-          (err as Error).message,
-        );
+        console.warn("Web Selector: screenshot capture failed:", (err as Error).message);
         metadata.screenshot = "";
       }
 
@@ -274,7 +255,17 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
-  }, [selectionsRef, toggle, deactivate, clearSelections, clearActions, removeSelectionAt, removeAction, updateActionInstruction, mode]);
+  }, [
+    selectionsRef,
+    toggle,
+    deactivate,
+    clearSelections,
+    clearActions,
+    removeSelectionAt,
+    removeAction,
+    updateActionInstruction,
+    mode,
+  ]);
 
   const handlePopupSubmit = useCallback((instruction: string) => {
     popupResolveRef.current?.(instruction);
@@ -310,16 +301,12 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       {/* Agent cursors — always polls AO; triggers NATS connection when agents found */}
       <AgentCursors natsClient={natsClient} onAgentsDetected={enableNats} shadowRoot={shadowRoot} />
 
-      {isActive && (
-        <Toolbar
-          mode={mode}
-          onModeChange={setMode}
-          onClose={deactivate}
-        />
-      )}
+      {isActive && <Toolbar mode={mode} onModeChange={setMode} onClose={deactivate} />}
 
       {/* Persistent numbered markers for ALL actions — visible even when deactivated */}
-      {allActions.length > 0 && <ActionMarkers actions={allActions} highlightedIndex={highlightedActionIndex} />}
+      {allActions.length > 0 && (
+        <ActionMarkers actions={allActions} highlightedIndex={highlightedActionIndex} />
+      )}
 
       {isActive && mode === "select" && (
         <>
@@ -338,9 +325,20 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         </>
       )}
 
-      {isActive && mode === "edit" && <EditMode addAction={addAction} hostElement={hostElement} natsClient={natsClient} shadowRoot={shadowRoot} />}
-      {isActive && mode === "resize" && <ResizeMode addAction={addAction} hostElement={hostElement} />}
-      {isActive && mode === "style" && <StylePanel addAction={addAction} hostElement={hostElement} />}
+      {isActive && mode === "edit" && (
+        <EditMode
+          addAction={addAction}
+          hostElement={hostElement}
+          natsClient={natsClient}
+          shadowRoot={shadowRoot}
+        />
+      )}
+      {isActive && mode === "resize" && (
+        <ResizeMode addAction={addAction} hostElement={hostElement} />
+      )}
+      {isActive && mode === "style" && (
+        <StylePanel addAction={addAction} hostElement={hostElement} />
+      )}
     </>
   );
 }

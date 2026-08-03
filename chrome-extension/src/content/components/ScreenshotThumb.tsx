@@ -7,10 +7,7 @@ export function ScreenshotThumb({ base64 }: ScreenshotThumbProps) {
 
   return (
     <div className="cs-popup-thumb">
-      <img
-        src={`data:image/jpeg;base64,${base64}`}
-        alt="Element screenshot"
-      />
+      <img src={`data:image/jpeg;base64,${base64}`} alt="Element screenshot" />
     </div>
   );
 }

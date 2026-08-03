@@ -3,11 +3,11 @@
  * Parses git clone --progress stderr for progress percentage.
  */
 
-import { spawn, execSync } from "child_process";
-import fs from "fs";
-import path from "path";
-import os from "os";
-import { BrowserWindow } from "electron";
+import { execSync, spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { BrowserWindow } from "electron";
 
 const PROJECTS_DIR = path.join(os.homedir(), ".vex", "projects");
 const GITHUB_URL_RE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/;
@@ -48,7 +48,7 @@ function extractRepoName(url: string): string {
 }
 
 function resolveDestPath(repoName: string): string {
-  let destPath = path.join(PROJECTS_DIR, repoName);
+  const destPath = path.join(PROJECTS_DIR, repoName);
   if (!fs.existsSync(destPath)) return destPath;
 
   let suffix = 2;
@@ -60,14 +60,17 @@ function resolveDestPath(repoName: string): string {
 
 export async function cloneRepo(
   url: string,
-  win: BrowserWindow | null
+  win: BrowserWindow | null,
 ): Promise<CloneResult | CloneError> {
   if (!isGitAvailable()) {
     return { success: false, error: "Git is not installed on your computer." };
   }
 
   if (!GITHUB_URL_RE.test(url)) {
-    return { success: false, error: "Invalid GitHub URL. Expected format: https://github.com/owner/repo" };
+    return {
+      success: false,
+      error: "Invalid GitHub URL. Expected format: https://github.com/owner/repo",
+    };
   }
 
   ensureProjectsDir();
@@ -93,9 +96,15 @@ export async function cloneRepo(
 
     child.on("error", (err) => {
       if ((err as NodeJS.ErrnoException).code === "ENOSPC") {
-        resolve({ success: false, error: "Not enough disk space. Free up some space and try again." });
+        resolve({
+          success: false,
+          error: "Not enough disk space. Free up some space and try again.",
+        });
       } else {
-        resolve({ success: false, error: "Could not access this repository. Check the URL and try again." });
+        resolve({
+          success: false,
+          error: "Could not access this repository. Check the URL and try again.",
+        });
       }
     });
 
@@ -104,7 +113,10 @@ export async function cloneRepo(
         sendProgress(win, "cloning", 100, "Clone complete.");
         resolve({ success: true, projectPath: destPath, repoName });
       } else {
-        resolve({ success: false, error: "Could not access this repository. Check the URL and try again." });
+        resolve({
+          success: false,
+          error: "Could not access this repository. Check the URL and try again.",
+        });
       }
     });
   });

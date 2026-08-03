@@ -49,9 +49,7 @@ POLL_INTERVAL = 1.0
 def port_pids(port: int) -> list[int]:
     """PIDs listening on a TCP port; empty when the port is free."""
     try:
-        out = subprocess.run(
-            ["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=5
-        )
+        out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=5)
     except Exception:
         return []
     return [int(p) for p in out.stdout.split() if p.strip().isdigit()]
@@ -64,9 +62,7 @@ def occupancy() -> dict[str, list[int]]:
 
 def describe(pid: int) -> str:
     try:
-        out = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "comm="], capture_output=True, text=True, timeout=5
-        )
+        out = subprocess.run(["ps", "-p", str(pid), "-o", "comm="], capture_output=True, text=True, timeout=5)
         return out.stdout.strip() or "?"
     except Exception:
         return "?"
@@ -103,9 +99,7 @@ def read_state() -> dict:
 def write_state(pid: int) -> None:
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(
-            json.dumps({"pid": pid, "started": time.strftime("%Y-%m-%d %H:%M:%S")})
-        )
+        STATE_FILE.write_text(json.dumps({"pid": pid, "started": time.strftime("%Y-%m-%d %H:%M:%S")}))
     except Exception:
         pass
 
@@ -145,8 +139,14 @@ def add_placement_rules(space: int) -> bool:
     for label, app in PLACEMENT_RULES:
         added = wm.run(
             [
-                "yabai", "-m", "rule", "--add", "--one-shot",
-                f"label={label}", f"app={app}", f"space={space}",
+                "yabai",
+                "-m",
+                "rule",
+                "--add",
+                "--one-shot",
+                f"label={label}",
+                f"app={app}",
+                f"space={space}",
             ]
         )
         ok = ok and added is not None
@@ -290,12 +290,8 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status", help="report which dev-environment ports are in use")
     start = sub.add_parser("start", help="start the dev environment")
-    start.add_argument(
-        "--no-chrome", action="store_true", help="skip Chrome (no extension testing)"
-    )
-    start.add_argument(
-        "--force", action="store_true", help="start even though ports are occupied"
-    )
+    start.add_argument("--no-chrome", action="store_true", help="skip Chrome (no extension testing)")
+    start.add_argument("--force", action="store_true", help="start even though ports are occupied")
     sub.add_parser("stop", help="stop the instance started by dev-env.py")
 
     args = parser.parse_args()

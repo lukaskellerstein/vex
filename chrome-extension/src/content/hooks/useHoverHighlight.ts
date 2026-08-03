@@ -23,10 +23,7 @@ export interface HoverInfo {
   element: Element;
 }
 
-export function useHoverHighlight(
-  state: SelectionState,
-  hostId: string,
-) {
+export function useHoverHighlight(state: SelectionState, hostId: string) {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const hoveredRef = useRef<Element | null>(null);
 

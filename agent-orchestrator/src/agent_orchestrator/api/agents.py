@@ -1,17 +1,15 @@
 """Agent endpoints (T026)."""
 
+import asyncio
 import json
 from datetime import UTC, datetime
-
-from agent_orchestrator.utils.ids import generate_agent_id
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.models.agent import Agent, AgentCreate, ContinueRequest, HeartbeatRequest
 from agent_orchestrator.services import batch_processor, nats_service
-
-import asyncio
+from agent_orchestrator.utils.ids import generate_agent_id
 
 router = APIRouter(tags=["agents"])
 
@@ -96,12 +94,15 @@ async def register_agent(body: AgentCreate):
     row = await cursor.fetchone()
     agent_data = _row_to_agent(row)
 
-    await nats_service.publish("vex.project.events", {
-        "event": "agent_registered",
-        "project_id": agent_data.get("project_id"),
-        "agent": agent_data,
-        "timestamp": now,
-    })
+    await nats_service.publish(
+        "vex.project.events",
+        {
+            "event": "agent_registered",
+            "project_id": agent_data.get("project_id"),
+            "agent": agent_data,
+            "timestamp": now,
+        },
+    )
 
     return agent_data
 
@@ -180,11 +181,11 @@ async def get_subagent_transcript(agent_id: str, subagent_id: str):
 
     try:
         steps, skipped, prompt = transcript_parser.parse_transcript(transcript_path)
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         raise HTTPException(
             status_code=422,
             detail=f"Transcript file not found at {transcript_path}",
-        )
+        ) from err
 
     # Compute duration from started_at / completed_at timestamps
     duration_ms = None
@@ -229,7 +230,7 @@ async def get_agent_trace(agent_id: str):
         "SELECT prompt, created_at FROM tasks WHERE agent_id = ? ORDER BY created_at ASC",
         (agent_id,),
     )
-    task_rows = await task_cursor.fetchall()
+    task_rows = list(await task_cursor.fetchall())
 
     traces = []
     for idx, row in enumerate(trace_rows):
@@ -242,37 +243,41 @@ async def get_agent_trace(agent_id: str):
         steps = []
         for s in step_rows:
             metadata = json.loads(s["metadata"]) if s["metadata"] else None
-            steps.append({
-                "id": s["id"],
-                "sequence_index": s["sequence_index"],
-                "type": s["type"],
-                "content": s["content"],
-                "metadata": metadata,
-                "duration_ms": s["duration_ms"],
-                "token_count": s["token_count"],
-                "created_at": s["created_at"],
-            })
+            steps.append(
+                {
+                    "id": s["id"],
+                    "sequence_index": s["sequence_index"],
+                    "type": s["type"],
+                    "content": s["content"],
+                    "metadata": metadata,
+                    "duration_ms": s["duration_ms"],
+                    "token_count": s["token_count"],
+                    "created_at": s["created_at"],
+                }
+            )
 
         # Match prompt from task by index (tasks and traces created in same order)
         prompt = task_rows[idx]["prompt"] if idx < len(task_rows) else None
 
-        traces.append({
-            "id": row["id"],
-            "batch_id": row["batch_id"],
-            "agent_id": row["agent_id"],
-            "agent_name": row["agent_name"],
-            "agent_model": row["agent_model"],
-            "prompt": prompt,
-            "status": row["status"],
-            "total_duration_ms": row["total_duration_ms"],
-            "total_cost_usd": row["total_cost_usd"],
-            "total_tokens": row["total_tokens"],
-            "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
-            "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
-            "steps": steps,
-            "created_at": row["created_at"],
-            "completed_at": row["completed_at"],
-        })
+        traces.append(
+            {
+                "id": row["id"],
+                "batch_id": row["batch_id"],
+                "agent_id": row["agent_id"],
+                "agent_name": row["agent_name"],
+                "agent_model": row["agent_model"],
+                "prompt": prompt,
+                "status": row["status"],
+                "total_duration_ms": row["total_duration_ms"],
+                "total_cost_usd": row["total_cost_usd"],
+                "total_tokens": row["total_tokens"],
+                "input_tokens": row["input_tokens"] if "input_tokens" in row.keys() else None,
+                "output_tokens": row["output_tokens"] if "output_tokens" in row.keys() else None,
+                "steps": steps,
+                "created_at": row["created_at"],
+                "completed_at": row["completed_at"],
+            }
+        )
 
     return {
         "agent_id": agent_id,
@@ -364,7 +369,7 @@ async def get_agent_logs(
     # Try live logs from batch processor
     live_logs = batch_processor.get_logs(agent_id)
     if live_logs:
-        return live_logs[offset:offset + limit]
+        return live_logs[offset : offset + limit]
 
     return []
 
@@ -379,11 +384,14 @@ async def deregister_agent(agent_id: str):
     await db.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
     await db.commit()
 
-    await nats_service.publish("vex.project.events", {
-        "event": "agent_deregistered",
-        "agent_id": agent_id,
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
+    await nats_service.publish(
+        "vex.project.events",
+        {
+            "event": "agent_deregistered",
+            "agent_id": agent_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -411,9 +419,7 @@ async def start_agent(agent_id: str):
     if await cursor.fetchone() is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    await db.execute(
-        "UPDATE agents SET status = 'starting' WHERE id = ?", (agent_id,)
-    )
+    await db.execute("UPDATE agents SET status = 'starting' WHERE id = ?", (agent_id,))
     await db.commit()
 
     cursor = await db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,))
@@ -442,9 +448,7 @@ async def stop_agent(agent_id: str):
     # If no active session to abort, go straight to 'stopped'
     # (orphaned record from AO restart or already finishing)
     final_status = "stopping" if aborted else "stopped"
-    await db.execute(
-        "UPDATE agents SET status = ? WHERE id = ?", (final_status, agent_id)
-    )
+    await db.execute("UPDATE agents SET status = ? WHERE id = ?", (final_status, agent_id))
     await db.commit()
 
     cursor = await db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,))

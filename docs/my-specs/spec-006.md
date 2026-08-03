@@ -28,7 +28,7 @@ When the Chrome extension submits a batch of visual edits via `POST /api/project
 
 Module-level singleton. Core logic:
 
-```
+```text
 process_batch(project_id, batch_id):
   1. Get project info (path, framework, styling_approach)
   2. Load batch actions from DB
@@ -56,11 +56,14 @@ Also exposes:
 **File:** `agent-orchestrator/src/agent_orchestrator/adapters/claude_code_sdk.py`
 
 Add a `steps: list[dict]` field to `SDKAgentSession` alongside `log_buffer`. Each step is:
+
 ```python
-{"type": "text"|"tool_use"|"tool_result"|"progress"|"error"|"completed",
- "content": str,
- "timestamp": str,
- "status": "past"|"current"|"pending"}
+{
+    "type": "text" | "tool_use" | "tool_result" | "progress" | "error" | "completed",
+    "content": str,
+    "timestamp": str,
+    "status": "past" | "current" | "pending",
+}
 ```
 
 In `send_task()`, when processing messages:
@@ -76,6 +79,7 @@ The last non-completed step has status="current", all prior have "past".
 **File:** `agent-orchestrator/src/agent_orchestrator/api/batches.py`
 
 After `await db.commit()` (line 83), add:
+
 ```python
 asyncio.create_task(batch_processor.process_batch(project_id, batch_id))
 ```
@@ -90,6 +94,7 @@ Add endpoint `GET /projects/{project_id}/batches/{batch_id}/task` → returns al
 @router.get("/agents/{agent_id}/logs")
 async def get_agent_logs(agent_id: str):
     return batch_processor.get_logs(agent_id)
+
 
 @router.get("/agents/{agent_id}/steps")
 async def get_agent_steps(agent_id: str):

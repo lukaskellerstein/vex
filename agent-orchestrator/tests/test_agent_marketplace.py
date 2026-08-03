@@ -22,19 +22,20 @@ from pathlib import Path
 
 import anyio
 from claude_agent_sdk import (
-    ClaudeSDKClient,
-    ClaudeAgentOptions,
     AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
     ResultMessage,
     SystemMessage,
     TextBlock,
     ToolUseBlock,
 )
+from claude_agent_sdk.types import SdkPluginConfig
 
 # Add src to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from agent_orchestrator.adapters.claude_code_sdk import load_config, get_agent_profile
+from agent_orchestrator.adapters.claude_code_sdk import get_agent_profile, load_config
 from agent_orchestrator.services import marketplace as marketplace_service
 from agent_orchestrator.services.agent_logger import AgentFileLogger
 
@@ -97,10 +98,7 @@ def parse_jsonl_log(log_path: Path) -> tuple[list[str], list[str], int, int]:
             if tool_name == "Skill":
                 skills.append(tool_input.get("skill", ""))
             elif tool_name == "Agent":
-                agents.append(
-                    tool_input.get("subagent_type", "")
-                    or tool_input.get("description", "")
-                )
+                agents.append(tool_input.get("subagent_type", "") or tool_input.get("description", ""))
         elif rtype == "text":
             text_block_count += 1
 
@@ -111,7 +109,7 @@ async def run_test(
     test_name: str,
     prompt: str,
     profile: dict,
-    plugins: list[dict],
+    plugins: list[SdkPluginConfig],
     workdir: Path,
     expect_skills: list[str] | None = None,
     expect_agents: list[str] | None = None,
@@ -199,19 +197,13 @@ async def run_test(
                         if loaded_mcp:
                             log("INIT", f"MCP servers ({len(loaded_mcp)}):")
                             for m in loaded_mcp:
-                                name = (
-                                    m.get("name", "?")
-                                    if isinstance(m, dict)
-                                    else str(m)
-                                )
+                                name = m.get("name", "?") if isinstance(m, dict) else str(m)
                                 log("MCP", f"  {name}")
 
                 elif isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock):
-                            input_preview = (
-                                json.dumps(block.input)[:500] if block.input else ""
-                            )
+                            input_preview = json.dumps(block.input)[:500] if block.input else ""
                             file_logger.event(
                                 "tool_call",
                                 input_preview,
@@ -223,9 +215,7 @@ async def run_test(
                                 skill = block.input.get("skill", "?")
                                 log("SKILL", f">>> {skill}")
                             elif block.name == "Agent" and block.input:
-                                atype = block.input.get(
-                                    "subagent_type", ""
-                                ) or block.input.get("description", "?")
+                                atype = block.input.get("subagent_type", "") or block.input.get("description", "?")
                                 log("AGENT", f">>> {atype}")
                             else:
                                 log("TOOL", block.name)
@@ -678,9 +668,7 @@ async def main() -> None:
         status = f"{GREEN}PASS{RESET}" if passed else f"{RED}FAIL{RESET}"
         print(f"  [{status}] {name}")
 
-    print(
-        f"\n  {BOLD}Total: {total} | Passed: {passed_count} | Failed: {failed_count}{RESET}"
-    )
+    print(f"\n  {BOLD}Total: {total} | Passed: {passed_count} | Failed: {failed_count}{RESET}")
 
     if failed_count > 0:
         print(f"\n  {RED}Some tests failed. Check output above for details.{RESET}")

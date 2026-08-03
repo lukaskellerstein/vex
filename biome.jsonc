@@ -1,0 +1,94 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
+  // This file is .jsonc, not .json, deliberately: biome 2.5.5 SILENTLY IGNORES
+  // a biome.json that contains comments — no error, no warning, it just runs
+  // on full defaults (measured; only an explicit --config-path makes the parse
+  // error loud). Keep the .jsonc extension or strip every comment.
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "html": {
+    // Biome 2.5.5's HTML formatter is EXPERIMENTAL and off by default
+    // upstream — this flag is the whole opt-in (enabled 2026-08-02; without
+    // it biome passes .html through untouched, measured). Not HTML inside
+    // .vue/.svelte — biome formats those as whole files anyway. Being
+    // experimental, the output style may shift on a biome upgrade — eyeball
+    // an .html diff after any bump.
+    "formatter": {
+      "enabled": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // Trimmed 2026-08-02, each entry measured against biome 2.5.5: what
+      // stays either auto-fixes on :w or catches probable real bugs
+      // (correctness/* — unused imports and variables are how wrong-variable
+      // bugs surface). What's off is convention with no safe fix — findings
+      // that sit in the gutter until a human rewrites working code.
+      "correctness": {
+        // Active only when package.json declares react (biome's react domain).
+        // Fires on every deliberate mount-only effect (deps: []), which is
+        // routine correct React, and its fix is unsafe — adding the deps
+        // changes when the effect re-runs — so it can never self-resolve on
+        // :w. Measured on 2.5.5. The other react-domain rules (conditional
+        // hooks etc.) stay on: they are silent on correct code.
+        "useExhaustiveDependencies": "off"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "off",
+        // `any` is a deliberate escape hatch, not a bug; no fix exists.
+        "noExplicitAny": "off",
+        // Fires on `list.forEach((x) => doThing(x))` — an expression-bodied
+        // arrow "returns" a value forEach ignores. Mundane code, no fix.
+        "useIterableCallbackReturn": "off"
+      },
+      "style": {
+        // `!` is routine TS; the suggested fix is unsafe (changes types).
+        "noNonNullAssertion": "off",
+        // String concatenation → template literal; unsafe fix, pure style.
+        "useTemplate": "off"
+      },
+      // Four unfixable findings on a 15-line component (useKeyWithClickEvents,
+      // noStaticElementInteractions, useAltText, useButtonType). Flip this
+      // back on per-repo for public-facing production UI.
+      "a11y": "off"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Enabling html.formatter above ALSO hands biome every .svg — measured
+      // on 2.5.5 (one repo: the flag pulled in 4 .html and 14 .svg). biome
+      // reformats the CSS inside an SVG's <style> as it would a stylesheet, so
+      // the compact one-line rules hand-authored and exported SVG normally
+      // carries explode to multi-line: a large diff on an artwork file for no
+      // correctness gain.
+      //
+      // This is a CLI/CI concern, not a :w one — `svg` is not in BIOME_FT in
+      // lua/plugins/formatting.lua, so conform never runs biome on an SVG
+      // buffer. What the block buys is `biome check .` staying honest: without
+      // it those 14 files are counted as format errors by every manual and CI
+      // run. Delete it in a repo whose SVGs are source you want formatted.
+      "includes": ["**/*.svg"],
+      "formatter": {
+        "enabled": false
+      }
+    }
+  ]
+}

@@ -11,7 +11,7 @@
 
 ## Repository Structure
 
-```
+```text
 vex/
 ├── chrome-extension/    # Chrome Extension (TypeScript, React, Vite)
 ├── agent-orchestrator/  # AgentManager (Python, FastAPI)
@@ -49,7 +49,8 @@ nats-server -p 4222 --websocket_port 4223 --websocket_no_tls
 ```
 
 Or use the nats-server config file:
-```
+
+```text
 listen: 0.0.0.0:4222
 websocket {
   listen: "0.0.0.0:4223"

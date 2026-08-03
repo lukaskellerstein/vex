@@ -35,6 +35,17 @@ venv/
 # Environment
 .env*
 !.env.example
+.envrc
+
+# Secrets — never committed, encrypted or not (.claude/rules/12-security.md)
+*.key
+*.pem
+*.agekey
+keys.txt
+.agent-token
+
+# Claude Code machine-local overrides
+.claude/settings.local.json
 
 # Vite
 .vite/

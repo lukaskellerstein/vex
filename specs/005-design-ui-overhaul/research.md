@@ -50,7 +50,8 @@
 
 **Rationale**: Analysis of existing vs. required APIs:
 
-### Existing APIs (sufficient):
+### Existing APIs (sufficient)
+
 - `GET /api/projects` — list projects ✓
 - `GET /api/projects/:id` — project detail ✓
 - `POST /api/projects` — create project ✓
@@ -66,7 +67,8 @@
 - `PATCH /api/config` — update config ✓
 - `GET /api/health` — health check ✓
 
-### Missing APIs (need to add):
+### Missing APIs (need to add)
+
 - `GET /api/activity` — activity event timeline (with filters: project, type, time range)
 - `GET /api/agents/:id/logs` — agent execution logs (endpoint exists in IPC but returns 404 from backend — no route implemented)
 - `GET /api/batches/:batchId/trace` — agent execution trace for a batch
@@ -74,12 +76,14 @@
 - `GET /api/projects/:id/batches` needs extension — missing `page_url`, `duration_ms`, `cost_usd`, `error_message` fields on batch summary
 - `GET /api/tasks` — list all tasks (currently only `GET /api/tasks/pending`)
 
-### Missing DB tables (need to add):
+### Missing DB tables (need to add)
+
 - `activity_events` — stores cross-component events for the activity timeline
 - `agent_logs` — stores agent runtime log entries
 - `agent_traces` / `trace_steps` — stores agent execution traces and their steps
 
-### IPC additions needed:
+### IPC additions needed
+
 - `get-batches` — list batches for a project (currently only available via direct API)
 - `get-batch` — get batch detail
 - `get-activity` — get activity events

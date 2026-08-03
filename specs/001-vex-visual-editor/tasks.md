@@ -270,7 +270,7 @@
 
 ## Parallel Example: Foundational Phase
 
-```
+```text
 # Launch all models in parallel:
 Task: "Create Project model in agent-orchestrator/src/agent_orchestrator/models/project.py"
 Task: "Create Agent model in agent-orchestrator/src/agent_orchestrator/models/agent.py"
@@ -284,7 +284,7 @@ Task: "Build floating toolbar in chrome-extension/src/content/components/Toolbar
 
 ## Parallel Example: Independent Extension Modes (after Foundational)
 
-```
+```text
 # These four modes have zero dependencies on each other:
 Task: "Implement Resize Mode in chrome-extension/src/content/components/ResizeMode.tsx"
 Task: "Implement Style Panel in chrome-extension/src/content/components/StylePanel.tsx"

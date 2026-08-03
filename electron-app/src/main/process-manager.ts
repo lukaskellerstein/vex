@@ -1,11 +1,11 @@
-import { ChildProcess, execSync, spawn } from "child_process";
-import { EventEmitter } from "events";
+import { type ChildProcess, execSync, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import http from "node:http";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { app } from "electron";
-import path from "path";
-import net from "net";
-import fs from "fs";
-import http from "http";
-import os from "os";
 import { getEnhancedPath } from "./system-path.js";
 
 interface ManagedProcess {
@@ -40,9 +40,7 @@ export class ProcessManager extends EventEmitter {
   }
 
   async stopAll(): Promise<void> {
-    const stopPromises = Array.from(this.processes.keys()).map((name) =>
-      this.stopProcess(name)
-    );
+    const stopPromises = Array.from(this.processes.keys()).map((name) => this.stopProcess(name));
     await Promise.all(stopPromises);
     this.removeNatsPidFile();
     this.natsHealthy = false;
@@ -53,7 +51,7 @@ export class ProcessManager extends EventEmitter {
     if (managed && managed.restartCount >= MAX_RESTART_ATTEMPTS) {
       this.emit(
         "error",
-        `Process "${name}" exceeded max restart attempts (${MAX_RESTART_ATTEMPTS})`
+        `Process "${name}" exceeded max restart attempts (${MAX_RESTART_ATTEMPTS})`,
       );
       return;
     }
@@ -91,7 +89,7 @@ export class ProcessManager extends EventEmitter {
   // --- T011: Resolve bundled NATS binary by platform ---
   private resolveNatsBinary(): string | null {
     const platform = process.platform; // "linux", "darwin", "win32"
-    const arch = process.arch;         // "x64", "arm64"
+    const arch = process.arch; // "x64", "arm64"
 
     let dirName: string;
     let binaryName = "nats-server";
@@ -174,7 +172,7 @@ export class ProcessManager extends EventEmitter {
 
       const pidStr = fs.readFileSync(NATS_PID_FILE, "utf8").trim();
       const pid = parseInt(pidStr, 10);
-      if (isNaN(pid)) {
+      if (Number.isNaN(pid)) {
         this.removeNatsPidFile();
         return;
       }
@@ -260,11 +258,9 @@ export class ProcessManager extends EventEmitter {
     this.writeNatsConfig();
 
     return new Promise((resolve, reject) => {
-      const child = spawn(
-        natsBinary,
-        ["-c", NATS_CONF_FILE],
-        { stdio: ["ignore", "pipe", "pipe"] }
-      );
+      const child = spawn(natsBinary, ["-c", NATS_CONF_FILE], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
       this.trackProcess("nats-server", child);
 
@@ -297,7 +293,7 @@ export class ProcessManager extends EventEmitter {
       const child = spawn(
         pythonBin,
         ["-m", "uvicorn", "agent_orchestrator.main:app", "--port", "8420"],
-        { cwd, env, stdio: ["ignore", "pipe", "pipe"] }
+        { cwd, env, stdio: ["ignore", "pipe", "pipe"] },
       );
 
       this.trackProcess("agent-manager", child);
@@ -324,7 +320,7 @@ export class ProcessManager extends EventEmitter {
         process.resourcesPath,
         "python",
         process.platform === "win32" ? "" : "bin",
-        pythonName
+        pythonName,
       );
       // AO is shipped as source (not installed) so config.json resolves relative
       // to src/agent_orchestrator/.../claude_code_sdk.py (parents[3]/config.json).
@@ -383,10 +379,7 @@ export class ProcessManager extends EventEmitter {
     });
 
     child.on("exit", (code, signal) => {
-      this.emit(
-        "log",
-        `[${name}] exited with code=${code} signal=${signal}`
-      );
+      this.emit("log", `[${name}] exited with code=${code} signal=${signal}`);
       this.processes.delete(name);
 
       if (name === "nats-server") {

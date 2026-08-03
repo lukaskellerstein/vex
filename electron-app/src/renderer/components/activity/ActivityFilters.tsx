@@ -1,5 +1,5 @@
-import React from "react";
-import { Search, ChevronDown, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
+import type React from "react";
 
 export type EventTypeFilter = "all" | "batch" | "task" | "agent" | "server";
 
@@ -28,9 +28,7 @@ export function ActivityFilters({
   resultCount,
 }: ActivityFiltersProps) {
   const isFiltered =
-    filters.projectId !== "all" ||
-    filters.eventType !== "all" ||
-    filters.search !== "";
+    filters.projectId !== "all" || filters.eventType !== "all" || filters.search !== "";
 
   function handleClear() {
     onFiltersChange({ projectId: "all", eventType: "all", search: "" });
@@ -54,9 +52,7 @@ export function ActivityFilters({
       <SelectWrapper>
         <select
           value={filters.projectId}
-          onChange={(e) =>
-            onFiltersChange({ ...filters, projectId: e.target.value })
-          }
+          onChange={(e) => onFiltersChange({ ...filters, projectId: e.target.value })}
           style={{ ...selectStyle, minWidth: "160px" }}
         >
           <option value="all">All Projects</option>
@@ -124,9 +120,7 @@ export function ActivityFilters({
         <input
           type="text"
           value={filters.search}
-          onChange={(e) =>
-            onFiltersChange({ ...filters, search: e.target.value })
-          }
+          onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
           placeholder="Search events..."
           style={{
             height: "28px",
@@ -218,8 +212,6 @@ const selectStyle: React.CSSProperties = {
 
 function SelectWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-      {children}
-    </div>
+    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>{children}</div>
   );
 }

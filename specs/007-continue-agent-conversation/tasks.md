@@ -37,7 +37,8 @@
 - [x] T008 Modify `get_agent_trace()` in `agent-orchestrator/src/agent_orchestrator/api/agents.py` to return all traces for the agent ordered by `created_at ASC` — response shape changes to `{"agent_id": ..., "traces": [...]}`; each trace includes its steps and associated task prompt
 
 **Checkpoint**: Backend fully supports continue + multi-trace. Verify with curl:
-```
+
+```text
 POST /api/agents/{id}/continue → 200 for terminal, 409 for running
 GET /api/agents/{id}/trace → returns traces array
 ```
@@ -74,7 +75,7 @@ GET /api/agents/{id}/trace → returns traces array
 
 - [x] T016 [US2] Modify completion notification in `chrome-extension/src/content/components/AgentCursors.tsx` — when agent completes/fails, show a notification badge on the cursor with status icon, agent name, and a reply/chat button (instead of immediately starting fade-out)
 - [x] T017 [US2] Add floating input panel component in `chrome-extension/src/content/components/AgentCursors.tsx` — textarea + Send button + dismiss button, anchored near cursor position, Catppuccin Mocha themed, appears when reply button is clicked
-- [x] T018 [US2] Implement continue HTTP call in `chrome-extension/src/content/components/AgentCursors.tsx` — on Send: `fetch(\`http://localhost:8420/api/agents/${agentId}/continue\`, { method: "POST", body: JSON.stringify({ message }) })`, handle success/error
+- [x] T018 [US2] Implement continue HTTP call in `chrome-extension/src/content/components/AgentCursors.tsx` — on Send: `fetch(\`<http://localhost:8420/api/agents/${agentId}/continue\`>, { method: "POST", body: JSON.stringify({ message }) })`, handle success/error
 - [x] T019 [US2] Update `completedAgentIdsRef` resurrection logic in `chrome-extension/src/content/components/AgentCursors.tsx` — when user sends a continue message, remove `agentId` from `completedAgentIdsRef` so the agent can transition back to "running" state with animated cursor
 - [x] T020 [US2] Handle dismiss without reply in `chrome-extension/src/content/components/AgentCursors.tsx` — clicking dismiss button proceeds with normal fade-out (existing behavior), closing the floating panel without sending
 
@@ -126,7 +127,7 @@ GET /api/agents/{id}/trace → returns traces array
 
 ### Within Phase 2 (Foundational)
 
-```
+```text
 T001 ─┐
 T002 ─┤ (parallel: different files)
       ↓
@@ -149,7 +150,7 @@ T003 → T004 → T005 (sequential: same file, refactor then implement)
 
 ## Parallel Example: User Story 1
 
-```
+```text
 # Launch IPC bridge tasks in parallel:
 Task T009: "Add continueAgent IPC method in preload.ts"
 Task T010: "Add continueAgent type declaration in electron.d.ts"

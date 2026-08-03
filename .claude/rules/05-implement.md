@@ -12,6 +12,8 @@ Write clean code from the start. Follow these rules during implementation:
 - Refactor continuously — improve code structure immediately when you see issues
 - Remove dead code — delete unused functions, variables, imports, and commented code
 - After writing code: review comments, clean up imports, check for side effects
+- Before changing a signature, `findReferences` rather than grep — a missed
+  caller is a runtime break: [`lsp.md`](lsp.md).
 
 ## Development Environment
 

@@ -65,9 +65,7 @@ function getStyleSubset(
 ): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key of keys) {
-    result[key] = computed.getPropertyValue(
-      key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()),
-    );
+    result[key] = computed.getPropertyValue(key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
   }
   return result;
 }
@@ -85,17 +83,14 @@ export function CopyStyle({ addAction, hostElement }: CopyStyleProps) {
     }
   }, []);
 
-  const highlightElement = useCallback(
-    (el: Element, color: string) => {
-      const htmlEl = el as HTMLElement;
-      const prev = htmlEl.style.outline;
-      htmlEl.style.outline = `2px solid ${color}`;
-      return () => {
-        htmlEl.style.outline = prev;
-      };
-    },
-    [],
-  );
+  const highlightElement = useCallback((el: Element, color: string) => {
+    const htmlEl = el as HTMLElement;
+    const prev = htmlEl.style.outline;
+    htmlEl.style.outline = `2px solid ${color}`;
+    return () => {
+      htmlEl.style.outline = prev;
+    };
+  }, []);
 
   const flashElement = useCallback((el: Element) => {
     const htmlEl = el as HTMLElement;
@@ -149,10 +144,7 @@ export function CopyStyle({ addAction, hostElement }: CopyStyleProps) {
         const htmlTarget = target as HTMLElement;
         const copiedProperties = sourceStylesRef.current;
         for (const [prop, value] of Object.entries(copiedProperties)) {
-          const cssProp = prop.replace(
-            /[A-Z]/g,
-            (m) => "-" + m.toLowerCase(),
-          );
+          const cssProp = prop.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
           htmlTarget.style.setProperty(cssProp, value);
         }
 

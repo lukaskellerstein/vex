@@ -13,7 +13,7 @@
  * config.json resolution (parents[3]/config.json) keeps working.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, rmSync, cpSync, realpathSync, symlinkSync, globSync } from "node:fs";
+import { cpSync, existsSync, globSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 

@@ -62,12 +62,14 @@ The Claude Agent SDK (v0.1.53) natively supports multi-turn via `session_id`. Se
 ## 5. Electron App: IPC bridge
 
 **File**: `electron-app/src/main/preload.ts`
+
 ```typescript
 continueAgent: (agentId: string, message: string) =>
   ipcRenderer.invoke("continue-agent", agentId, message),
 ```
 
 **File**: `electron-app/src/main/index.ts`
+
 ```typescript
 ipcMain.handle("continue-agent", async (_event, agentId: string, message: string) => {
   return apiPost(`/api/agents/${agentId}/continue`, { message });
@@ -75,6 +77,7 @@ ipcMain.handle("continue-agent", async (_event, agentId: string, message: string
 ```
 
 **File**: `electron-app/src/renderer/electron.d.ts`
+
 ```typescript
 continueAgent: (agentId: string, message: string) => Promise<any>;
 ```

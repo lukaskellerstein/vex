@@ -1,5 +1,3 @@
-import React from "react";
-
 interface FrameworkBadgeProps {
   framework: string | null;
 }

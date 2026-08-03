@@ -1,13 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronDown, Radio } from "lucide-react";
-import { ActivityStats, type ActivityStatsData } from "../components/activity/ActivityStats";
-import {
-  ActivityFilters,
-  type ActivityFiltersState,
-  type EventTypeFilter,
-} from "../components/activity/ActivityFilters";
-import { ActivityTimeline } from "../components/activity/ActivityTimeline";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TimelineEvent } from "../components/activity/ActivityEntry";
+import { ActivityFilters, type ActivityFiltersState } from "../components/activity/ActivityFilters";
+import { ActivityStats, type ActivityStatsData } from "../components/activity/ActivityStats";
+import { ActivityTimeline } from "../components/activity/ActivityTimeline";
 
 type TimeRange = "last-30m" | "last-2h" | "last-24h" | "last-7d" | "all";
 
@@ -65,9 +61,7 @@ export function Activity() {
       if (Array.isArray(activityData)) setEvents(activityData);
       if (statsData && typeof statsData === "object") setStats(statsData);
       if (Array.isArray(projectsData)) {
-        setProjects(
-          projectsData.map((p: any) => ({ id: p.id, name: p.name }))
-        );
+        setProjects(projectsData.map((p: any) => ({ id: p.id, name: p.name })));
       }
     } catch {
       // Silently handle — data will remain at previous state
@@ -100,7 +94,7 @@ export function Activity() {
       (e) =>
         e.summary.toLowerCase().includes(q) ||
         e.project_name.toLowerCase().includes(q) ||
-        (e.agent_name?.toLowerCase().includes(q) ?? false)
+        (e.agent_name?.toLowerCase().includes(q) ?? false),
     );
   }, [events, filters.search]);
 

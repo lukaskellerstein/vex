@@ -54,13 +54,18 @@ declare global {
       getAgentLogs: (agentId: string) => Promise<any[]>;
       getAgentTraceByAgent: (agentId: string) => Promise<any>;
       getAgentSubagents: (agentId: string) => Promise<SubagentMetadata[]>;
-      getSubagentTranscript: (agentId: string, subagentId: string) => Promise<SubagentTranscriptResponse>;
+      getSubagentTranscript: (
+        agentId: string,
+        subagentId: string,
+      ) => Promise<SubagentTranscriptResponse>;
       getNatsStatus: () => Promise<{ healthy: boolean }>;
       getConfig: () => Promise<Record<string, string>>;
       updateConfig: (config: Record<string, unknown>) => Promise<Record<string, string>>;
       cloneGithubRepo: (url: string) => Promise<{ path: string }>;
       installDependencies: (projectPath: string) => Promise<{ success: boolean }>;
-      onCloneProgress: (callback: (data: { phase: string; progress: number; message: string }) => void) => () => void;
+      onCloneProgress: (
+        callback: (data: { phase: string; progress: number; message: string }) => void,
+      ) => () => void;
       getBatches: (projectId: string) => Promise<any[]>;
       getBatch: (projectId: string, batchId: string) => Promise<any>;
       deleteBatch: (projectId: string, batchId: string) => Promise<void>;
@@ -68,12 +73,21 @@ declare global {
       stopAgent: (agentId: string) => Promise<any>;
       continueAgent: (agentId: string, message: string) => Promise<any>;
       getAgentTrace: (batchId: string) => Promise<any>;
-      getActivity: (filters?: { projectId?: string; type?: string; since?: string }) => Promise<any[]>;
+      getActivity: (filters?: {
+        projectId?: string;
+        type?: string;
+        since?: string;
+      }) => Promise<any[]>;
       getActivityStats: (since?: string) => Promise<any>;
       getTasks: (projectId?: string) => Promise<any[]>;
       getStorageStats: () => Promise<any>;
       clearScreenshots: () => Promise<{ deleted: number }>;
-      getAppInfo: () => Promise<{ version: string; electron: string; node: string; platform: string }>;
+      getAppInfo: () => Promise<{
+        version: string;
+        electron: string;
+        node: string;
+        platform: string;
+      }>;
       subscribeAgentSteps: (agentId: string) => Promise<{ ok: boolean; error?: string }>;
       unsubscribeAgentSteps: (agentId: string) => Promise<{ ok: boolean }>;
       onAgentStep: (callback: (data: Record<string, unknown>) => void) => () => void;

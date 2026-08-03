@@ -254,7 +254,7 @@ The Agent Orchestrator exposes a REST API on port 8420. All endpoints are prefix
 
 ## Project Structure
 
-```
+```text
 vex/
 ├── chrome-extension/              # Chrome Extension (Manifest V3)
 │   ├── src/
@@ -335,15 +335,20 @@ Contributions are welcome! Here's how to get started:
 
 1. **Fork** the repository
 2. **Create** your feature branch:
+
    ```bash
    git checkout -b feature/amazing-feature
    ```
+
 3. **Set up** the dev environment:
+
    ```bash
    ./dev-setup.sh
    ```
+
 4. **Make** your changes — follow the existing code style and conventions
 5. **Test** your changes:
+
    ```bash
    # Python
    cd agent-orchestrator && uv run pytest
@@ -352,14 +357,19 @@ Contributions are welcome! Here's how to get started:
    # Extension
    cd chrome-extension && npm run build
    ```
+
 6. **Commit** your changes with a clear message:
+
    ```bash
    git commit -m "Add amazing feature"
    ```
+
 7. **Push** to your branch:
+
    ```bash
    git push origin feature/amazing-feature
    ```
+
 8. **Open** a Pull Request
 
 ### Guidelines

@@ -5,11 +5,13 @@
 ## PopupDialog (Select Mode)
 
 ### Current State
+
 - Header: element tag + selector
 - CodeMirror instruction editor
 - Buttons: Cancel, Skip, Add
 
 ### After Change
+
 - Header: element tag + selector
 - **Screenshot thumbnail**: base64 JPEG, max 140px height, loading placeholder while capturing
 - CodeMirror instruction editor
@@ -20,10 +22,12 @@
 ## ResizeMode Hover
 
 ### Current State
+
 - No hover feedback before element selection
 - Selection border appears only after click
 
 ### After Change
+
 - **Hover border**: visible border on mouseover (similar to select mode)
 - Hover suppressed when element is selected (handles visible)
 - Hover label showing element tag/class
@@ -33,6 +37,7 @@
 ## StylePanel
 
 ### Current State
+
 - Fixed position, auto-computed placement (right/left/center of element)
 - Header: "Style Editor" title + close button (×)
 - Not draggable
@@ -40,6 +45,7 @@
 - No copy-style integration
 
 ### After Change
+
 - **Draggable**: header acts as drag handle (excluding close button)
 - Position constrained to viewport
 - **Selection border**: visible border on the element being styled
@@ -51,11 +57,13 @@
 ## Toolbar (On-Page Flowtable)
 
 ### Current State
+
 - Mode buttons (select, edit, resize, style, copyStyle, visibility)
 - Send button
 - Draggable
 
 ### After Change
+
 - Mode buttons: select, edit, resize, style, visibility (**copyStyle removed**)
 - Send button
 - **Expand chevron**: toggles action panel visibility
@@ -71,8 +79,10 @@
 ## Popup (Extension Icon)
 
 ### Current State
+
 - Header, ProjectSelector, Controls, ActionList, Footer
 
 ### After Change
+
 - Header, ProjectSelector, Controls, Footer
 - **ActionList removed** (relocated to on-page toolbar)

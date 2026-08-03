@@ -26,6 +26,7 @@ Aggregate activity statistics.
 - `since` (optional): ISO 8601 timestamp — compute stats from this time
 
 **Response**:
+
 ```json
 {
   "completed_batches": 12,
@@ -57,6 +58,7 @@ Get runtime log entries for an agent.
 - `offset` (optional, default 0): Pagination offset
 
 **Response**: `LogEntry[]`
+
 ```json
 [
   {
@@ -74,6 +76,7 @@ Get runtime log entries for an agent.
 Get storage usage statistics.
 
 **Response**:
+
 ```json
 {
   "database_bytes": 1048576,

@@ -68,14 +68,17 @@ class AgentFileLogger:
         self._started_at = datetime.now(UTC).isoformat()
 
         if self._jsonl_path:
-            _append_jsonl(self._jsonl_path, {
-                "type": "start",
-                "ts": self._started_at,
-                "agent_id": self.agent_id,
-                "profile": profile_name,
-                "model": model,
-                "prompt": prompt[:2000],
-            })
+            _append_jsonl(
+                self._jsonl_path,
+                {
+                    "type": "start",
+                    "ts": self._started_at,
+                    "agent_id": self.agent_id,
+                    "profile": profile_name,
+                    "model": model,
+                    "prompt": prompt[:2000],
+                },
+            )
 
         if self._html_path:
             self._html_path.write_text(
@@ -109,16 +112,19 @@ class AgentFileLogger:
             return
 
         if self._jsonl_path:
-            _append_jsonl(self._jsonl_path, {
-                "type": "config",
-                "ts": datetime.now(UTC).isoformat(),
-                "intended_plugins": intended_plugins,
-                "loaded_plugins": _names(loaded_plugins),
-                "loaded_skills": _names(loaded_skills),
-                "loaded_agents": _names(loaded_agents),
-                "tools_count": len(loaded_tools),
-                "loaded_mcp": _names(loaded_mcp),
-            })
+            _append_jsonl(
+                self._jsonl_path,
+                {
+                    "type": "config",
+                    "ts": datetime.now(UTC).isoformat(),
+                    "intended_plugins": intended_plugins,
+                    "loaded_plugins": _names(loaded_plugins),
+                    "loaded_skills": _names(loaded_skills),
+                    "loaded_agents": _names(loaded_agents),
+                    "tools_count": len(loaded_tools),
+                    "loaded_mcp": _names(loaded_mcp),
+                },
+            )
 
         if self._html_path:
             _append_html(
@@ -177,14 +183,17 @@ class AgentFileLogger:
         finished_at = datetime.now(UTC).isoformat()
 
         if self._jsonl_path:
-            _append_jsonl(self._jsonl_path, {
-                "type": "finish",
-                "ts": finished_at,
-                "status": status,
-                "cost_usd": cost_usd,
-                "duration_ms": duration_ms,
-                "events": self._event_count,
-            })
+            _append_jsonl(
+                self._jsonl_path,
+                {
+                    "type": "finish",
+                    "ts": finished_at,
+                    "status": status,
+                    "cost_usd": cost_usd,
+                    "duration_ms": duration_ms,
+                    "events": self._event_count,
+                },
+            )
 
         if self._html_path:
             _append_html(
@@ -299,20 +308,18 @@ def _html_config_section(
 
     return (
         f'<div class="config">\n'
-        f'<h2>Configuration</h2>\n'
+        f"<h2>Configuration</h2>\n"
         f'<div class="col"><div class="label">Intended Plugins</div><ul>{_li(intended)}</ul></div>\n'
         f'<div class="col"><div class="label">Loaded Plugins</div><ul>{_li(plugins)}</ul></div>\n'
         f'<div class="col"><div class="label">Skills</div><ul>{_li(skills)}</ul></div>\n'
         f'<div class="col"><div class="label">Agents</div><ul>{_li(agents)}</ul></div>\n'
         f'<div class="col"><div class="label">MCP Servers</div><ul>{_li(mcp)}</ul></div>\n'
         f'<div class="col"><div class="label">Tools</div><ul><li>{tools_count} tool(s)</li></ul></div>\n'
-        f'</div>\n'
+        f"</div>\n"
     )
 
 
-def _html_event(
-    ts: str, event_type: str, content: str, tool_name: str | None
-) -> str:
+def _html_event(ts: str, event_type: str, content: str, tool_name: str | None) -> str:
     tag_label = event_type
     if tool_name:
         tag_label = f"{event_type} ({html.escape(tool_name)})"
@@ -321,7 +328,7 @@ def _html_event(
         f'<span class="ts">{html.escape(ts)}</span>'
         f'<span class="tag tag-{html.escape(event_type)}">{html.escape(tag_label)}</span>'
         f'<span class="body">{html.escape(content[:2000])}</span>'
-        f'</div>\n'
+        f"</div>\n"
     )
 
 
@@ -334,13 +341,13 @@ def _html_footer(
 ) -> str:
     cls = "footer failed" if status != "completed" else "footer"
     return (
-        f'</div>\n'
+        f"</div>\n"
         f'<div class="{cls}">\n'
-        f'<h2>Result: {html.escape(status)}</h2>\n'
+        f"<h2>Result: {html.escape(status)}</h2>\n"
         f'<div class="stat">Finished: {html.escape(finished_at)}</div>\n'
         f'<div class="stat">Duration: {duration_ms}ms</div>\n'
         f'<div class="stat">Cost: ${cost_usd}</div>\n'
         f'<div class="stat">Events: {event_count}</div>\n'
-        f'</div>\n'
-        f'</body></html>'
+        f"</div>\n"
+        f"</body></html>"
     )

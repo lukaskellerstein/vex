@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Action } from "../shared/types";
 import type { GetStateResponse } from "../shared/messages";
-import { ConnectionStatus } from "./components/ConnectionStatus";
-import { type Project } from "./components/ProjectSelector";
-import { Controls } from "./components/Controls";
+import type { Action } from "../shared/types";
 import { BatchSelector } from "./components/BatchSelector";
+import { ConnectionStatus } from "./components/ConnectionStatus";
+import { Controls } from "./components/Controls";
+import type { Project } from "./components/ProjectSelector";
 import "./styles/popup.css";
 
-function sendToContent(
-  tabId: number | null,
-  message: Record<string, unknown>,
-): Promise<unknown> {
+function sendToContent(tabId: number | null, message: Record<string, unknown>): Promise<unknown> {
   if (!tabId) return Promise.resolve(null);
   return new Promise((resolve) => {
     chrome.tabs.sendMessage(tabId, message, (response) => {
@@ -39,10 +36,7 @@ async function ensurePersistentInjection(tabUrl: string): Promise<void> {
       {
         id: PERSISTENT_SCRIPT_ID,
         js: ["src/content/index.js"],
-        matches: LOCAL_HOSTNAMES.flatMap((host) => [
-          `http://${host}/*`,
-          `https://${host}/*`,
-        ]),
+        matches: LOCAL_HOSTNAMES.flatMap((host) => [`http://${host}/*`, `https://${host}/*`]),
         runAt: "document_idle",
         persistAcrossSessions: false,
       },
@@ -107,8 +101,10 @@ export function App() {
           const portMatches = loadedProjects.filter((p) => {
             if (!p.dev_server_url) return false;
             try {
-              return new URL(p.dev_server_url).hostname === "localhost" &&
-                new URL(p.dev_server_url).port === tabParsed.port;
+              return (
+                new URL(p.dev_server_url).hostname === "localhost" &&
+                new URL(p.dev_server_url).port === tabParsed.port
+              );
             } catch {
               return false;
             }
@@ -167,15 +163,21 @@ export function App() {
     setSelectorIsActive(false);
   }, [activeTabId]);
 
-  const handleRemove = useCallback(async (index: number) => {
-    await sendToContent(activeTabId, { action: "removeAction", index });
-    await refreshState();
-  }, [activeTabId, refreshState]);
+  const handleRemove = useCallback(
+    async (index: number) => {
+      await sendToContent(activeTabId, { action: "removeAction", index });
+      await refreshState();
+    },
+    [activeTabId, refreshState],
+  );
 
-  const handleUpdateInstruction = useCallback(async (index: number, instruction: string) => {
-    await sendToContent(activeTabId, { action: "updateInstruction", index, instruction });
-    await refreshState();
-  }, [activeTabId, refreshState]);
+  const handleUpdateInstruction = useCallback(
+    async (index: number, instruction: string) => {
+      await sendToContent(activeTabId, { action: "updateInstruction", index, instruction });
+      await refreshState();
+    },
+    [activeTabId, refreshState],
+  );
 
   useEffect(() => {
     (async () => {
@@ -279,23 +281,48 @@ function ResizeHandle() {
 // --- Action list for popup (matches toolbar style) ---
 
 import {
-  MousePointer, Type as TypeIcon, Palette, Move as MoveIcon, Copy,
-  Trash2, LayoutGrid, Image as ImageIcon, Maximize2, Scissors, PaintBucket,
+  Copy,
+  Image as ImageIcon,
+  LayoutGrid,
+  Maximize2,
+  MousePointer,
+  Move as MoveIcon,
+  PaintBucket,
+  Palette,
+  Scissors,
+  Trash2,
+  Type as TypeIcon,
 } from "lucide-react";
 
 // Aligned with chrome-extension/src/popup/components/ActionList.tsx and electron-app BatchCard.tsx
 const ACTION_COLORS: Record<string, string> = {
-  select: "#3b82f6", insert: "#22c55e", editText: "#eab308",
-  delete: "#ef4444", duplicate: "#06b6d4", move: "#8b5cf6",
-  wrap: "#64748b", resize: "#a855f7", styleChange: "#f97316",
-  replaceImage: "#ec4899", generateSection: "#14b8a6", copyStyle: "#6366f1",
+  select: "#3b82f6",
+  insert: "#22c55e",
+  editText: "#eab308",
+  delete: "#ef4444",
+  duplicate: "#06b6d4",
+  move: "#8b5cf6",
+  wrap: "#64748b",
+  resize: "#a855f7",
+  styleChange: "#f97316",
+  replaceImage: "#ec4899",
+  generateSection: "#14b8a6",
+  copyStyle: "#6366f1",
 };
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
-  select: MousePointer, insert: LayoutGrid, editText: TypeIcon,
-  delete: Trash2, duplicate: Copy, move: MoveIcon,
-  wrap: Scissors, resize: Maximize2, styleChange: Palette,
-  replaceImage: ImageIcon, generateSection: LayoutGrid, copyStyle: PaintBucket,
+  select: MousePointer,
+  insert: LayoutGrid,
+  editText: TypeIcon,
+  delete: Trash2,
+  duplicate: Copy,
+  move: MoveIcon,
+  wrap: Scissors,
+  resize: Maximize2,
+  styleChange: Palette,
+  replaceImage: ImageIcon,
+  generateSection: LayoutGrid,
+  copyStyle: PaintBucket,
 };
 
 function PopupActionList({
@@ -361,26 +388,52 @@ function PopupActionItem({
   const num = index + 1;
 
   return (
-    <div className="popup-action-item-wrapper" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+    <div
+      className="popup-action-item-wrapper"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <div
         className={`popup-action-item ${expanded ? "popup-action-item-expanded" : ""}`}
         onClick={() => setExpanded((v) => !v)}
       >
         <span className="popup-action-num">{num}</span>
         <span className="popup-action-badge" style={{ backgroundColor: color }}>
-          {(() => { const I = ACTION_ICONS[action.type]; return I ? <I size={10} /> : null; })()}
+          {(() => {
+            const I = ACTION_ICONS[action.type];
+            return I ? <I size={10} /> : null;
+          })()}
           {action.type}
         </span>
-        <span className="popup-action-sel" title={action.selector}>{action.selector}</span>
+        <span className="popup-action-sel" title={action.selector}>
+          {action.selector}
+        </span>
         {fullPrompt && (
           <span className="popup-action-instr" title={fullPrompt}>
             {fullPrompt}
           </span>
         )}
         <span style={{ flex: 1 }} />
-        <button className="popup-action-rm" onClick={(e) => { e.stopPropagation(); onRemove(index); }} title="Remove">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        <button
+          className="popup-action-rm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(index);
+          }}
+          title="Remove"
+        >
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>
@@ -400,7 +453,9 @@ function PopupActionItem({
                 className="popup-detail-screenshot"
                 src={`data:image/jpeg;base64,${screenshot}`}
                 alt="Screenshot"
-                onClick={() => chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshot })}
+                onClick={() =>
+                  chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshot })
+                }
                 title="Click to open full size"
               />
             </div>
@@ -413,7 +468,9 @@ function PopupActionItem({
                 className="popup-detail-screenshot"
                 src={`data:image/jpeg;base64,${screenshotBefore}`}
                 alt="Before"
-                onClick={() => chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshotBefore })}
+                onClick={() =>
+                  chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshotBefore })
+                }
                 title="Click to open full size"
               />
             </div>
@@ -426,7 +483,9 @@ function PopupActionItem({
                 className="popup-detail-screenshot"
                 src={`data:image/jpeg;base64,${screenshotAfter}`}
                 alt="After"
-                onClick={() => chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshotAfter })}
+                onClick={() =>
+                  chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshotAfter })
+                }
                 title="Click to open full size"
               />
             </div>
@@ -454,22 +513,34 @@ function PopupActionItem({
                 <div className="popup-detail-prompt-btns">
                   <button
                     className="popup-detail-prompt-save"
-                    onClick={() => onUpdateInstruction(index, editValue).then(() => setEditingPrompt(false))}
-                  >Save</button>
+                    onClick={() =>
+                      onUpdateInstruction(index, editValue).then(() => setEditingPrompt(false))
+                    }
+                  >
+                    Save
+                  </button>
                   <button
                     className="popup-detail-prompt-cancel"
                     onClick={() => setEditingPrompt(false)}
-                  >Cancel</button>
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             ) : (
               <div
                 className="popup-detail-value popup-detail-prompt-clickable"
                 style={{ whiteSpace: "pre-wrap", cursor: "pointer" }}
-                onClick={(e) => { e.stopPropagation(); setEditValue(fullPrompt); setEditingPrompt(true); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditValue(fullPrompt);
+                  setEditingPrompt(true);
+                }}
                 title="Click to edit"
               >
-                {fullPrompt || <span style={{ opacity: 0.5, fontStyle: "italic" }}>Click to add prompt…</span>}
+                {fullPrompt || (
+                  <span style={{ opacity: 0.5, fontStyle: "italic" }}>Click to add prompt…</span>
+                )}
               </div>
             )}
           </div>
@@ -478,7 +549,9 @@ function PopupActionItem({
             <div className="popup-detail-row">
               <span className="popup-detail-label">Text change</span>
               <div className="popup-detail-value">
-                <span style={{ textDecoration: "line-through", color: "#f38ba8" }}>{(action as any).before}</span>
+                <span style={{ textDecoration: "line-through", color: "#f38ba8" }}>
+                  {(action as any).before}
+                </span>
                 {" → "}
                 <span style={{ color: "#a6e3a1" }}>{(action as any).after}</span>
               </div>
@@ -488,18 +561,21 @@ function PopupActionItem({
           {"changes" in action && (
             <div className="popup-detail-row">
               <span className="popup-detail-label">Changes</span>
-              <pre className="popup-detail-pre">{JSON.stringify((action as any).changes, null, 2)}</pre>
+              <pre className="popup-detail-pre">
+                {JSON.stringify((action as any).changes, null, 2)}
+              </pre>
             </div>
           )}
           {"deltas" in action && (
             <div className="popup-detail-row">
               <span className="popup-detail-label">Deltas</span>
-              <pre className="popup-detail-pre">{JSON.stringify((action as any).deltas, null, 2)}</pre>
+              <pre className="popup-detail-pre">
+                {JSON.stringify((action as any).deltas, null, 2)}
+              </pre>
             </div>
           )}
         </div>
       )}
-
     </div>
   );
 }

@@ -35,9 +35,7 @@ async def health():
 async def get_config():
     """Return all global config as a flat dict."""
     db = await get_db()
-    cursor = await db.execute(
-        "SELECT key, value FROM config WHERE scope = 'global'"
-    )
+    cursor = await db.execute("SELECT key, value FROM config WHERE scope = 'global'")
     rows = await cursor.fetchall()
     return {row["key"]: row["value"] for row in rows}
 
@@ -57,8 +55,6 @@ async def update_config(body: dict):
     await db.commit()
 
     # Return the full config after update
-    cursor = await db.execute(
-        "SELECT key, value FROM config WHERE scope = 'global'"
-    )
+    cursor = await db.execute("SELECT key, value FROM config WHERE scope = 'global'")
     rows = await cursor.fetchall()
     return {row["key"]: row["value"] for row in rows}

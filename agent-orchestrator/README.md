@@ -157,7 +157,7 @@ All routes are prefixed with `/api`.
 
 ## Project Structure
 
-```
+```text
 agent-orchestrator/
 ├── config.json                        # Agent profiles and plugin config
 ├── pyproject.toml                     # Dependencies (uv/hatch)
