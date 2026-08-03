@@ -1,11 +1,11 @@
-import { type ChildProcess, execSync, spawn } from "child_process";
+import { type ChildProcess, execSync, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import http from "node:http";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { app } from "electron";
-import { EventEmitter } from "events";
-import fs from "fs";
-import http from "http";
-import net from "net";
-import os from "os";
-import path from "path";
 import { getEnhancedPath } from "./system-path.js";
 
 interface ManagedProcess {
@@ -172,7 +172,7 @@ export class ProcessManager extends EventEmitter {
 
       const pidStr = fs.readFileSync(NATS_PID_FILE, "utf8").trim();
       const pid = parseInt(pidStr, 10);
-      if (isNaN(pid)) {
+      if (Number.isNaN(pid)) {
         this.removeNatsPidFile();
         return;
       }

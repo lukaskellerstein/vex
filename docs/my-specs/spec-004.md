@@ -69,7 +69,7 @@ Add "Add from GitHub" option alongside the existing "Add from folder":
 
 ### UI Flow
 
-```
+```text
 [Add Project]
   ├── From GitHub URL  →  paste URL  →  cloning...  →  installing...  →  ready
   └── From Local Folder  →  file picker  →  ready

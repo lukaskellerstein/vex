@@ -81,7 +81,7 @@ Wire `nats_service.connect()` into FastAPI's async lifespan handler in `main.py`
 
 Currently `main.py` lifespan only initializes the database. Need to add:
 
-```
+```python
 await nats_service.connect()  # on startup
 await nats_service.disconnect()  # on shutdown
 ```

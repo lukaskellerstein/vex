@@ -157,9 +157,11 @@ class SDKAgentSession:
     """Runtime state for an active Claude Agent SDK session."""
 
     agent_id: str
-    client: ClaudeSDKClient | None = None
+    # Both are supplied at every construction site and never cleared, so they
+    # are required rather than Optional — the type now matches the lifecycle.
+    client: ClaudeSDKClient
+    session_id: str
     options: ClaudeAgentOptions | None = None
-    session_id: str | None = None
     status: str = "idle"  # idle, running, completed, failed, cancelled
     cancelled: bool = False
     current_task_id: str | None = None
@@ -182,6 +184,10 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
     def __init__(self, profile_name: str = "general") -> None:
         self._sessions: dict[str, SDKAgentSession] = {}
         self._profile_name = profile_name
+
+    def get_session(self, agent_id: str) -> SDKAgentSession | None:
+        """Live session state for an agent, or None if it is not running here."""
+        return self._sessions.get(agent_id)
 
     async def start(
         self,
@@ -358,12 +364,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
         # Check if a session file exists for this agent so we can resume it.
         # Agents created before the session_id fix won't have one.
         session_file = self._find_session_file(project_path, session_id)
-        resume_opts: dict[str, str] = {}
         if session_file:
-            resume_opts["resume"] = session_id
             logger.info("Resuming session %s for agent %s", session_id, agent_id)
         else:
-            resume_opts["session_id"] = session_id
             logger.warning(
                 "No session file found for %s — starting fresh session for agent %s",
                 session_id,
@@ -385,7 +388,10 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
             mcp_servers=mcp_servers,
             plugins=plugins,
             hooks=self._make_hooks(agent_id),
-            **resume_opts,
+            # Resume the existing session, or seed a fresh one with this id.
+            # Both fields default to None, so the unused branch is a no-op.
+            resume=session_id if session_file else None,
+            session_id=None if session_file else session_id,
         )
 
         client = ClaudeSDKClient(options=options)
@@ -1213,8 +1219,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 "tool_name": tool_name,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
-            if hook_input.get("agent_id"):
-                payload["subagent_id"] = hook_input["agent_id"]
+            subagent_id = hook_input.get("agent_id")
+            if subagent_id:
+                payload["subagent_id"] = subagent_id
                 payload["subagent_type"] = hook_input.get("agent_type", "")
 
             if tool_name == "Skill":
@@ -1249,8 +1256,9 @@ class ClaudeCodeSDKAdapter(AgentAdapter):
                 "response_preview": response_str,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
-            if hook_input.get("agent_id"):
-                payload["subagent_id"] = hook_input["agent_id"]
+            subagent_id = hook_input.get("agent_id")
+            if subagent_id:
+                payload["subagent_id"] = subagent_id
                 payload["subagent_type"] = hook_input.get("agent_type", "")
 
             if tool_name == "Skill":

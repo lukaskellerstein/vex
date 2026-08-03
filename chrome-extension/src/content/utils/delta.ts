@@ -7,7 +7,7 @@ function parseNumeric(value: string): number | null {
   const match = trimmed.match(UNIT_RE);
   if (match) return parseFloat(match[1]);
   const num = parseFloat(trimmed);
-  return isNaN(num) ? null : num;
+  return Number.isNaN(num) ? null : num;
 }
 
 function roundTo4px(value: number): number {

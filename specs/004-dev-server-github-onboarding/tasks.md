@@ -156,7 +156,7 @@
 
 ### Parallel Opportunities
 
-```
+```text
 Phase 2: T001, T002, T003, T004 — all different files, run in parallel
 
 Phase 3 + Phase 4 partial overlap:

@@ -181,11 +181,11 @@ async def get_subagent_transcript(agent_id: str, subagent_id: str):
 
     try:
         steps, skipped, prompt = transcript_parser.parse_transcript(transcript_path)
-    except FileNotFoundError:
+    except FileNotFoundError as err:
         raise HTTPException(
             status_code=422,
             detail=f"Transcript file not found at {transcript_path}",
-        )
+        ) from err
 
     # Compute duration from started_at / completed_at timestamps
     duration_ms = None
@@ -230,7 +230,7 @@ async def get_agent_trace(agent_id: str):
         "SELECT prompt, created_at FROM tasks WHERE agent_id = ? ORDER BY created_at ASC",
         (agent_id,),
     )
-    task_rows = await task_cursor.fetchall()
+    task_rows = list(await task_cursor.fetchall())
 
     traces = []
     for idx, row in enumerate(trace_rows):

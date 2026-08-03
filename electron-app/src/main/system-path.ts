@@ -13,10 +13,10 @@
  * The result is cached for the app lifetime.
  */
 
-import { execFileSync } from "child_process";
-import fs from "fs";
-import os from "os";
-import path from "path";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const SHELL_TIMEOUT_MS = 5000;
 const DELIM = "__VEX_PATH_DELIM__";

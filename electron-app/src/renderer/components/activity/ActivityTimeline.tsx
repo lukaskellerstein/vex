@@ -1,5 +1,5 @@
 import { Activity as ActivityIcon } from "lucide-react";
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { ActivityEntry, type TimelineEvent } from "./ActivityEntry";
 
 type TimeGroup = "just-now" | "earlier-today" | "yesterday" | "older";

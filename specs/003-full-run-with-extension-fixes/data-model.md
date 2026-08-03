@@ -57,7 +57,7 @@ All SQLite tables and Pydantic models remain unchanged. This feature modifies be
 
 ## Entity Relationships
 
-```
+```text
 Project 1──* Batch 1──* Action
 Project 1──* Agent
 Agent 1──* Task

@@ -1,8 +1,8 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell } from "electron";
-import fs from "fs";
-import http from "http";
-import net from "net";
-import path from "path";
+import fs from "node:fs";
+import http from "node:http";
+import net from "node:net";
+import path from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import WebSocket from "ws";
 import { installDependencies } from "./dependency-installer.js";
 import { DevServerManager } from "./dev-server-manager.js";

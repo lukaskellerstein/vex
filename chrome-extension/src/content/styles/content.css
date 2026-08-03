@@ -389,14 +389,14 @@
 }
 
 .cs-toolbar-close-btn {
-  padding: 4px 6px !important;
+  padding: 4px 6px;
   min-width: auto;
-  color: #6c7086 !important;
+  color: #6c7086;
 }
 
 .cs-toolbar-close-btn:hover {
-  color: #f38ba8 !important;
-  background: rgba(243, 139, 168, 0.1) !important;
+  color: #f38ba8;
+  background: rgba(243, 139, 168, 0.1);
 }
 
 .cs-action-panel {
@@ -1034,27 +1034,27 @@
 }
 
 .cs-resize-keep {
-  background: #16a34a !important;
-  color: #fff !important;
-  border-color: #15803d !important;
-  font-size: 12px !important;
-  padding: 4px 10px !important;
+  background: #16a34a;
+  color: #fff;
+  border-color: #15803d;
+  font-size: 12px;
+  padding: 4px 10px;
 }
 
 .cs-resize-keep:hover {
-  background: #15803d !important;
+  background: #15803d;
 }
 
 .cs-resize-discard {
-  background: #dc2626 !important;
-  color: #fff !important;
-  border-color: #b91c1c !important;
-  font-size: 12px !important;
-  padding: 4px 10px !important;
+  background: #dc2626;
+  color: #fff;
+  border-color: #b91c1c;
+  font-size: 12px;
+  padding: 4px 10px;
 }
 
 .cs-resize-discard:hover {
-  background: #b91c1c !important;
+  background: #b91c1c;
 }
 
 /* --- Style Panel --- */

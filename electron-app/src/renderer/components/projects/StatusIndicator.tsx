@@ -1,5 +1,3 @@
-import React from "react";
-
 interface StatusIndicatorProps {
   status: string;
   showLabel?: boolean;

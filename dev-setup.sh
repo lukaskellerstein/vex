@@ -78,11 +78,11 @@ TMP_DIR="/tmp/vex"
 mkdir -p "$LOG_DIR" "$TMP_DIR"
 
 # Truncate old logs
->"$LOG_DIR/nats.log"
->"$LOG_DIR/ao.log"
->"$LOG_DIR/vite.log"
->"$LOG_DIR/electron.log"
->"$LOG_DIR/chrome.log"
+: >"$LOG_DIR/nats.log"
+: >"$LOG_DIR/ao.log"
+: >"$LOG_DIR/vite.log"
+: >"$LOG_DIR/electron.log"
+: >"$LOG_DIR/chrome.log"
 
 NATS_CONF="${TMP_DIR}/nats-dev.conf"
 cat >"$NATS_CONF" <<EOF

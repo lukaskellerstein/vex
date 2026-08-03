@@ -1,5 +1,4 @@
 import { ArrowLeft, Bot } from "lucide-react";
-import React from "react";
 import { useNavigate } from "react-router-dom";
 import type { AgentStep } from "../components/project-detail/AgentStepItem";
 import { AgentStepList } from "../components/project-detail/AgentStepList";

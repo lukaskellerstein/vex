@@ -33,8 +33,18 @@ class CLIWrapperAdapter(AgentAdapter):
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         self._agent_config: dict[str, dict] = {}
 
-    async def start(self, project_id: str, project_path: str) -> AgentProcess:
-        agent_id = generate_agent_id()
+    async def start(
+        self,
+        project_id: str,
+        project_path: str,
+        agent_id: str | None = None,
+        model: str | None = None,
+        auth_header: str | None = None,
+    ) -> AgentProcess:
+        # model and auth_header are part of the AgentAdapter contract but have no
+        # meaning for a generic CLI wrapper: it neither selects a model nor drives
+        # a browser. They are accepted and ignored on purpose.
+        agent_id = agent_id or generate_agent_id()
         self._agent_config[agent_id] = {
             "project_id": project_id,
             "project_path": project_path,

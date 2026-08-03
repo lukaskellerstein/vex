@@ -1,5 +1,5 @@
 import { AlertTriangle } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AddProjectDialog } from "../components/AddProjectDialog";
 import { ProjectCard } from "../components/projects/ProjectCard";
@@ -214,7 +214,7 @@ export function Projects() {
     return projects.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
-        (p.framework && p.framework.toLowerCase().includes(q)) ||
+        p.framework?.toLowerCase().includes(q) ||
         p.path.toLowerCase().includes(q),
     );
   }, [projects, searchQuery]);

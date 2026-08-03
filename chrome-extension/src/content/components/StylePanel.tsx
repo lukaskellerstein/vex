@@ -250,9 +250,9 @@ function toHex(color: string): string {
   if (color.startsWith("#")) return color.slice(0, 7);
   const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
   if (!match) return "#000000";
-  const r = parseInt(match[1]).toString(16).padStart(2, "0");
-  const g = parseInt(match[2]).toString(16).padStart(2, "0");
-  const b = parseInt(match[3]).toString(16).padStart(2, "0");
+  const r = parseInt(match[1], 10).toString(16).padStart(2, "0");
+  const g = parseInt(match[2], 10).toString(16).padStart(2, "0");
+  const b = parseInt(match[3], 10).toString(16).padStart(2, "0");
   return `#${r}${g}${b}`;
 }
 
@@ -379,7 +379,7 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
 
   const [borderWidth, setBorderWidth] = useState(0);
   const [borderStyle, setBorderStyle] = useState("none");
-  const [borderRadius, setBorderRadius] = useState(0);
+  const [, setBorderRadius] = useState(0);
   const [borderRadiusValues, setBorderRadiusValues] = useState<[number, number, number, number]>([
     0, 0, 0, 0,
   ]);
@@ -717,13 +717,6 @@ export function StylePanel({ addAction, hostElement }: StylePanelProps) {
     cleanupHoverStyle();
     setSelectedEl(null);
   }, [finalizeAction, cleanupHoverStyle]);
-
-  // Cancel: revert styles and close panel
-  const handleCancel = useCallback(() => {
-    revertStyles();
-    cleanupHoverStyle();
-    setSelectedEl(null);
-  }, [revertStyles, cleanupHoverStyle]);
 
   // Drag handlers for panel header
   const onHeaderPointerDown = useCallback(

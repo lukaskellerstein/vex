@@ -11,11 +11,11 @@
  *   the user can still stop them.
  */
 
-import { type ChildProcess, spawn, spawnSync } from "child_process";
-import fs from "fs";
-import net from "net";
-import os from "os";
-import path from "path";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
 import { getEnhancedPath, resolveExecutable } from "./system-path.js";
 
 const MAX_LOG_LINES = 2000;
@@ -28,6 +28,14 @@ const PORT_IN_USE_PATTERNS = [
   "address already in use",
   "Port is already in use",
 ];
+
+// Dev servers colour their output; strip SGR codes before matching against it.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the ESC control character is the entire purpose
+const ANSI_SGR_PATTERN = /\x1b\[[0-9;]*m/g;
+
+function stripAnsi(line: string): string {
+  return line.replace(ANSI_SGR_PATTERN, "");
+}
 
 interface DevServer {
   process: ChildProcess | null; // null for recovered orphans (no live handle)
@@ -641,7 +649,7 @@ export class DevServerManager {
   }
 
   private detectUrl(line: string): string | null {
-    const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
+    const clean = stripAnsi(line);
     for (const token of clean.split(/\s+/)) {
       const trimmed = token.replace(/[(),;'"]/g, "");
       if (
@@ -675,7 +683,7 @@ export class DevServerManager {
   }
 
   private detectPortConflict(line: string, port: number): string | null {
-    const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
+    const clean = stripAnsi(line);
     for (const pattern of PORT_IN_USE_PATTERNS) {
       if (clean.includes(pattern)) {
         return `Port ${port} is in use. Stop the other process first.`;

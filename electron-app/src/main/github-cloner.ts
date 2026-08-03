@@ -3,11 +3,11 @@
  * Parses git clone --progress stderr for progress percentage.
  */
 
-import { execSync, spawn } from "child_process";
+import { execSync, spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { BrowserWindow } from "electron";
-import fs from "fs";
-import os from "os";
-import path from "path";
 
 const PROJECTS_DIR = path.join(os.homedir(), ".vex", "projects");
 const GITHUB_URL_RE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/;

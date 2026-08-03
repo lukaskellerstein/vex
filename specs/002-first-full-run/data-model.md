@@ -67,7 +67,7 @@ Runtime state for each active Claude Agent SDK session:
 
 ## Entity Relationships
 
-```
+```text
 Project 1──* Batch 1──* Action
 Project 1──* Agent
 Agent 1──* Task
@@ -78,7 +78,7 @@ No relationship changes for this feature.
 
 ## State Machine: Agent Lifecycle (Updated)
 
-```
+```text
 registered ──start()──→ starting ──SDK client created──→ running
     running ──send_task()──→ running (task in progress)
     running ──task completes──→ running (idle)

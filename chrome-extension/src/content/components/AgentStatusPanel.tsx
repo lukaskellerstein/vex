@@ -1,6 +1,5 @@
 import type { FC } from "react";
 import { useState } from "react";
-import { AGENT_MANAGER_URL } from "../../shared/messages";
 
 interface PanelAgent {
   agentId: string;

@@ -27,7 +27,7 @@ The existing `projects` table in SQLite already has all needed fields. No schema
 
 **State transitions** (managed by Electron, synced to AO via PATCH):
 
-```
+```text
 idle → starting → running → idle
               ↘ error            (port conflict detected in stderr)
                         ↘ error  (non-zero exit without port conflict)
@@ -58,11 +58,11 @@ Transient state during GitHub clone flow. Not persisted.
 | repoName | string | Extracted from URL |
 | progress | number | 0-100 percentage (from git stderr) |
 | phase | string | cloning, installing, detecting, ready, error |
-| error | string | null | User-friendly error message |
+| error | string \| null | User-friendly error message |
 
 ## Relationships
 
-```
+```text
 Project (AO/SQLite) 1:1 DevServerInstance (Electron/memory)
   - Linked by projectId
   - Electron updates Project.status and Project.dev_server_url via PATCH API

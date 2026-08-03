@@ -1,5 +1,4 @@
 import { CheckCircle, GitFork, Loader2 } from "lucide-react";
-import React from "react";
 
 interface SubagentInfo {
   id: string;

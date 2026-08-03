@@ -31,7 +31,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
 
-    ```
+    ```markdown
     ## Extension Hooks
 
     **Optional Pre-Hook**: {extension}
@@ -44,7 +44,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
   - **Mandatory hook** (`optional: false`):
 
-    ```
+    ```markdown
     ## Extension Hooks
 
     **Automatic Pre-Hook**: {extension}
@@ -83,7 +83,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - For each executable hook, output the following based on its `optional` flag:
      - **Optional hook** (`optional: true`):
 
-       ```
+       ```markdown
        ## Extension Hooks
 
        **Optional Hook**: {extension}
@@ -96,7 +96,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
      - **Mandatory hook** (`optional: false`):
 
-       ```
+       ```markdown
        ## Extension Hooks
 
        **Automatic Hook**: {extension}

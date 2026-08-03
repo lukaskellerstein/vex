@@ -5,12 +5,6 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-# Configure application-level logging (uvicorn only configures its own loggers)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s:     %(name)s - %(message)s",
-)
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,11 +24,20 @@ from agent_orchestrator.services import batch_processor, nats_service
 from agent_orchestrator.services import marketplace as marketplace_service
 from agent_orchestrator.services.agent_manager import AgentManagerService
 
+# Configure application-level logging (uvicorn only configures its own loggers).
+# Runs after the imports rather than before them: no imported module installs a
+# root handler or logs at import time, and handlers are resolved when a record is
+# emitted, so this still governs every application logger.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:     %(name)s - %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async defasfdasfd lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):
     await init_db()
     try:
         await nats_service.connect()
@@ -61,7 +64,7 @@ async defasfdasfd lifespan(app: FastAPI):
     await close_db()
 
 
-asfdasfd sync def _cleanup_orphaned_records() -> None:
+async def _cleanup_orphaned_records() -> None:
     """Mark agents/batches/tasks that were left in active states as failed on startup.
 
     Also creates synthetic traces for orphaned agents so the UI can always display
@@ -78,7 +81,7 @@ asfdasfd sync def _cleanup_orphaned_records() -> None:
            WHERE a.status IN ('running', 'starting', 'stopping', 'created', 'registered')
              AND at.id IS NULL"""
     )
-    orphaned_rows = await cursor.fetchall()
+    orphaned_rows = list(await cursor.fetchall())
 
     # Create synthetic traces for orphaned agents
     now = datetime.now(UTC).isoformat()

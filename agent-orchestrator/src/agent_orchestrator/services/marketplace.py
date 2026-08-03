@@ -5,6 +5,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from claude_agent_sdk.types import SdkPluginConfig
+
 logger = logging.getLogger(__name__)
 
 # Default storage for cloned marketplace repos
@@ -145,9 +147,9 @@ def resolve_plugin_ref(ref: str) -> Path | None:
     return path
 
 
-def resolve_plugin_refs(refs: list[str]) -> list[dict]:
+def resolve_plugin_refs(refs: list[str]) -> list[SdkPluginConfig]:
     """Resolve a list of plugin refs to SDK plugin config dicts."""
-    plugins: list[dict] = []
+    plugins: list[SdkPluginConfig] = []
     for ref in refs:
         path = resolve_plugin_ref(ref)
         if path:

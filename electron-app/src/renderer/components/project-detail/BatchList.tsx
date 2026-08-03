@@ -1,5 +1,5 @@
 import { Filter, Search } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BatchCard } from "./BatchCard";
 
 interface BatchData {

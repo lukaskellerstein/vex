@@ -1,5 +1,5 @@
 import { Clock, Play, Square, Trash2 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FrameworkBadge } from "./FrameworkBadge";
 import { OperatorRobot } from "./OperatorRobot";
 import { StatusIndicator } from "./StatusIndicator";

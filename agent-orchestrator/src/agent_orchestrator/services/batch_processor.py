@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from agent_orchestrator.adapters.claude_code_sdk import _VEX_SESSION_NS
+from agent_orchestrator.adapters.claude_code_sdk import _VEX_SESSION_NS, ClaudeCodeSDKAdapter
 from agent_orchestrator.db.database import get_db
 from agent_orchestrator.services import nats_service
 from agent_orchestrator.services.agent_manager import AgentManagerService
@@ -16,6 +16,21 @@ logger = logging.getLogger(__name__)
 
 _agent_manager: AgentManagerService | None = None
 _running_batches: dict[str, dict] = {}  # batch_id → {"task": asyncio.Task, "agent_ids": list[str]}
+
+
+def _require_manager() -> AgentManagerService:
+    """The initialised manager, or a clear error if init() was never called."""
+    if _agent_manager is None:
+        raise RuntimeError("batch_processor.init() has not been called")
+    return _agent_manager
+
+
+def _sdk_adapter() -> ClaudeCodeSDKAdapter | None:
+    """The Claude Code SDK adapter, if the manager is up and has one registered."""
+    if _agent_manager is None:
+        return None
+    adapter = _agent_manager._adapters.get("claude-code-sdk")
+    return adapter if isinstance(adapter, ClaudeCodeSDKAdapter) else None
 
 
 def init(agent_manager: AgentManagerService) -> None:
@@ -41,14 +56,13 @@ async def stop_batch(batch_id: str) -> bool:
         return False
 
     # Phase 1: Interrupt all active SDK sessions for this batch's agents
-    if _agent_manager:
-        adapter = _agent_manager._adapters.get("claude-code-sdk")
-        if adapter:
-            for agent_id in entry.get("agent_ids", []):
-                try:
-                    await adapter.abort(agent_id)
-                except Exception:
-                    logger.exception("Error aborting agent %s in batch %s", agent_id, batch_id)
+    adapter = _sdk_adapter()
+    if adapter:
+        for agent_id in entry.get("agent_ids", []):
+            try:
+                await adapter.abort(agent_id)
+            except Exception:
+                logger.exception("Error aborting agent %s in batch %s", agent_id, batch_id)
 
     # Phase 2: Cancel the asyncio task as backstop
     task = entry.get("task")
@@ -87,12 +101,10 @@ async def abort_agent(agent_id: str) -> bool:
 
     Returns True if the agent was found and interrupted.
     """
-    if _agent_manager is None:
-        return False
-    adapter = _agent_manager._adapters.get("claude-code-sdk")
+    adapter = _sdk_adapter()
     if adapter is None:
         return False
-    session = adapter._sessions.get(agent_id)
+    session = adapter.get_session(agent_id)
     if session is None or session.status != "running":
         return False
     try:
@@ -147,8 +159,8 @@ async def continue_agent(agent_id: str, message: str) -> None:
         )
 
         # Resume conversation via adapter
-        adapter = _agent_manager._adapters.get("claude-code-sdk")
-        if not adapter:
+        adapter = _sdk_adapter()
+        if adapter is None:
             raise RuntimeError("claude-code-sdk adapter not available")
 
         await adapter.resume(
@@ -162,7 +174,7 @@ async def continue_agent(agent_id: str, message: str) -> None:
         )
 
         # Extract cost/duration from session steps
-        session = adapter._sessions.get(agent_id)
+        session = adapter.get_session(agent_id)
         cost_usd = None
         duration_ms = None
         completed_at = datetime.now(UTC).isoformat()
@@ -255,7 +267,7 @@ async def process_batch(project_id: str, batch_id: str) -> None:
         "SELECT * FROM actions WHERE batch_id = ? ORDER BY sequence_index",
         (batch_id,),
     )
-    actions = await cursor.fetchall()
+    actions = list(await cursor.fetchall())
 
     if not actions:
         await db.execute(
@@ -524,7 +536,7 @@ async def _process_action(
         await db.commit()
 
         # Start agent via AgentManagerService
-        await _agent_manager.start_agent(
+        await _require_manager().start_agent(
             agent_id=agent_id,
             project_id=project["id"],
             project_path=project["path"],
@@ -534,7 +546,7 @@ async def _process_action(
         )
 
         # Get adapter and send task
-        adapter = _agent_manager._adapters.get("claude-code-sdk")
+        adapter = _sdk_adapter()
         if adapter is None:
             raise RuntimeError("claude-code-sdk adapter not registered")
 
@@ -552,7 +564,7 @@ async def _process_action(
         await adapter.send_task(agent_id, task_dict)
 
         # Get session for step/cost data
-        session = adapter._sessions.get(agent_id)
+        session = adapter.get_session(agent_id)
         cost_usd = None
         duration_ms = None
         was_cancelled = session and session.status == "cancelled"
@@ -698,14 +710,14 @@ async def _process_action(
     finally:
         # Cleanup: stop agent
         try:
-            await _agent_manager.stop_agent(agent_id)
+            await _require_manager().stop_agent(agent_id)
         except Exception:
             logger.exception("Error stopping agent %s", agent_id)
 
 
 async def _persist_trace(
     db,
-    batch_id: str,
+    batch_id: str | None,
     agent_id: str,
     agent_name: str,
     session,
@@ -779,7 +791,7 @@ async def _persist_trace(
 
 async def _persist_error_trace(
     db,
-    batch_id: str,
+    batch_id: str | None,
     agent_id: str,
     agent_name: str,
     status: str,
@@ -821,12 +833,10 @@ async def _persist_error_trace(
 
 def get_steps(agent_id: str) -> list[dict]:
     """Get structured steps for a live agent from the adapter session."""
-    if _agent_manager is None:
-        return []
-    adapter = _agent_manager._adapters.get("claude-code-sdk")
+    adapter = _sdk_adapter()
     if adapter is None:
         return []
-    session = adapter._sessions.get(agent_id)
+    session = adapter.get_session(agent_id)
     if session is None:
         return []
     return list(session.steps)
@@ -834,12 +844,10 @@ def get_steps(agent_id: str) -> list[dict]:
 
 def get_logs(agent_id: str) -> list[str]:
     """Get log buffer for a live agent from the adapter session."""
-    if _agent_manager is None:
-        return []
-    adapter = _agent_manager._adapters.get("claude-code-sdk")
+    adapter = _sdk_adapter()
     if adapter is None:
         return []
-    session = adapter._sessions.get(agent_id)
+    session = adapter.get_session(agent_id)
     if session is None:
         return []
     return list(session.log_buffer)

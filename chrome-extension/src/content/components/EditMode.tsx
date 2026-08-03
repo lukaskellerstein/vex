@@ -91,7 +91,6 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
 
   // Drag state
   const dragSourceRef = useRef<Element | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Insert form state
   const [insertTab, setInsertTab] = useState<"manual" | "prompt">("prompt");
@@ -113,7 +112,7 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
   const insertCancelRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!popup || popup.kind !== "insert" || insertTab !== "prompt") {
+    if (popup?.kind !== "insert" || insertTab !== "prompt") {
       if (insertEditorViewRef.current) {
         // Read value before destroying
         setInsertPrompt(insertEditorViewRef.current.state.doc.toString());
@@ -862,72 +861,6 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
     [addAction, hostElement, pushUndo, fireGenerationRequest],
   );
 
-  // Drag handlers
-  const onDragStart = useCallback((e: React.DragEvent, el: Element) => {
-    dragSourceRef.current = el;
-    (el as HTMLElement).style.opacity = "0.4";
-    e.dataTransfer.effectAllowed = "move";
-  }, []);
-
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }, []);
-
-  const onDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      const source = dragSourceRef.current;
-      if (!source) return;
-      (source as HTMLElement).style.opacity = "";
-
-      const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
-      if (!dropTarget || !source.parentElement || isOwnElement(dropTarget)) return;
-
-      const parent = source.parentElement;
-      const siblings = Array.from(parent.children);
-      const fromIndex = siblings.indexOf(source);
-      const toIndex = siblings.indexOf(dropTarget);
-
-      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
-
-      const parentSelector = generateSelector(parent);
-      const selector = generateSelector(source);
-      const screenshotBefore = await takeScreenshot(parent, hostElement);
-
-      reorderElement(parent, fromIndex, toIndex);
-
-      const screenshotAfter = await takeScreenshot(parent, hostElement);
-
-      addAction({
-        type: "move",
-        selector,
-        timestamp: new Date().toISOString(),
-        screenshotBefore,
-        screenshotAfter,
-        parentSelector,
-        fromIndex,
-        toIndex,
-      });
-
-      pushUndo(() => {
-        reorderElement(parent, toIndex, fromIndex);
-      });
-
-      dragSourceRef.current = null;
-      setDragOverIndex(null);
-    },
-    [addAction, hostElement, pushUndo],
-  );
-
-  const onDragEnd = useCallback(() => {
-    if (dragSourceRef.current) {
-      (dragSourceRef.current as HTMLElement).style.opacity = "";
-    }
-    dragSourceRef.current = null;
-    setDragOverIndex(null);
-  }, []);
-
   // Make hovered elements draggable
   useEffect(() => {
     if (!hovered || popup || editing || isOwnElement(hovered)) return;
@@ -1493,8 +1426,6 @@ export function EditMode({ addAction, hostElement, natsClient, shadowRoot }: Edi
         !editing &&
         (() => {
           // Clamp insert buttons / label / delete so they stay visible at viewport edges
-          const BTN = 22; // button diameter
-          const HALF = BTN / 2; // 11px
           const vpW = window.innerWidth;
           const vpH = window.innerHeight;
           // How far outside the highlight each button sits (CSS default: -12px)

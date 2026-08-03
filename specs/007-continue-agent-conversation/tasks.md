@@ -38,7 +38,7 @@
 
 **Checkpoint**: Backend fully supports continue + multi-trace. Verify with curl:
 
-```
+```text
 POST /api/agents/{id}/continue → 200 for terminal, 409 for running
 GET /api/agents/{id}/trace → returns traces array
 ```
@@ -127,7 +127,7 @@ GET /api/agents/{id}/trace → returns traces array
 
 ### Within Phase 2 (Foundational)
 
-```
+```text
 T001 ─┐
 T002 ─┤ (parallel: different files)
       ↓
@@ -150,7 +150,7 @@ T003 → T004 → T005 (sequential: same file, refactor then implement)
 
 ## Parallel Example: User Story 1
 
-```
+```text
 # Launch IPC bridge tasks in parallel:
 Task T009: "Add continueAgent IPC method in preload.ts"
 Task T010: "Add continueAgent type declaration in electron.d.ts"

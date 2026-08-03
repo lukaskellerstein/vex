@@ -254,7 +254,7 @@ The Agent Orchestrator exposes a REST API on port 8420. All endpoints are prefix
 
 ## Project Structure
 
-```
+```text
 vex/
 ├── chrome-extension/              # Chrome Extension (Manifest V3)
 │   ├── src/

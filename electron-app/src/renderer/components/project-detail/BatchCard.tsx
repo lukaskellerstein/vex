@@ -78,14 +78,6 @@ function formatPagePath(url?: string): string {
   }
 }
 
-function formatModelName(model?: string): string {
-  if (!model) return "Agent";
-  if (model.includes("sonnet")) return "Sonnet 4.5";
-  if (model.includes("opus")) return "Opus 4.6";
-  if (model.includes("haiku")) return "Haiku 4.5";
-  return model.split("-").slice(0, 2).join(" ");
-}
-
 const STATUS_CONFIG: Record<string, { Icon: React.ElementType; color: string }> = {
   completed: { Icon: CheckCircle2, color: "var(--status-success)" },
   failed: { Icon: XCircle, color: "var(--status-error)" },
@@ -136,7 +128,6 @@ export function BatchCard({
   const StatusIcon = config.Icon;
   const isSpinning = batch.status === "running" || batch.status === "processing";
   const pagePath = formatPagePath(batch.page_url);
-  const actionCount = batch.action_count ?? batch.actions?.length ?? 0;
 
   // Fetch agent count eagerly on mount
   useEffect(() => {

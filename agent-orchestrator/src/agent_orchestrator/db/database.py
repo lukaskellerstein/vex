@@ -257,7 +257,8 @@ async def _create_tables(db: aiosqlite.Connection) -> None:
     # Earlier schema had batch_id UNIQUE (1 trace per batch), but the current
     # design creates 1 trace per action, so multiple traces per batch.
     try:
-        row = await db.execute_fetchall("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_traces'")
+        rows = await db.execute_fetchall("SELECT sql FROM sqlite_master WHERE type='table' AND name='agent_traces'")
+        row = list(rows)
         if row and "UNIQUE" in (row[0][0] or ""):
             await db.executescript("""
                 CREATE TABLE agent_traces_new (

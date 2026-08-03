@@ -28,7 +28,7 @@ When the Chrome extension submits a batch of visual edits via `POST /api/project
 
 Module-level singleton. Core logic:
 
-```
+```text
 process_batch(project_id, batch_id):
   1. Get project info (path, framework, styling_approach)
   2. Load batch actions from DB

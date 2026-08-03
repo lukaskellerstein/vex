@@ -162,6 +162,7 @@ def test_inject_playwright_auth(tmp_path, monkeypatch):
     out, cfg = sdk._inject_playwright_auth(servers, "Authorization: Bearer X", "AG2")
     assert servers["playwright-vex"]["args"] == ["@playwright/mcp@latest", "--isolated"]
     assert out["playwright-vex"]["args"] == ["@playwright/mcp@latest", "--config", str(cfg)]
+    assert cfg is not None
     data = json.loads(cfg.read_text())
     assert data["browser"]["isolated"] is True
     assert data["browser"]["contextOptions"]["extraHTTPHeaders"] == {"Authorization": "Bearer X"}

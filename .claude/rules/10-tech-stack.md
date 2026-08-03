@@ -6,7 +6,7 @@ description: "Reference: Technology stack — Electron, Chrome Extension, React,
 
 ## Project Structure
 
-```
+```text
 electron-app/        # Electron desktop app (main process + React renderer)
 chrome-extension/    # Chrome Extension (Manifest V3, React + Vite)
 agent-orchestrator/  # Python FastAPI backend

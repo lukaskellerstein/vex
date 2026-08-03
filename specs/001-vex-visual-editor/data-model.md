@@ -147,7 +147,7 @@ Global and per-project settings.
 
 ## Relationships
 
-```
+```text
 Project 1──* Batch
 Project 1──* Agent (via projectId assignment)
 Project 1──* Task

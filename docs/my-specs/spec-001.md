@@ -33,7 +33,7 @@ The only place Vex touches framework detection is in **dev server management** �
 
 ### 3.1 Component topology
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │ Electron App                                                     │
 │                                                                   │
@@ -525,7 +525,7 @@ Section generation and image generation require a round-trip between the extensi
 
 ### 8.1 Flow
 
-```
+```text
 1. Developer clicks section "+" or image "Generate" in the Chrome extension
 
 2. Extension publishes to NATS: vex.generate.request.{projectId}
@@ -647,7 +647,7 @@ claude plugin install vex-agent
 
 The plugin contains:
 
-```
+```text
 vex-agent/
 ├── .claude-plugin/
 │   └── plugin.json
@@ -701,7 +701,7 @@ This IS the correct use of MCP — the agent calls Vex to pull work, not the oth
 
 For agents that don't support plugins or MCP, the user pastes a one-paragraph instruction into their agent's context:
 
-```
+```text
 You are connected to Vex, a visual web editing tool. To get pending visual 
 editing tasks, call: GET http://localhost:8420/api/projects/{projectId}/batches/latest
 Each batch contains actions (select, insert, editText, delete, resize, styleChange, 

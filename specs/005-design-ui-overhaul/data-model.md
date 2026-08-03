@@ -122,7 +122,7 @@ Individual steps within an agent trace.
 
 ## Entity Relationships
 
-```
+```text
 Project 1──N Batch
 Project 1──N Agent (via agent.project_id)
 Batch   1──N Action (existing)
@@ -137,28 +137,28 @@ Agent   1──N ActivityEvent
 
 ### Project.status
 
-```
+```text
 idle → starting → running → stopping → idle
                 → error → idle
 ```
 
 ### Batch.status
 
-```
+```text
 pending → processing → completed
                      → failed
 ```
 
 ### Agent.status
 
-```
+```text
 registered → starting → running → stopping → stopped
                       → error → starting (restart)
 ```
 
 ### AgentTrace.status
 
-```
+```text
 running → completed
         → failed
 ```

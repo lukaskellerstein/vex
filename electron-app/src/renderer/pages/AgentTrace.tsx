@@ -52,6 +52,9 @@ interface MultiTraceResponse {
   traces: TraceData[];
 }
 
+/** The trace endpoints are typed `Promise<any>`, so the shape is only known at runtime. */
+type TraceResponse = Partial<TraceData> & Partial<MultiTraceResponse> & { detail?: string };
+
 /** Merge multiple traces into a single TraceData with turn separator steps injected. */
 function mergeTraces(traces: TraceData[]): TraceData {
   if (traces.length === 0) throw new Error("No traces to merge");
@@ -285,7 +288,7 @@ export function AgentTrace() {
   // Fetch the final persisted trace (for completed/failed agents or by traceId)
   const fetchPersistedTrace = useCallback(async () => {
     try {
-      let data;
+      let data: TraceResponse | undefined;
       if (traceId) {
         data = await window.electronAPI.getAgentTrace(traceId);
       } else if (agentId) {
@@ -677,14 +680,12 @@ export function AgentTrace() {
     const mcpServers = new Set<string>();
     const subagents = new Set<string>();
     const skills = new Set<string>();
-    let totalTokens = 0;
     let inputTokens = 0;
     let outputTokens = 0;
     let errorCount = 0;
     let liveCostUsd = 0;
 
     for (const step of displaySteps) {
-      if (step.token_count) totalTokens += step.token_count;
       if (step.type === "tool_error" || step.type === "error") errorCount++;
 
       // Accumulate per-step cost from metadata

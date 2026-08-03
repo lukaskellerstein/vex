@@ -15,9 +15,9 @@
  *   - port:    port to bind (defaults to 0 → OS picks a free port)
  */
 
-import fs from "fs";
-import http from "http";
-import path from "path";
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
 
 const LIVERELOAD_PATH = "/__livereload";
 const LIVERELOAD_SNIPPET = `

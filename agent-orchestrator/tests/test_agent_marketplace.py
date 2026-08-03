@@ -30,6 +30,7 @@ from claude_agent_sdk import (
     TextBlock,
     ToolUseBlock,
 )
+from claude_agent_sdk.types import SdkPluginConfig
 
 # Add src to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -108,7 +109,7 @@ async def run_test(
     test_name: str,
     prompt: str,
     profile: dict,
-    plugins: list[dict],
+    plugins: list[SdkPluginConfig],
     workdir: Path,
     expect_skills: list[str] | None = None,
     expect_agents: list[str] | None = None,

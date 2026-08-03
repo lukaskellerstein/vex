@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Action, InteractionMode, Selection } from "../shared/types";
+import type { Action, Selection } from "../shared/types";
 import { AgentCursors } from "./components/AgentCursors";
 import { EditMode } from "./components/EditMode";
 import { ActionMarkers, Overlay } from "./components/Overlay";
@@ -70,16 +70,6 @@ export function App({ hostElement, shadowRoot }: AppProps) {
   stateRef.current = state;
 
   const [highlightedActionIndex, setHighlightedActionIndex] = useState<number | null>(null);
-
-  // Send handler
-  const handleSend = useCallback(() => {
-    chrome.runtime.sendMessage({
-      action: "sendActions",
-      actions: actionsRef.current,
-      pageUrl: location.href,
-      pageTitle: document.title,
-    });
-  }, [actionsRef]);
 
   // Watch for selected element removal from DOM
   useEffect(() => {

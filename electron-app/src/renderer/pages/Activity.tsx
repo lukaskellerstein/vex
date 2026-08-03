@@ -1,11 +1,7 @@
 import { ChevronDown, Radio } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TimelineEvent } from "../components/activity/ActivityEntry";
-import {
-  ActivityFilters,
-  type ActivityFiltersState,
-  type EventTypeFilter,
-} from "../components/activity/ActivityFilters";
+import { ActivityFilters, type ActivityFiltersState } from "../components/activity/ActivityFilters";
 import { ActivityStats, type ActivityStatsData } from "../components/activity/ActivityStats";
 import { ActivityTimeline } from "../components/activity/ActivityTimeline";
 

@@ -68,30 +68,35 @@ async def activity_stats(since: str | None = Query(default=None)):
         f"SELECT COUNT(*) as cnt FROM activity_events WHERE type = 'batch_completed' {time_filter}",
         params,
     )
-    completed = (await cursor.fetchone())["cnt"]
+    row = await cursor.fetchone()
+    completed = row["cnt"] if row else 0
 
     cursor = await db.execute(
         f"SELECT COUNT(*) as cnt FROM activity_events WHERE type = 'batch_failed' {time_filter}",
         params,
     )
-    failed = (await cursor.fetchone())["cnt"]
+    row = await cursor.fetchone()
+    failed = row["cnt"] if row else 0
 
     cursor = await db.execute(
         f"""SELECT COALESCE(SUM(json_extract(meta, '$.action_count')), 0) as total
             FROM activity_events WHERE type IN ('batch_completed', 'batch_failed') {time_filter}""",
         params,
     )
-    total_actions = (await cursor.fetchone())["total"]
+    row = await cursor.fetchone()
+    total_actions = row["total"] if row else 0
 
     cursor = await db.execute("SELECT COUNT(*) as cnt FROM agents WHERE status = 'running'")
-    active_agents = (await cursor.fetchone())["cnt"]
+    row = await cursor.fetchone()
+    active_agents = row["cnt"] if row else 0
 
     cursor = await db.execute(
         f"""SELECT COALESCE(SUM(json_extract(meta, '$.cost_usd')), 0) as total
             FROM activity_events WHERE type IN ('batch_completed', 'batch_failed') {time_filter}""",
         params,
     )
-    total_cost = (await cursor.fetchone())["total"]
+    row = await cursor.fetchone()
+    total_cost = row["total"] if row else 0
 
     return {
         "completed_batches": completed,

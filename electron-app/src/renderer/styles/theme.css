@@ -264,8 +264,14 @@ textarea:focus {
   *,
   *::before,
   *::after {
+    /* !important is load-bearing here: this is the standard reduced-motion
+       override and its whole job is to defeat component-level animation
+       declarations. Without it the accessibility guarantee is lost. */
+    /* biome-ignore lint/complexity/noImportantStyles: required to override component animations */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required to override component animations */
     animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: required to override component animations */
     transition-duration: 0.01ms !important;
   }
 }

@@ -45,14 +45,14 @@ Already has all needed columns: id, trace_id (FK → agent_traces), sequence_ind
 
 ### Batch Status
 
-```
+```text
 pending → processing → completed (all agents succeed)
                      → failed (any agent fails)
 ```
 
 ### Agent Status (in DB)
 
-```
+```text
 created → running → completed (task succeeds)
                   → failed (task errors)
                   → stopped (cleanup after completed/failed)
@@ -60,14 +60,14 @@ created → running → completed (task succeeds)
 
 ### Task Status
 
-```
+```text
 pending → in_progress → completed (agent finishes successfully)
                       → failed (agent errors)
 ```
 
 ## Relationships
 
-```
+```text
 batches 1──N actions        (existing)
 batches 1──N tasks          (NEW via batch_id column)
 batches 1──1 agent_traces   (existing, via batch_id UNIQUE)

@@ -3,10 +3,10 @@
  * Sends progress via IPC clone-progress channel.
  */
 
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import type { BrowserWindow } from "electron";
-import fs from "fs";
-import path from "path";
 
 interface InstallResult {
   success: true;

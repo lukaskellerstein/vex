@@ -300,7 +300,7 @@ async def get_active_cursors(page_url: str):
                ORDER BY t.created_at""",
             (batch_id,),
         )
-        tasks = await task_cursor.fetchall()
+        tasks = list(await task_cursor.fetchall())
 
         # Match actions to agents by index, skip agents that already finished
         for idx, action in enumerate(actions):
@@ -364,7 +364,7 @@ async def get_batch_cursors(batch_id: str):
         "SELECT agent_id, agent_name, status FROM agent_traces WHERE batch_id = ? ORDER BY created_at",
         (batch_id,),
     )
-    traces = await trace_cursor.fetchall()
+    traces = list(await trace_cursor.fetchall())
 
     agents = []
     for idx, action in enumerate(actions):
@@ -479,13 +479,10 @@ async def delete_batch(project_id: str, batch_id: str):
     # Delete tasks linked to this batch
     await db.execute("DELETE FROM tasks WHERE batch_id = ?", (batch_id,))
 
-    # Delete activity events for agents spawned by this batch
+    # Delete activity events for agents spawned by this batch, then the agents themselves
     if agent_ids:
         placeholders = ",".join("?" * len(agent_ids))
         await db.execute(f"DELETE FROM activity_events WHERE agent_id IN ({placeholders})", agent_ids)
-
-    # Delete the agents themselves
-    if agent_ids:
         await db.execute(f"DELETE FROM agents WHERE id IN ({placeholders})", agent_ids)
 
     # Delete the batch (actions cascade-delete via FK)
