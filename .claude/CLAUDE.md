@@ -21,7 +21,10 @@ files, outside the flow: [`rules/01-project-config.md`](rules/01-project-config.
 [`rules/11-communication.md`](rules/11-communication.md),
 [`rules/12-security.md`](rules/12-security.md),
 [`rules/machine-tools.md`](rules/machine-tools.md) (the `nvim-tools` and
-`lukas-ps` CLIs — pre-approved, read-only).
+`lukas-ps` CLIs — pre-approved, read-only),
+[`rules/lsp.md`](rules/lsp.md) (the `LSP` tool — enabled in this repo for
+Python and TypeScript, and deferred, so it must be loaded before it can be
+called).
 
 **NEVER report completion without first testing.** If you write code and stop without verifying it works, you have failed. Testing is YOUR responsibility — the user should never need to ask you to test.
 

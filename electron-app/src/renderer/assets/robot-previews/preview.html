@@ -1,21 +1,30 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>Retro Robot Variants — Pick Your Worker</title>
-  <style>
+  <head>
+    <meta charset="utf-8">
+    <title>Retro Robot Variants — Pick Your Worker</title>
+    <style>
     body {
       background: #0d0e14;
       color: #cdd6f4;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
       padding: 40px;
       margin: 0;
     }
-    h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.02em; }
-    .subtitle { color: #6c7086; font-size: 14px; margin-bottom: 40px; }
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      color: #6c7086;
+      font-size: 14px;
+      margin-bottom: 40px;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -58,8 +67,15 @@
     }
 
     /* Demo section */
-    .demo-section { margin-top: 60px; width: 100%; max-width: 1100px; }
-    .demo-section h2 { font-size: 18px; margin-bottom: 16px; }
+    .demo-section {
+      margin-top: 60px;
+      width: 100%;
+      max-width: 1100px;
+    }
+    .demo-section h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
     .demo-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -74,131 +90,165 @@
       align-items: center;
       gap: 12px;
     }
-    .demo-card .info { flex: 1; }
-    .demo-card .info h3 { font-size: 14px; margin: 0 0 3px; }
-    .demo-card .info span { font-size: 11px; color: #6c7086; }
-    .demo-card .robots { display: flex; gap: 2px; align-items: center; }
-    .demo-card .robots object { width: 32px; height: 38px; }
-    .demo-card .timer { font-size: 11px; color: #a6adc8; font-family: monospace; margin-left: 8px; white-space: nowrap; }
-  </style>
-</head>
-<body>
-  <h1>Retro Robot Variants</h1>
-  <p class="subtitle">5 retro styles with long animation cycles (4-8s) — watch each for the full loop before deciding</p>
+    .demo-card .info {
+      flex: 1;
+    }
+    .demo-card .info h3 {
+      font-size: 14px;
+      margin: 0 0 3px;
+    }
+    .demo-card .info span {
+      font-size: 11px;
+      color: #6c7086;
+    }
+    .demo-card .robots {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+    .demo-card .robots object {
+      width: 32px;
+      height: 38px;
+    }
+    .demo-card .timer {
+      font-size: 11px;
+      color: #a6adc8;
+      font-family: monospace;
+      margin-left: 8px;
+      white-space: nowrap;
+    }
+    </style>
+  </head>
+  <body>
+    <h1>Retro Robot Variants</h1>
+    <p class="subtitle">
+      5 retro styles with long animation cycles (4-8s) — watch each for the full loop before
+      deciding
+    </p>
 
-  <div class="grid">
-    <div class="card">
-      <object data="retro-1-coder.svg" type="image/svg+xml"></object>
-      <h2>1. Coder</h2>
-      <div class="anim-dur">4s cycle</div>
-      <p>Rapid typing bursts, pause to think (amber LED), code scrolls across chest screen</p>
-    </div>
-    <div class="card">
-      <object data="retro-2-builder.svg" type="image/svg+xml"></object>
-      <h2>2. Builder</h2>
-      <div class="anim-dur">5s cycle</div>
-      <p>Hammering with sparks, holds piece with left arm, pauses to inspect, progress bar fills</p>
-    </div>
-    <div class="card">
-      <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
-      <h2>3. Analyst</h2>
-      <div class="anim-dur">6s cycle</div>
-      <p>Scans left-right, thinks, nods, takes notes. Dual visor, data bars with anomaly alerts</p>
-    </div>
-    <div class="card">
-      <object data="retro-4-welder.svg" type="image/svg+xml"></object>
-      <h2>4. Welder</h2>
-      <div class="anim-dur">7s cycle</div>
-      <p>Welds at 3 spots, arc glow + spark spray, visor dims for protection, body heats up</p>
-    </div>
-    <div class="card">
-      <object data="retro-5-operator.svg" type="image/svg+xml"></object>
-      <h2>5. Operator</h2>
-      <div class="anim-dur">8s cycle</div>
-      <p>Flips switches, pushes buttons, turns knobs, pulls lever, double-take, LED status board</p>
-    </div>
-  </div>
-
-  <div class="demo-section">
-    <h2>On project cards (32px, repeated per agent count)</h2>
-
-    <div class="demo-grid">
-      <div class="demo-card">
-        <div class="info">
-          <h3>acme-dashboard</h3>
-          <span>Next.js</span>
-        </div>
-        <div class="robots">
-          <object data="retro-1-coder.svg" type="image/svg+xml"></object>
-          <object data="retro-1-coder.svg" type="image/svg+xml"></object>
-          <object data="retro-1-coder.svg" type="image/svg+xml"></object>
-        </div>
-        <div class="timer">4m 12s</div>
+    <div class="grid">
+      <div class="card">
+        <object data="retro-1-coder.svg" type="image/svg+xml"></object>
+        <h2>1. Coder</h2>
+        <div class="anim-dur">4s cycle</div>
+        <p>Rapid typing bursts, pause to think (amber LED), code scrolls across chest screen</p>
       </div>
-
-      <div class="demo-card">
-        <div class="info">
-          <h3>design-system</h3>
-          <span>React + Storybook</span>
-        </div>
-        <div class="robots">
-          <object data="retro-2-builder.svg" type="image/svg+xml"></object>
-          <object data="retro-2-builder.svg" type="image/svg+xml"></object>
-        </div>
-        <div class="timer">12m 03s</div>
+      <div class="card">
+        <object data="retro-2-builder.svg" type="image/svg+xml"></object>
+        <h2>2. Builder</h2>
+        <div class="anim-dur">5s cycle</div>
+        <p>
+          Hammering with sparks, holds piece with left arm, pauses to inspect, progress bar fills
+        </p>
       </div>
-
-      <div class="demo-card">
-        <div class="info">
-          <h3>shopfront-web</h3>
-          <span>Nuxt</span>
-        </div>
-        <div class="robots">
-          <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
-          <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
-          <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
-          <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
-        </div>
-        <div class="timer">1m 47s</div>
+      <div class="card">
+        <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
+        <h2>3. Analyst</h2>
+        <div class="anim-dur">6s cycle</div>
+        <p>
+          Scans left-right, thinks, nods, takes notes. Dual visor, data bars with anomaly alerts
+        </p>
       </div>
-
-      <div class="demo-card">
-        <div class="info">
-          <h3>admin-panel</h3>
-          <span>Angular</span>
-        </div>
-        <div class="robots">
-          <object data="retro-4-welder.svg" type="image/svg+xml"></object>
-        </div>
-        <div class="timer">8m 31s</div>
+      <div class="card">
+        <object data="retro-4-welder.svg" type="image/svg+xml"></object>
+        <h2>4. Welder</h2>
+        <div class="anim-dur">7s cycle</div>
+        <p>Welds at 3 spots, arc glow + spark spray, visor dims for protection, body heats up</p>
       </div>
-
-      <div class="demo-card">
-        <div class="info">
-          <h3>blog-platform</h3>
-          <span>Remix</span>
-        </div>
-        <div class="robots">
-          <object data="retro-5-operator-a.svg" type="image/svg+xml"></object>
-          <object data="retro-5-operator-b.svg" type="image/svg+xml"></object>
-          <object data="retro-5-operator-c.svg" type="image/svg+xml"></object>
-          <object data="retro-5-operator-d.svg" type="image/svg+xml"></object>
-          <object data="retro-5-operator-e.svg" type="image/svg+xml"></object>
-        </div>
-        <div class="timer">22m 18s</div>
-      </div>
-
-      <div class="demo-card">
-        <div class="info">
-          <h3>crm-frontend</h3>
-          <span>Vue.js</span>
-        </div>
-        <div class="robots" style="opacity: 0.3;">
-          <object data="retro-1-coder.svg" type="image/svg+xml" style="filter: grayscale(1);"></object>
-        </div>
-        <div class="timer" style="color: #585b70;">idle — 2h ago</div>
+      <div class="card">
+        <object data="retro-5-operator.svg" type="image/svg+xml"></object>
+        <h2>5. Operator</h2>
+        <div class="anim-dur">8s cycle</div>
+        <p>
+          Flips switches, pushes buttons, turns knobs, pulls lever, double-take, LED status board
+        </p>
       </div>
     </div>
-  </div>
-</body>
+
+    <div class="demo-section">
+      <h2>On project cards (32px, repeated per agent count)</h2>
+
+      <div class="demo-grid">
+        <div class="demo-card">
+          <div class="info">
+            <h3>acme-dashboard</h3>
+            <span>Next.js</span>
+          </div>
+          <div class="robots">
+            <object data="retro-1-coder.svg" type="image/svg+xml"></object>
+            <object data="retro-1-coder.svg" type="image/svg+xml"></object>
+            <object data="retro-1-coder.svg" type="image/svg+xml"></object>
+          </div>
+          <div class="timer">4m 12s</div>
+        </div>
+
+        <div class="demo-card">
+          <div class="info">
+            <h3>design-system</h3>
+            <span>React + Storybook</span>
+          </div>
+          <div class="robots">
+            <object data="retro-2-builder.svg" type="image/svg+xml"></object>
+            <object data="retro-2-builder.svg" type="image/svg+xml"></object>
+          </div>
+          <div class="timer">12m 03s</div>
+        </div>
+
+        <div class="demo-card">
+          <div class="info">
+            <h3>shopfront-web</h3>
+            <span>Nuxt</span>
+          </div>
+          <div class="robots">
+            <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
+            <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
+            <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
+            <object data="retro-3-analyst.svg" type="image/svg+xml"></object>
+          </div>
+          <div class="timer">1m 47s</div>
+        </div>
+
+        <div class="demo-card">
+          <div class="info">
+            <h3>admin-panel</h3>
+            <span>Angular</span>
+          </div>
+          <div class="robots">
+            <object data="retro-4-welder.svg" type="image/svg+xml"></object>
+          </div>
+          <div class="timer">8m 31s</div>
+        </div>
+
+        <div class="demo-card">
+          <div class="info">
+            <h3>blog-platform</h3>
+            <span>Remix</span>
+          </div>
+          <div class="robots">
+            <object data="retro-5-operator-a.svg" type="image/svg+xml"></object>
+            <object data="retro-5-operator-b.svg" type="image/svg+xml"></object>
+            <object data="retro-5-operator-c.svg" type="image/svg+xml"></object>
+            <object data="retro-5-operator-d.svg" type="image/svg+xml"></object>
+            <object data="retro-5-operator-e.svg" type="image/svg+xml"></object>
+          </div>
+          <div class="timer">22m 18s</div>
+        </div>
+
+        <div class="demo-card">
+          <div class="info">
+            <h3>crm-frontend</h3>
+            <span>Vue.js</span>
+          </div>
+          <div class="robots" style="opacity: 0.3;">
+            <object
+              data="retro-1-coder.svg"
+              type="image/svg+xml"
+              style="filter: grayscale(1);"
+            ></object>
+          </div>
+          <div class="timer" style="color: #585b70;">idle — 2h ago</div>
+        </div>
+      </div>
+    </div>
+  </body>
 </html>

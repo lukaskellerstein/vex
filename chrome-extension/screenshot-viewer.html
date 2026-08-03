@@ -1,17 +1,35 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>VEX Screenshot</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #111; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    img { max-width: 100%; max-height: 100vh; object-fit: contain; }
-    .loading { color: #888; font-family: sans-serif; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <span class="loading" id="loading">Loading screenshot...</span>
-  <img id="img" style="display:none" />
-  <script src="screenshot-viewer.js"></script>
-</body>
+  <head>
+    <title>VEX Screenshot</title>
+    <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    img {
+      max-width: 100%;
+      max-height: 100vh;
+      object-fit: contain;
+    }
+    .loading {
+      color: #888;
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    </style>
+  </head>
+  <body>
+    <span class="loading" id="loading">Loading screenshot...</span>
+    <img id="img" style="display:none">
+    <script src="screenshot-viewer.js"></script>
+  </body>
 </html>
