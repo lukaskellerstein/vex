@@ -58,3 +58,6 @@ keys.txt
 test_output/
 # Playwright MCP session artifacts (console logs, snapshots)
 .playwright-mcp/
+
+# Claude Code worktree sessions: claude -w <name>
+.worktrees/

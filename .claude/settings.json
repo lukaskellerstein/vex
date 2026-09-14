@@ -1,6 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "companyAnnouncements": ["Welcome to VEX"],
+  "companyAnnouncements": [
+    "Welcome to VEX"
+  ],
   "permissions": {
     "allow": [
       "Agent",
@@ -8,7 +10,6 @@
       "Bash",
       "Cd",
       "Edit",
-      "EnterWorktree",
       "ExitPlanMode",
       "Glob",
       "Grep",
@@ -40,46 +41,11 @@
       "Bash(node scripts/publish-release.mjs:*)",
       "Edit(./electron-app/package.json)",
       "Edit(./chrome-extension/manifest.json)",
-
       "Bash(python3 .claude/hooks/dev-env.py start --force:*)",
       "Bash(python3 ./.claude/hooks/dev-env.py start --force:*)",
-
-      "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push --delete:*)",
       "Bash(git branch -D:*)",
-      "Bash(git reset --hard:*)",
-      "Bash(npm publish:*)"
-    ],
-    "deny": [
-      "Bash(rm -rf /)",
-      "Bash(rm -rf /*)",
-      "Bash(rm -rf ~)",
-      "Bash(rm -rf ~*)",
-      "Bash(rm -rf $HOME*)",
-      "Bash(sudo rm -rf /*)",
-      "Bash(sudo rm -rf ~*)",
-      "Bash(sudo rm -rf *)",
-      "Bash(*--no-preserve-root*)",
-      "Bash(mkfs*)",
-      "Bash(diskutil erase*)",
-      "Bash(dd * of=/dev/*)",
-
-      "Read(~/.ssh/**)",
-      "Read(~/.gnupg/**)",
-      "Read(~/.aws/**)",
-      "Read(~/.azure/**)",
-      "Read(~/.config/gcloud/**)",
-      "Read(~/.kube/config)",
-      "Read(~/.docker/config.json)",
-      "Read(~/.netrc)",
-      "Read(~/.npmrc)",
-      "Read(~/.pypirc)",
-      "Read(~/.bash_history)",
-      "Read(~/.zsh_history)",
-      "Read(~/.config/sops/age/**)",
-      "Read(~/.claude/.credentials.json)",
-
       "Read(./secrets/**)",
       "Read(./.secrets/**)",
       "Read(./.npmrc)",
@@ -100,27 +66,19 @@
       "Read(./**/keys.txt)",
       "Read(./**/*.tfstate)",
       "Read(./**/*.tfstate.backup)",
-
-      "Edit(~/.ssh/**)",
-      "Edit(~/.gnupg/**)",
-      "Edit(~/.config/sops/age/**)",
-      "Edit(~/.claude/.credentials.json)",
+      "EnterWorktree",
+      "ExitWorktree"
+    ],
+    "deny": [
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf $HOME*)",
+      "Bash(sudo rm -rf ~*)",
+      "Bash(mkfs*)",
+      "Bash(dd * of=/dev/*)",
       "Edit(./.git/**)"
     ]
   },
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "mcp__(electron|extension)-playwright__browser_(navigate|navigate_back|tabs|snapshot|take_screenshot|evaluate)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/playwright-post-navigate.py\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [
@@ -137,11 +95,120 @@
           }
         ]
       }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-create.sh\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-remove.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/playwright-session-start.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-guard.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__(electron-playwright|extension-playwright)__browser_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/playwright-pre.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__(electron-playwright|extension-playwright)__browser_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/playwright-post.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/playwright-post.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
     "dev-tools-plugin@claude-my-marketplace": true,
     "lsp-python@claude-my-marketplace": false,
     "lsp-typescript@claude-my-marketplace": false
+  },
+  "sandbox": {
+    "enabled": false,
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "denyRead": [
+        "./**/.env",
+        "./**/*.pem",
+        "./**/*.key",
+        "./**/*.agekey",
+        "./**/keys.txt",
+        "./**/*credentials*.json",
+        "./**/serviceAccountKey.json",
+        "./**/*.tfstate"
+      ]
+    },
+    "excludedCommands": [
+      "*playwright-launch.sh*",
+      "open *",
+      "osascript *",
+      "yabai *"
+    ]
   }
 }

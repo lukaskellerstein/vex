@@ -4,6 +4,8 @@ description: "Step 1: Understand — read code, ask questions, identify gaps bef
 
 # Step 1: Understand
 
+- Know where you stand first: `pwd` and `git branch --show-current`. Follow the
+  agent-specific Local/worktree boundary in [`worktree.md`](worktree.md).
 - Read relevant code and identify impacted areas
 - Baseline the repo's existing problems: `nvim-tools --json --all` (every
   linter / formatter / type-checker finding, repo-wide) — so pre-existing

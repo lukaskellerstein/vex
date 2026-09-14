@@ -46,6 +46,29 @@ Both servers run in **attach mode** (`--cdp-endpoint`): they connect to a browse
 
 **After restarting the dev environment**, the first MCP call fails with `Target page, context or browser has been closed` — the server is still holding the CDP connection to the browser that just died. It reconnects on its own; simply retry the same call once.
 
+### Whose instance it is
+
+If a `browser_*` call is denied because the instance on the CDP port was
+started by the user: that instance is theirs. Do not touch it, and do not
+restart the dev environment over it — ask the user for permission, and only
+after an explicit yes run the `touch` command from the denial message.
+
+**The no-touch rule covers every attach path, not just MCP tools.** A
+`connectOverCDP` in your own script, a raw CDP request from `curl` — same
+rule. The MCP gate cannot see inside a script, so before any script attaches
+to a CDP port, run `python3 .claude/hooks/pw.py owns-port <port>` yourself:
+exit 0 means proceed, exit 1 means the instance is the user's — ask.
+
+The browser is placed on its own desktop space by the shared Playwright hooks
+(`.claude/hooks/`) — never switch to it, focus it, or move it. Session-end
+cleanup is a safety net, not a substitute for closing it yourself.
+
+**A headed browser your own script launches goes through the launch script
+too** — `.claude/hooks/playwright-launch.sh npx tsx <script>` — so its window
+is born on the scratch space like every other agent browser. Never launch a
+headed browser bare: macOS creates new windows on whatever space the user is
+looking at. A headless browser needs no placement — run that script directly.
+
 ## 5c. Test
 
 **Electron UI changes** — use `electron-playwright` MCP (CDP port 9222):
