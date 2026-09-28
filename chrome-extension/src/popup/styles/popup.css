@@ -175,6 +175,15 @@ body {
   background: #2a1a1a;
 }
 
+.ctrl-btn.copy-all {
+  flex: 0 0 auto;
+}
+
+.ctrl-btn.copy-all:hover:not(:disabled) {
+  color: #a6e3a1;
+  border-color: #3f6f3a;
+}
+
 /* Send bar: project selector + send button */
 .send-bar {
   display: flex;
@@ -646,6 +655,36 @@ body {
 .popup-action-rm:hover {
   color: #f38ba8;
   background: rgba(243, 139, 168, 0.1);
+}
+
+.popup-action-copy {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #6c7086;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.popup-action-copy:hover {
+  color: #a6e3a1;
+  background: rgba(166, 227, 161, 0.1);
+}
+
+.popup-action-copy-error {
+  color: #f38ba8;
+}
+
+.popup-action-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #a6adc8;
+  background: #313244;
+  border-radius: 8px;
+  padding: 0 5px;
 }
 
 /* Action item wrapper */

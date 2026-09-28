@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { editPanels, formatAllEdits, formatSingleEdit } from "../shared/format-edits";
 import type { GetStateResponse } from "../shared/messages";
+import { actionElements } from "../shared/select-elements";
 import type { Action } from "../shared/types";
+import { copyEdit } from "./clipboard";
 import { BatchSelector } from "./components/BatchSelector";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { Controls } from "./components/Controls";
 import type { Project } from "./components/ProjectSelector";
+import { useCopyFeedback } from "./useCopyFeedback";
 import "./styles/popup.css";
 
 function sendToContent(tabId: number | null, message: Record<string, unknown>): Promise<unknown> {
@@ -179,6 +183,23 @@ export function App() {
     [activeTabId, refreshState],
   );
 
+  const handleCopy = useCallback(
+    (index: number) => {
+      const action = actions[index];
+      const page = { url: pageUrl, title: pageTitle };
+      return copyEdit(editPanels(action, index + 1), (panels) =>
+        formatSingleEdit(action, index + 1, page, panels),
+      );
+    },
+    [actions, pageUrl, pageTitle],
+  );
+
+  const handleCopyAll = useCallback(() => {
+    const page = { url: pageUrl, title: pageTitle };
+    const panels = actions.flatMap((action, i) => editPanels(action, i + 1));
+    return copyEdit(panels, (saved) => formatAllEdits(actions, page, saved));
+  }, [actions, pageUrl, pageTitle]);
+
   useEffect(() => {
     (async () => {
       const [tab] = await chrome.tabs.query({
@@ -218,6 +239,7 @@ export function App() {
         onProjectsLoaded={setLoadedProjects}
         onToggle={handleToggle}
         onClear={handleClear}
+        onCopyAll={handleCopyAll}
         onRefreshState={refreshState}
       />
 
@@ -227,6 +249,7 @@ export function App() {
         actions={actions}
         activeTabId={activeTabId}
         onRemove={handleRemove}
+        onCopy={handleCopy}
         onUpdateInstruction={handleUpdateInstruction}
       />
 
@@ -281,6 +304,8 @@ function ResizeHandle() {
 // --- Action list for popup (matches toolbar style) ---
 
 import {
+  Check,
+  ClipboardCopy,
   Copy,
   Image as ImageIcon,
   LayoutGrid,
@@ -329,11 +354,13 @@ function PopupActionList({
   actions,
   activeTabId,
   onRemove,
+  onCopy,
   onUpdateInstruction,
 }: {
   actions: Action[];
   activeTabId: number | null;
   onRemove: (i: number) => void;
+  onCopy: (i: number) => Promise<void>;
   onUpdateInstruction: (index: number, instruction: string) => Promise<void>;
 }) {
   if (actions.length === 0) return null;
@@ -351,6 +378,7 @@ function PopupActionList({
           action={action}
           index={i}
           onRemove={onRemove}
+          onCopy={onCopy}
           onUpdateInstruction={onUpdateInstruction}
           onMouseEnter={() => highlightAction(i)}
           onMouseLeave={() => highlightAction(null)}
@@ -364,6 +392,7 @@ function PopupActionItem({
   action,
   index,
   onRemove,
+  onCopy,
   onUpdateInstruction,
   onMouseEnter,
   onMouseLeave,
@@ -371,6 +400,7 @@ function PopupActionItem({
   action: Action;
   index: number;
   onRemove: (i: number) => void;
+  onCopy: (i: number) => Promise<void>;
   onUpdateInstruction: (index: number, instruction: string) => Promise<void>;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -381,11 +411,16 @@ function PopupActionItem({
   const instruction = "instruction" in action ? (action as any).instruction : "";
   const prompt = "prompt" in action ? (action as any).prompt : "";
   const fullPrompt = instruction || prompt;
-  const screenshot = "screenshot" in action ? (action as any).screenshot : "";
+  const viewShots =
+    action.type === "select"
+      ? [action.screenshot, ...(action.extraScreenshots ?? [])].filter(Boolean)
+      : [];
   const screenshotBefore = "screenshotBefore" in action ? (action as any).screenshotBefore : "";
   const screenshotAfter = "screenshotAfter" in action ? (action as any).screenshotAfter : "";
   const color = ACTION_COLORS[action.type] ?? "#888";
   const num = index + 1;
+  const elements = actionElements(action);
+  const copy = useCopyFeedback(() => onCopy(index));
 
   return (
     <div
@@ -408,12 +443,27 @@ function PopupActionItem({
         <span className="popup-action-sel" title={action.selector}>
           {action.selector}
         </span>
+        {elements.length > 1 && (
+          <span className="popup-action-count" title={`${elements.length} elements`}>
+            +{elements.length - 1}
+          </span>
+        )}
         {fullPrompt && (
           <span className="popup-action-instr" title={fullPrompt}>
             {fullPrompt}
           </span>
         )}
         <span style={{ flex: 1 }} />
+        <button
+          className={`popup-action-copy${copy.state === "error" ? " popup-action-copy-error" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            copy.run();
+          }}
+          title={copy.state === "error" ? "Copy failed" : "Copy to clipboard"}
+        >
+          {copy.state === "copied" ? <Check size={12} /> : <ClipboardCopy size={12} />}
+        </button>
         <button
           className="popup-action-rm"
           onClick={(e) => {
@@ -441,25 +491,40 @@ function PopupActionItem({
       {/* Inline expanded detail */}
       {expanded && (
         <div className="popup-action-detail">
-          <div className="popup-detail-row">
-            <span className="popup-detail-label">Selector</span>
-            <span className="popup-detail-value">{action.selector}</span>
-          </div>
-
-          {screenshot && (
+          {elements.length > 1 ? (
             <div className="popup-detail-row">
-              <span className="popup-detail-label">Screenshot</span>
+              <span className="popup-detail-label">Elements</span>
+              <div className="popup-detail-value">
+                {elements.map((el, i) => (
+                  <div key={i}>
+                    {num}.{i + 1} {el.selector}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="popup-detail-row">
+              <span className="popup-detail-label">Selector</span>
+              <span className="popup-detail-value">{action.selector}</span>
+            </div>
+          )}
+
+          {viewShots.map((shot, i) => (
+            <div className="popup-detail-row" key={i}>
+              <span className="popup-detail-label">
+                {viewShots.length > 1 ? `View ${i + 1}` : "Screenshot"}
+              </span>
               <img
                 className="popup-detail-screenshot"
-                src={`data:image/jpeg;base64,${screenshot}`}
+                src={`data:image/jpeg;base64,${shot}`}
                 alt="Screenshot"
                 onClick={() =>
-                  chrome.runtime.sendMessage({ action: "openScreenshot", base64: screenshot })
+                  chrome.runtime.sendMessage({ action: "openScreenshot", base64: shot })
                 }
                 title="Click to open full size"
               />
             </div>
-          )}
+          ))}
 
           {screenshotBefore && (
             <div className="popup-detail-row">

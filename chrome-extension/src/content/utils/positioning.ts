@@ -11,11 +11,18 @@ export function computePopupPosition(
   popupHeight: number,
 ): PopupPosition {
   const spaceBelow = window.innerHeight - elementRect.y - elementRect.height;
+  const spaceAbove = elementRect.y;
+  const below = elementRect.y + elementRect.height + 8;
+  const above = elementRect.y - popupHeight - 8;
 
-  const top =
-    spaceBelow > popupHeight + 12
-      ? elementRect.y + elementRect.height + 8
-      : Math.max(4, elementRect.y - popupHeight - 8);
+  // Below if it fits, else above if it fits, else the roomier side kept on
+  // screen — so the popup covers as little of the element as possible.
+  let top: number;
+  if (spaceBelow > popupHeight + 12) top = below;
+  else if (spaceAbove > popupHeight + 12) top = above;
+  else if (spaceBelow >= spaceAbove) top = Math.min(below, window.innerHeight - popupHeight - 4);
+  else top = Math.max(4, above);
+  top = Math.max(4, top);
 
   const left = Math.max(4, Math.min(elementRect.x, window.innerWidth - popupWidth - 4));
 

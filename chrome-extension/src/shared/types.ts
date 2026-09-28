@@ -41,8 +41,8 @@ interface BaseAction {
   screenshotAfter: string;
 }
 
-export interface SelectAction {
-  type: "select";
+/** One element on the page, with the metadata an agent needs to find it in code. */
+export interface ElementTarget {
   selector: string;
   tagName: string;
   id: string | null;
@@ -53,12 +53,23 @@ export interface SelectAction {
   boundingRect: BoundingRect;
   parentTag: string | null;
   childCount: number;
-  instruction: string;
-  screenshot: string;
-  url: string;
   accessibilityPath: string | null;
   reactComponent: string | null;
   reactSourceFile: string | null;
+}
+
+/** A prompt for one or more elements. The first element lives in the top-level
+ *  fields (so single-element consumers keep working); the rest in `extraElements`.
+ *  Elements visible together share one screenshot; an element that was only
+ *  visible after scrolling gets its own. `screenshot` is the view with the first
+ *  element, `extraScreenshots` the others. */
+export interface SelectAction extends ElementTarget {
+  type: "select";
+  instruction: string;
+  screenshot: string;
+  url: string;
+  extraElements?: ElementTarget[];
+  extraScreenshots?: string[];
 }
 
 export interface InsertAction extends BaseAction {

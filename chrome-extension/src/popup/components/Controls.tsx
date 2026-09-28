@@ -1,7 +1,8 @@
-import { Pencil } from "lucide-react";
+import { Check, ClipboardCopy, Pencil } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AGENT_MANAGER_URL } from "../../shared/messages";
 import type { Action, SelectAction } from "../../shared/types";
+import { useCopyFeedback } from "../useCopyFeedback";
 import type { Project } from "./ProjectSelector";
 
 /** Normalize actions for the backend API.
@@ -28,6 +29,7 @@ interface ControlsProps {
   onProjectsLoaded?: (projects: Project[]) => void;
   onToggle: () => void;
   onClear: () => void;
+  onCopyAll: () => Promise<void>;
   onRefreshState: () => Promise<void>;
 }
 
@@ -42,8 +44,10 @@ export function Controls({
   onProjectsLoaded,
   onToggle,
   onClear,
+  onCopyAll,
   onRefreshState,
 }: ControlsProps) {
+  const copyAll = useCopyFeedback(onCopyAll);
   const [sendState, setSendState] = useState<"idle" | "sending" | "sent">("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -198,6 +202,22 @@ export function Controls({
             />
           </svg>
           <span>Clear</span>
+        </button>
+
+        <button
+          className="ctrl-btn copy-all"
+          onClick={copyAll.run}
+          title="Copy all edits (text + one image) to paste into a coding agent"
+          disabled={actions.length === 0}
+        >
+          {copyAll.state === "copied" ? <Check size={16} /> : <ClipboardCopy size={16} />}
+          <span>
+            {copyAll.state === "copied"
+              ? "Copied"
+              : copyAll.state === "error"
+                ? "Copy failed"
+                : "Copy all"}
+          </span>
         </button>
       </div>
 

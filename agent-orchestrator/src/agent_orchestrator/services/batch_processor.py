@@ -950,7 +950,7 @@ def _build_prompt(
                 "## Task",
                 "Apply the following visual edit:",
                 "",
-                f"**Action**: [{action_type}] `{selector}`",
+                f"**Action**: [{action_type}] {_selectors_text(selector, action_data)}",
             ]
         )
         if instruction:
@@ -961,7 +961,13 @@ def _build_prompt(
     _append_element_context(parts, action_data)
 
     # --- Screenshots ---
-    _append_screenshots(parts, action_type, screenshot_before, screenshot_after)
+    _append_screenshots(
+        parts,
+        action_type,
+        screenshot_before,
+        screenshot_after,
+        action_data.get("extra_screenshot_paths") or [],
+    )
 
     return "\n".join(parts)
 
@@ -1084,42 +1090,61 @@ def _append_action_details(parts: list[str], action_type: str, data: dict) -> No
                 parts.append(f"  - `{prop}`: `{val}`")
 
 
+def _selectors_text(selector: str, data: dict) -> str:
+    """`sel` for one element; `N elements: `a`, `b`` when the action targets a group."""
+    extra = data.get("extra_elements") or []
+    if not extra:
+        return f"`{selector}`"
+    selectors = [selector, *(e.get("selector", "") for e in extra)]
+    return f"{len(selectors)} elements: " + ", ".join(f"`{s}`" for s in selectors)
+
+
 def _append_element_context(parts: list[str], data: dict) -> None:
-    """Append element context info when available (primarily from select actions)."""
-    has_context = any(
-        data.get(k)
-        for k in (
-            "tag_name",
-            "react_component",
-            "react_source_file",
-            "accessibility_path",
-            "computed_styles",
-            "class_list",
-        )
-    )
-    if not has_context:
+    """Append element context info when available (primarily from select actions).
+
+    A multi-element select gets one numbered block per element. The numbers match
+    the badges drawn on the screenshot (1.1, 1.2, ...).
+    """
+    extra = data.get("extra_elements") or []
+    if not extra:
+        lines = _element_context_lines(data)
+        if lines:
+            parts.extend(["", "## Element Context", *lines])
         return
 
-    parts.append("")
-    parts.append("## Element Context")
+    parts.extend(
+        [
+            "",
+            "## Elements",
+            f"The instruction applies to all {len(extra) + 1} elements below. On the screenshot "
+            "each one is outlined with a badge carrying its number.",
+        ]
+    )
+    for i, element in enumerate([data, *extra], start=1):
+        parts.extend(["", f"### Element 1.{i}: `{element.get('selector', '')}`"])
+        parts.extend(_element_context_lines(element))
 
+
+def _element_context_lines(data: dict) -> list[str]:
+    """Context lines for one element: React component, source, tag, text, styles."""
+    lines: list[str] = []
     if data.get("react_component"):
-        parts.append(f"**React component**: `{data['react_component']}`")
+        lines.append(f"**React component**: `{data['react_component']}`")
     if data.get("react_source_file"):
-        parts.append(f"**Source file**: `{data['react_source_file']}`")
+        lines.append(f"**Source file**: `{data['react_source_file']}`")
     if data.get("accessibility_path"):
-        parts.append(f"**Accessibility path**: {data['accessibility_path']}")
+        lines.append(f"**Accessibility path**: {data['accessibility_path']}")
     if data.get("tag_name"):
         tag_info = f"`<{data['tag_name']}"
         if data.get("class_list"):
             tag_info += f' class="{" ".join(data["class_list"])}"'
         tag_info += ">`"
-        parts.append(f"**Element**: {tag_info}")
+        lines.append(f"**Element**: {tag_info}")
     if data.get("parent_tag"):
-        parts.append(f"**Parent**: `<{data['parent_tag']}>`")
+        lines.append(f"**Parent**: `<{data['parent_tag']}>`")
     if data.get("text_content"):
         text = data["text_content"][:100]
-        parts.append(f"**Text**: `{text}`")
+        lines.append(f"**Text**: `{text}`")
     if data.get("computed_styles"):
         # Include a compact summary of key styles
         styles = data["computed_styles"]
@@ -1127,8 +1152,9 @@ def _append_element_context(parts: list[str], data: dict) -> None:
             f"  - `{k}`: `{v}`" for k, v in styles.items() if v and v != "none" and v != "normal" and v != "0px"
         ]
         if style_lines:
-            parts.append("**Current styles**:")
-            parts.extend(style_lines[:15])  # Cap at 15 to avoid bloat
+            lines.append("**Current styles**:")
+            lines.extend(style_lines[:15])  # Cap at 15 to avoid bloat
+    return lines
 
 
 def _append_screenshots(
@@ -1136,8 +1162,13 @@ def _append_screenshots(
     action_type: str,
     screenshot_before: str | None,
     screenshot_after: str | None,
+    extra_views: list[str] | None = None,
 ) -> None:
-    """Append screenshot references with context-appropriate labels."""
+    """Append screenshot references with context-appropriate labels.
+
+    A multi-element select can carry more views: elements visible together share
+    one screenshot, and an element reached by scrolling has its own.
+    """
     if not screenshot_before and not screenshot_after:
         return
 
@@ -1146,9 +1177,12 @@ def _append_screenshots(
     parts.append("Use the Read tool to view these images for visual reference:")
 
     if action_type == "select":
-        # Select has a single reference screenshot (current state of the element)
-        if screenshot_before:
-            parts.append(f"- **Reference** (current state of the element): `{screenshot_before}`")
+        # Reference screenshots show the current state; badges number the elements
+        if screenshot_before and extra_views:
+            for i, view in enumerate([screenshot_before, *extra_views], start=1):
+                parts.append(f"- **View {i}** (current state; badges mark the elements): `{view}`")
+        elif screenshot_before:
+            parts.append(f"- **Reference** (current state of the selected elements): `{screenshot_before}`")
         if screenshot_after:
             parts.append(f"- **After**: `{screenshot_after}`")
     else:
@@ -1211,6 +1245,8 @@ def _action_to_dict(
         "accessibility_path",
         "react_component",
         "react_source_file",
+        "extra_elements",
+        "extra_screenshot_paths",
     ):
         if action_data.get(key) is not None:
             result[key] = action_data[key]

@@ -9,11 +9,21 @@ import type { BoundingRect } from "../../shared/types";
 import { computePopupPosition } from "../utils/positioning";
 import { ScreenshotThumb } from "./ScreenshotThumb";
 
+export interface PopupElement {
+  label: string;
+  text: string;
+}
+
 interface PopupDialogProps {
   elementRect: BoundingRect;
-  headerText: string;
-  screenshotBase64: string;
+  elements: PopupElement[];
+  screenshots: string[];
   shadowRoot: ShadowRoot;
+  /** True while the user is clicking on the page to add another element. */
+  picking: boolean;
+  onStartPicking: () => void;
+  onStopPicking: () => void;
+  onRemoveElement: (index: number) => void;
   onSubmit: (instruction: string) => void;
   onSkip: () => void;
   onCancel: () => void;
@@ -21,12 +31,26 @@ interface PopupDialogProps {
 
 const POPUP_WIDTH = 460;
 const POPUP_HEIGHT = 420;
+// Must match .cs-popup-element line-height and .cs-popup-elements max-height
+const ELEMENT_ROW_HEIGHT = 20;
+const ELEMENT_LIST_MAX_HEIGHT = 96;
+const VIEWPORT_MARGIN = 8;
+
+/** Extra height so each element row after the first does not squeeze the
+ *  prompt; stops where the element list starts to scroll. */
+function elementListGrowth(count: number): number {
+  return Math.min(count * ELEMENT_ROW_HEIGHT, ELEMENT_LIST_MAX_HEIGHT) - ELEMENT_ROW_HEIGHT;
+}
 
 export function PopupDialog({
   elementRect,
-  headerText,
-  screenshotBase64,
+  elements,
+  screenshots,
   shadowRoot,
+  picking,
+  onStartPicking,
+  onStopPicking,
+  onRemoveElement,
   onSubmit,
   onSkip,
   onCancel,
@@ -39,7 +63,12 @@ export function PopupDialog({
     null,
   );
 
-  const pos = computePopupPosition(elementRect, size.width, size.height);
+  // `size` is what the user dragged to; the element list growth comes on top
+  const height = Math.min(
+    size.height + elementListGrowth(elements.length),
+    window.innerHeight - 2 * VIEWPORT_MARGIN,
+  );
+  const pos = computePopupPosition(elementRect, size.width, height);
 
   // GSAP entrance animation
   useEffect(() => {
@@ -165,12 +194,10 @@ export function PopupDialog({
     };
   }, [shadowRoot]); // Only re-create if shadowRoot changes
 
-  // Keep submit/skip refs in sync
+  // Give the prompt back its focus once an element was added or picking ended
   useEffect(() => {
-    // The EditorView captures closures at creation time via the keymap.
-    // Since we use refs inside the keymap callbacks, the latest functions
-    // are always available without recreating the editor.
-  }, [handleSubmit, handleSkip]);
+    if (!picking) editorViewRef.current?.focus();
+  }, [picking, elements.length]);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -203,30 +230,77 @@ export function PopupDialog({
     [size.width, size.height],
   );
 
+  const hiddenWhilePicking = picking ? " cs-popup-hidden" : "";
+  const canRemove = elements.length > 1;
+
   return (
     <div
       ref={containerRef}
       className="cs-popup-container"
-      style={{ top: pos.top, left: pos.left, width: size.width, height: size.height }}
+      style={{
+        top: pos.top,
+        left: pos.left,
+        width: size.width,
+        height: picking ? "auto" : height,
+      }}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="cs-popup-section">
-        <div className="cs-popup-section-label">Selector</div>
-        <div className="cs-popup-header">{headerText}</div>
+      {picking && (
+        <div className="cs-popup-picking">
+          <span>Click an element to add it ({elements.length} selected) · Esc to stop</span>
+          <button className="cs-btn cs-btn-add" onClick={onStopPicking}>
+            Done
+          </button>
+        </div>
+      )}
+
+      <div className={"cs-popup-section" + hiddenWhilePicking}>
+        <div className="cs-popup-section-label">
+          {elements.length > 1 ? `Elements (${elements.length})` : "Selector"}
+        </div>
+        <ul className="cs-popup-elements">
+          {elements.map((el, i) => (
+            <li key={el.label} className="cs-popup-element">
+              <span className="cs-popup-element-label">{el.label}</span>
+              <span className="cs-popup-element-text" title={el.text}>
+                {el.text}
+              </span>
+              {canRemove && (
+                <button
+                  className="cs-popup-element-rm"
+                  onClick={() => onRemoveElement(i)}
+                  title="Remove element"
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="cs-popup-add-element">
+          <button onClick={onStartPicking}>+ Add element</button>
+          <span>or Shift+click on the page</span>
+        </div>
       </div>
 
-      <div className="cs-popup-section">
-        <div className="cs-popup-section-label">Screenshot</div>
-        <ScreenshotThumb base64={screenshotBase64} />
+      <div className={"cs-popup-section" + hiddenWhilePicking}>
+        <div className="cs-popup-section-label">
+          {screenshots.length > 1 ? `Screenshots (${screenshots.length})` : "Screenshot"}
+        </div>
+        <div className="cs-popup-thumbs">
+          {screenshots.map((base64) => (
+            <ScreenshotThumb key={base64.slice(-32)} base64={base64} />
+          ))}
+        </div>
       </div>
 
-      <div className="cs-popup-section cs-popup-section-grow">
+      <div className={"cs-popup-section cs-popup-section-grow" + hiddenWhilePicking}>
         <div className="cs-popup-section-label">Prompt</div>
         <div className="cs-popup-editor" ref={editorContainerRef} />
       </div>
 
-      <div className="cs-popup-buttons">
+      <div className={"cs-popup-buttons" + hiddenWhilePicking}>
         <button className="cs-btn cs-btn-cancel" onClick={handleCancel}>
           Cancel
         </button>
@@ -238,7 +312,7 @@ export function PopupDialog({
         </button>
       </div>
 
-      <div className="cs-popup-resize-grip" onMouseDown={handleResizeStart}>
+      <div className={"cs-popup-resize-grip" + hiddenWhilePicking} onMouseDown={handleResizeStart}>
         <svg width="10" height="10" viewBox="0 0 10 10">
           <path
             d="M9 1L1 9M9 5L5 9M9 9L9 9"

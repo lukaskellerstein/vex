@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Action, Selection } from "../shared/types";
+import { actionElements, elementLabel } from "../shared/select-elements";
+import type { Action, ElementTarget, SelectAction } from "../shared/types";
 import { AgentCursors } from "./components/AgentCursors";
 import { EditMode } from "./components/EditMode";
 import { ActionMarkers, Overlay } from "./components/Overlay";
@@ -10,16 +11,60 @@ import { Toolbar } from "./components/Toolbar";
 import { useActions } from "./hooks/useActions";
 import { useHoverHighlight } from "./hooks/useHoverHighlight";
 import { useNatsClient } from "./hooks/useNatsClient";
-import { captureScreenshot } from "./hooks/useScreenshot";
+import { captureViewport } from "./hooks/useScreenshot";
 import { useSelectionState } from "./hooks/useSelectionState";
 import { revertAllVisualChanges } from "./hooks/useUndo";
-import { collectMetadata } from "./utils/metadata";
+import {
+  addView,
+  type GroupView,
+  isInViewport,
+  pruneViews,
+  rectInViews,
+  renderViews,
+  toRect,
+} from "./utils/group-views";
+import { collectElementTarget } from "./utils/metadata";
 
 const HOST_ID = "__web-selector-root";
 
-interface PopupState {
-  element: Element;
-  metadata: Selection;
+/** The elements collected for one prompt while the popup is open. */
+interface PendingGroup {
+  actionNumber: number;
+  elements: Element[];
+  targets: ElementTarget[];
+  /** Raw captures; each element is marked on the newest view that shows it. */
+  views: GroupView[];
+  /** The views rendered with badges, in view order. */
+  screenshots: string[];
+}
+
+function groupLabels(group: Pick<PendingGroup, "actionNumber" | "elements">): string[] {
+  return group.elements.map((_, i) => elementLabel(group.actionNumber, i, group.elements.length));
+}
+
+function buildSelectAction(group: PendingGroup, instruction: string): SelectAction {
+  const [primary, ...extra] = group.targets;
+  return {
+    type: "select",
+    ...primary,
+    instruction,
+    screenshot: group.screenshots[0] ?? "",
+    url: location.href,
+    ...(extra.length > 0 ? { extraElements: extra } : {}),
+    ...(group.screenshots.length > 1 ? { extraScreenshots: group.screenshots.slice(1) } : {}),
+  };
+}
+
+function findSelectionIndex(selections: SelectAction[], el: Element): number {
+  return selections.findIndex((s) =>
+    actionElements(s).some((target) => {
+      try {
+        return document.querySelector(target.selector) === el;
+      } catch {
+        return false;
+      }
+    }),
+  );
 }
 
 interface AppProps {
@@ -52,7 +97,23 @@ export function App({ hostElement, shadowRoot }: AppProps) {
     setMode,
   } = useActions();
 
-  const { hover, isOwnElement } = useHoverHighlight(state, HOST_ID);
+  const [pending, setPendingState] = useState<PendingGroup | null>(null);
+  const pendingRef = useRef<PendingGroup | null>(null);
+  const setPending = useCallback((group: PendingGroup | null) => {
+    pendingRef.current = group;
+    setPendingState(group);
+  }, []);
+
+  const [picking, setPickingState] = useState(false);
+  const pickingRef = useRef(false);
+  const setPicking = useCallback((value: boolean) => {
+    pickingRef.current = value;
+    setPickingState(value);
+  }, []);
+
+  const shiftHeld = useShiftHeld();
+  const hoverEnabled = state === "idle" || (state === "selected" && (picking || shiftHeld));
+  const { hover, isOwnElement } = useHoverHighlight(hoverEnabled, HOST_ID);
 
   // NATS connects only when needed: user activates the extension OR
   // AgentCursors discovers active agents via AO polling.
@@ -64,20 +125,20 @@ export function App({ hostElement, shadowRoot }: AppProps) {
   const enableNats = useCallback(() => setNatsEnabled(true), []);
   const natsClient = useNatsClient(natsEnabled);
 
-  const popupRef = useRef<PopupState | null>(null);
   const popupResolveRef = useRef<((instruction: string) => void) | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const [highlightedActionIndex, setHighlightedActionIndex] = useState<number | null>(null);
 
-  // Watch for selected element removal from DOM
+  // Close the popup once every selected element is gone from the DOM. A group
+  // may outlive a single element: an SPA route change keeps the earlier views.
   useEffect(() => {
-    if (state !== "selected" || !popupRef.current) return;
+    if (state !== "selected" || !pendingRef.current) return;
 
     const observer = new MutationObserver(() => {
-      if (!popupRef.current) return;
-      if (!document.body.contains(popupRef.current.element)) {
+      const elements = pendingRef.current?.elements ?? [];
+      if (elements.length > 0 && elements.every((el) => !el.isConnected)) {
         popupResolveRef.current?.("");
       }
     });
@@ -86,10 +147,101 @@ export function App({ hostElement, shadowRoot }: AppProps) {
     return () => observer.disconnect();
   }, [state]);
 
+  /** Capture the current view for the group elements visible in it, when
+   *  `capture` is set, then re-render every view with the current labels. */
+  const buildGroup = useCallback(
+    async (
+      actionNumber: number,
+      elements: Element[],
+      targets: ElementTarget[],
+      views: GroupView[],
+      capture: boolean,
+    ): Promise<PendingGroup> => {
+      let nextViews = views;
+      const visible = elements.filter(isInViewport);
+      if (capture && visible.length > 0) {
+        const marks = visible.map((el) => ({ el, rect: toRect(el.getBoundingClientRect()) }));
+        try {
+          nextViews = addView(views, { raw: await captureViewport(hostElement), marks });
+        } catch (err) {
+          console.warn("Web Selector: screenshot capture failed:", (err as Error).message);
+        }
+      }
+      nextViews = pruneViews(nextViews, elements);
+
+      const labels = groupLabels({ actionNumber, elements });
+      const screenshots = await renderViews(nextViews, elements, labels);
+      // Each target's rect is the one on its screenshot
+      const alignedTargets = targets.map((target, i) => ({
+        ...target,
+        boundingRect: rectInViews(nextViews, elements[i]) ?? target.boundingRect,
+      }));
+      return { actionNumber, elements, targets: alignedTargets, views: nextViews, screenshots };
+    },
+    [hostElement],
+  );
+
+  // A capture hides the overlay for a moment; ignore clicks until it is back.
+  const capturingRef = useRef(false);
+  const updateGroup = useCallback(
+    async (elements: Element[], targets: ElementTarget[], capture: boolean) => {
+      const current = pendingRef.current;
+      if (!current || elements.length === 0 || capturingRef.current) return;
+      capturingRef.current = true;
+      try {
+        const next = await buildGroup(
+          current.actionNumber,
+          elements,
+          targets,
+          current.views,
+          capture,
+        );
+        if (pendingRef.current) setPending(next);
+      } finally {
+        capturingRef.current = false;
+      }
+    },
+    [buildGroup, setPending],
+  );
+
+  // Removing needs no new capture: its mark disappears and the rest are renumbered.
+  const removeFromGroup = useCallback(
+    (index: number) => {
+      const current = pendingRef.current;
+      if (!current) return;
+      void updateGroup(
+        current.elements.filter((_, i) => i !== index),
+        current.targets.filter((_, i) => i !== index),
+        false,
+      );
+    },
+    [updateGroup],
+  );
+
+  /** Add an element to the open group, or take it out if it is already there. */
+  const toggleInGroup = useCallback(
+    (el: Element) => {
+      const current = pendingRef.current;
+      if (!current) return;
+      const index = current.elements.indexOf(el);
+      if (index !== -1) {
+        removeFromGroup(index);
+        return;
+      }
+      void updateGroup(
+        [...current.elements, el],
+        [...current.targets, collectElementTarget(el)],
+        true,
+      );
+    },
+    [updateGroup, removeFromGroup],
+  );
+
   // Click handler
   useEffect(() => {
     const onClick = async (e: MouseEvent) => {
-      if (stateRef.current !== "idle") return;
+      const addingToGroup = stateRef.current === "selected" && (e.shiftKey || pickingRef.current);
+      if (stateRef.current !== "idle" && !addingToGroup) return;
 
       const el = document.elementFromPoint(e.clientX, e.clientY);
       if (!el || isOwnElement(el)) return;
@@ -97,34 +249,32 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      // Check if already selected -> deselect
-      const existingIndex = selectionsRef.current.findIndex((s) => {
-        try {
-          const found = document.querySelector(s.selector);
-          return found === el;
-        } catch {
-          return false;
-        }
-      });
+      if (addingToGroup) {
+        toggleInGroup(el);
+        return;
+      }
+      if (capturingRef.current) return;
 
+      // Check if already selected -> deselect
+      const existingIndex = findSelectionIndex(selectionsRef.current, el);
       if (existingIndex !== -1) {
         removeSelectionAt(existingIndex);
         return;
       }
 
       // New selection pipeline
-      const metadata = collectMetadata(el);
-      const selectionNumber = selectionsRef.current.length + 1;
-
-      try {
-        metadata.screenshot = await captureScreenshot(el, selectionNumber, hostElement);
-      } catch (err) {
-        console.warn("Web Selector: screenshot capture failed:", (err as Error).message);
-        metadata.screenshot = "";
-      }
+      capturingRef.current = true;
+      const group = await buildGroup(
+        selectionsRef.current.length + 1,
+        [el],
+        [collectElementTarget(el)],
+        [],
+        true,
+      );
+      capturingRef.current = false;
 
       // Show popup - enter selected state
-      popupRef.current = { element: el, metadata };
+      setPending(group);
       enterSelected();
 
       // Wait for user instruction (null = cancel)
@@ -132,12 +282,13 @@ export function App({ hostElement, shadowRoot }: AppProps) {
         popupResolveRef.current = resolve as (v: string) => void;
       });
 
-      popupRef.current = null;
+      const finalGroup = pendingRef.current;
+      setPending(null);
+      setPicking(false);
       popupResolveRef.current = null;
 
-      if (instruction !== null) {
-        metadata.instruction = instruction;
-        addSelection(metadata);
+      if (instruction !== null && finalGroup) {
+        addSelection(buildSelectAction(finalGroup, instruction));
       }
       exitSelected();
     };
@@ -146,7 +297,10 @@ export function App({ hostElement, shadowRoot }: AppProps) {
     return () => document.removeEventListener("click", onClick, true);
   }, [
     isOwnElement,
-    hostElement,
+    buildGroup,
+    toggleInGroup,
+    setPending,
+    setPicking,
     enterSelected,
     exitSelected,
     addSelection,
@@ -163,6 +317,12 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       e.preventDefault();
       e.stopImmediatePropagation();
 
+      // While adding elements, Escape only ends the picking
+      if (pickingRef.current) {
+        setPicking(false);
+        return;
+      }
+
       // Cancel popup if open
       if (stateRef.current === "selected") {
         (popupResolveRef.current as ((v: string | null) => void) | null)?.(null);
@@ -175,7 +335,7 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [deactivate, setMode]);
+  }, [deactivate, setMode, setPicking]);
 
   // Chrome message handlers
   useEffect(() => {
@@ -279,16 +439,20 @@ export function App({ hostElement, shadowRoot }: AppProps) {
     (popupResolveRef.current as ((v: string | null) => void) | null)?.(null);
   }, []);
 
-  const popupState = popupRef.current;
-  const popupHeaderText = popupState
-    ? popupState.metadata.tagName +
-      (popupState.metadata.selector.length < 50
-        ? " \u2014 " + popupState.metadata.selector
-        : " \u2014 " + popupState.metadata.selector.slice(0, 47) + "...")
-    : "";
+  const handleStartPicking = useCallback(() => setPicking(true), [setPicking]);
+  const handleStopPicking = useCallback(() => setPicking(false), [setPicking]);
 
-  // Show pending selection as a green border while popup is open
-  const pendingSelection = popupState ? popupState.metadata : null;
+  // Show the pending group as green borders while the popup is open
+  const pendingLabels = pending ? groupLabels(pending) : [];
+  const pendingMarks = pending
+    ? pending.elements.map((el, i) => ({ el, label: pendingLabels[i] }))
+    : [];
+  const popupElements = pending
+    ? pending.targets.map((t, i) => ({
+        label: pendingLabels[i],
+        text: `${t.tagName} \u2014 ${t.selector}`,
+      }))
+    : [];
 
   const isActive = state !== "inactive";
 
@@ -310,13 +474,17 @@ export function App({ hostElement, shadowRoot }: AppProps) {
 
       {isActive && mode === "select" && (
         <>
-          <Overlay hover={hover} selections={[]} pendingSelection={pendingSelection} />
-          {state === "selected" && popupState && (
+          <Overlay hover={hover} pending={pendingMarks} />
+          {state === "selected" && pending && (
             <PopupDialog
-              elementRect={popupState.metadata.boundingRect}
-              headerText={popupHeaderText}
-              screenshotBase64={popupState.metadata.screenshot}
+              elementRect={pending.targets[0].boundingRect}
+              elements={popupElements}
+              screenshots={pending.screenshots}
               shadowRoot={shadowRoot}
+              picking={picking}
+              onStartPicking={handleStartPicking}
+              onStopPicking={handleStopPicking}
+              onRemoveElement={removeFromGroup}
               onSubmit={handlePopupSubmit}
               onSkip={handlePopupSkip}
               onCancel={handlePopupCancel}
@@ -341,4 +509,22 @@ export function App({ hostElement, shadowRoot }: AppProps) {
       )}
     </>
   );
+}
+
+/** Tracks whether Shift is held, so hovering previews what Shift+click will add. */
+function useShiftHeld(): boolean {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => setHeld(e.shiftKey);
+    const onBlur = () => setHeld(false);
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("keyup", onKey, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("keyup", onKey, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+  return held;
 }
