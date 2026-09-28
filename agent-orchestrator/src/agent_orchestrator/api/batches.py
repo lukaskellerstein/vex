@@ -73,7 +73,11 @@ async def submit_batch(project_id: str, body: BatchSubmission):
             screenshot_after_path = save_screenshot(project_id, action.screenshot_after)
 
         # Store action data without base64 screenshots
-        action_data = action.model_dump(exclude={"screenshot_before", "screenshot_after"})
+        action_data = action.model_dump(exclude={"screenshot_before", "screenshot_after", "extra_screenshots"})
+        if action.extra_screenshots:
+            action_data["extra_screenshot_paths"] = [
+                save_screenshot(project_id, shot) for shot in action.extra_screenshots
+            ]
         data_json = json.dumps(action_data)
 
         await db.execute(
@@ -452,7 +456,7 @@ async def delete_batch(project_id: str, batch_id: str):
 
     # Clean up screenshot files before cascading deletes
     action_cursor = await db.execute(
-        "SELECT screenshot_before_path, screenshot_after_path FROM actions WHERE batch_id = ?",
+        "SELECT screenshot_before_path, screenshot_after_path, data FROM actions WHERE batch_id = ?",
         (batch_id,),
     )
     action_rows = await action_cursor.fetchall()
@@ -461,6 +465,8 @@ async def delete_batch(project_id: str, batch_id: str):
             delete_screenshot(a["screenshot_before_path"])
         if a["screenshot_after_path"]:
             delete_screenshot(a["screenshot_after_path"])
+        for path in json.loads(a["data"]).get("extra_screenshot_paths") or []:
+            delete_screenshot(path)
 
     # Find agents spawned for this batch (via tasks table)
     agent_cursor = await db.execute(

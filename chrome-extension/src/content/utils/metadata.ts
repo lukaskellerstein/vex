@@ -1,4 +1,4 @@
-import type { Selection } from "../../shared/types";
+import type { ElementTarget } from "../../shared/types";
 import { generateSelector } from "./selector";
 
 const COMPUTED_PROPS = [
@@ -126,7 +126,7 @@ function getReactSourceFile(el: Element): string | null {
   return null;
 }
 
-export function collectMetadata(el: Element): Selection {
+export function collectElementTarget(el: Element): ElementTarget {
   const htmlEl = el as HTMLElement;
   const rect = el.getBoundingClientRect();
   const computed = getComputedStyle(el);
@@ -144,7 +144,6 @@ export function collectMetadata(el: Element): Selection {
   }
 
   return {
-    type: "select",
     selector: generateSelector(el),
     tagName: el.tagName.toLowerCase(),
     id: el.id || null,
@@ -160,9 +159,6 @@ export function collectMetadata(el: Element): Selection {
     },
     parentTag: el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
     childCount: el.children.length,
-    instruction: "",
-    screenshot: "",
-    url: window.location.href,
     accessibilityPath: buildAccessibilityPath(el),
     reactComponent: getReactComponent(el),
     reactSourceFile: getReactSourceFile(el),

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BoundingRect, SelectionState } from "../../shared/types";
+import type { BoundingRect } from "../../shared/types";
 
 function isOwnElement(el: Element, hostId: string): boolean {
   let node: Element | null = el;
@@ -23,7 +23,7 @@ export interface HoverInfo {
   element: Element;
 }
 
-export function useHoverHighlight(state: SelectionState, hostId: string) {
+export function useHoverHighlight(enabled: boolean, hostId: string) {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const hoveredRef = useRef<Element | null>(null);
 
@@ -35,7 +35,7 @@ export function useHoverHighlight(state: SelectionState, hostId: string) {
   );
 
   useEffect(() => {
-    if (state !== "idle") {
+    if (!enabled) {
       setHover(null);
       hoveredRef.current = null;
       return;
@@ -82,7 +82,7 @@ export function useHoverHighlight(state: SelectionState, hostId: string) {
       document.removeEventListener("mousemove", onMouseMove, true);
       document.removeEventListener("scroll", onScroll, true);
     };
-  }, [state, checkElement]);
+  }, [enabled, checkElement]);
 
   return { hover, hoveredRef, isOwnElement: (el: Element) => isOwnElement(el, hostId) };
 }

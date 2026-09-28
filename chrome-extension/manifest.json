@@ -3,7 +3,7 @@
   "name": "Vex",
   "version": "3.4.0",
   "description": "Visually select elements on any webpage, annotate them with instructions, and send to a coding agent for automatic code changes.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads", "downloads.ui"],
   "host_permissions": [
     "http://localhost/*",
     "https://localhost/*",

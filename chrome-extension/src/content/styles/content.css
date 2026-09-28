@@ -47,20 +47,15 @@
   box-shadow: 0 0 8px rgba(22, 163, 106, 0.4);
 }
 
-.cs-selected {
-  position: fixed;
-  border: 3px solid #16a34a;
-  pointer-events: none;
-  border-radius: 2px;
-}
-
 .cs-badge {
   position: absolute;
   top: -12px;
   right: -12px;
-  width: 24px;
+  min-width: 24px;
   height: 24px;
-  border-radius: 50%;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 12px;
   background: #ef4444;
   color: #fff;
   font-size: 12px;
@@ -131,6 +126,101 @@
   text-overflow: ellipsis;
 }
 
+.cs-popup-elements {
+  list-style: none;
+  margin: 0;
+  padding: 4px 14px 8px;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.cs-popup-element {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #a6adc8;
+  font-family: monospace;
+  line-height: 20px;
+}
+
+.cs-popup-element-label {
+  flex-shrink: 0;
+  min-width: 24px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.cs-popup-element-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-popup-element-rm {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #6c7086;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.cs-popup-element-rm:hover {
+  color: #f38ba8;
+}
+
+.cs-popup-add-element {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 8px;
+  font-size: 11px;
+  color: #6c7086;
+}
+
+.cs-popup-add-element button {
+  border: 1px dashed #45475a;
+  border-radius: 6px;
+  background: transparent;
+  color: #cdd6f4;
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cs-popup-add-element button:hover {
+  border-color: #4f46e5;
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.cs-popup-picking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #cdd6f4;
+}
+
+.cs-popup-picking span {
+  flex: 1;
+}
+
+.cs-popup-container .cs-popup-hidden {
+  display: none;
+}
+
 .cs-popup-thumb {
   padding: 4px 14px 8px;
   display: flex;
@@ -143,6 +233,16 @@
   max-height: 140px;
   border-radius: 4px;
   border: 1px solid #313244;
+}
+
+.cs-popup-thumbs {
+  display: flex;
+  background: #181825;
+}
+
+.cs-popup-thumbs .cs-popup-thumb {
+  flex: 1;
+  min-width: 0;
 }
 
 .cs-popup-section-grow {

@@ -14,6 +14,22 @@ class BatchStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ElementTarget(BaseModel):
+    """One extra element of a multi-element select action."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    selector: str
+    tag_name: str | None = None
+    class_list: list[str] | None = None
+    text_content: str | None = None
+    computed_styles: dict | None = None
+    parent_tag: str | None = None
+    accessibility_path: str | None = None
+    react_component: str | None = None
+    react_source_file: str | None = None
+
+
 class ActionData(BaseModel):
     """Flat union of all 12 action types. Type-specific fields are optional."""
 
@@ -38,6 +54,10 @@ class ActionData(BaseModel):
     computed_styles: dict | None = None
     parent_tag: str | None = None
     child_count: int | None = None
+    # More elements that share this action's instruction; the screenshot outlines all of them
+    extra_elements: list[ElementTarget] | None = None
+    # More views (base64 JPEG) for group elements that were not visible together
+    extra_screenshots: list[str] | None = None
 
     # insert
     position: str | None = None  # after|before|firstChild|lastChild

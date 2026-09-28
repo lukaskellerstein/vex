@@ -1,4 +1,13 @@
+import { saveScreenshotFiles } from "./screenshot-files";
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "saveScreenshots") {
+    saveScreenshotFiles(message.files)
+      .then((paths) => sendResponse({ paths }))
+      .catch((err: Error) => sendResponse({ error: err.message }));
+    return true;
+  }
+
   if (message.action === "captureTab") {
     chrome.tabs
       .captureVisibleTab(sender.tab!.windowId, { format: "png" })
