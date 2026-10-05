@@ -97,6 +97,13 @@
   flex-direction: column;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: move;
+}
+
+/* A mousedown here keeps its own job, so it does not move the popup */
+.cs-popup-elements,
+.cs-popup-editor {
+  cursor: auto;
 }
 
 .cs-popup-section {

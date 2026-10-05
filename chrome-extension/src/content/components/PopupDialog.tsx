@@ -6,7 +6,7 @@ import { placeholder as cmPlaceholder, EditorView, keymap } from "@codemirror/vi
 import gsap from "gsap";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoundingRect } from "../../shared/types";
-import { computePopupPosition } from "../utils/positioning";
+import { clampToViewport, computePopupPosition, type PopupPosition } from "../utils/positioning";
 import { ScreenshotThumb } from "./ScreenshotThumb";
 
 export interface PopupElement {
@@ -35,11 +35,25 @@ const POPUP_HEIGHT = 420;
 const ELEMENT_ROW_HEIGHT = 20;
 const ELEMENT_LIST_MAX_HEIGHT = 96;
 const VIEWPORT_MARGIN = 8;
+// A mousedown on these keeps its own job instead of moving the popup
+const NOT_A_MOVE_HANDLE = "button, .cs-popup-elements, .cs-popup-editor";
 
 /** Extra height so each element row after the first does not squeeze the
  *  prompt; stops where the element list starts to scroll. */
 function elementListGrowth(count: number): number {
   return Math.min(count * ELEMENT_ROW_HEIGHT, ELEMENT_LIST_MAX_HEIGHT) - ELEMENT_ROW_HEIGHT;
+}
+
+/** A move that ends over the page still fires a click there, and while picking
+ *  that click would add the element under the cursor. Drop that one click. */
+function swallowNextClick() {
+  const swallow = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  window.addEventListener("click", swallow, { capture: true, once: true });
+  // The click, if any, fires right after mouseup, in the same task
+  setTimeout(() => window.removeEventListener("click", swallow, true));
 }
 
 export function PopupDialog({
@@ -62,13 +76,20 @@ export function PopupDialog({
   const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(
     null,
   );
+  const [movedTo, setMovedTo] = useState<PopupPosition | null>(null);
 
   // `size` is what the user dragged to; the element list growth comes on top
   const height = Math.min(
     size.height + elementListGrowth(elements.length),
     window.innerHeight - 2 * VIEWPORT_MARGIN,
   );
-  const pos = computePopupPosition(elementRect, size.width, height);
+  // Once moved, the popup stays where it was dropped. The move keeps the slim
+  // picking bar on screen; the full dialog is kept on screen here, because it
+  // grows with added elements and when picking ends.
+  let pos = movedTo ?? computePopupPosition(elementRect, size.width, height);
+  if (movedTo && !picking) {
+    pos = clampToViewport(movedTo.top, movedTo.left, size.width, height, VIEWPORT_MARGIN);
+  }
 
   // GSAP entrance animation
   useEffect(() => {
@@ -230,6 +251,36 @@ export function PopupDialog({
     [size.width, size.height],
   );
 
+  const handleMoveStart = useCallback((e: React.MouseEvent) => {
+    const box = containerRef.current?.getBoundingClientRect();
+    if (e.button !== 0 || !box || (e.target as Element).closest(NOT_A_MOVE_HANDLE)) return;
+    // Also keeps the focus in the prompt
+    e.preventDefault();
+    const grabX = e.clientX - box.left;
+    const grabY = e.clientY - box.top;
+    let moved = false;
+
+    const onMove = (ev: MouseEvent) => {
+      moved = true;
+      setMovedTo(
+        clampToViewport(
+          ev.clientY - grabY,
+          ev.clientX - grabX,
+          box.width,
+          box.height,
+          VIEWPORT_MARGIN,
+        ),
+      );
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (moved) swallowNextClick();
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
   const hiddenWhilePicking = picking ? " cs-popup-hidden" : "";
   const canRemove = elements.length > 1;
 
@@ -243,7 +294,10 @@ export function PopupDialog({
         width: size.width,
         height: picking ? "auto" : height,
       }}
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        handleMoveStart(e);
+      }}
       onClick={(e) => e.stopPropagation()}
     >
       {picking && (
